@@ -1,5 +1,6 @@
 pub mod docker;
 pub mod commands;
+pub mod engine;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,6 +13,7 @@ pub fn run() {
             .build(),
         )?;
       }
+      app.handle().plugin(tauri_plugin_dialog::init())?;
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -20,7 +22,8 @@ pub fn run() {
       commands::start_container,
       commands::stop_container,
       commands::restart_container,
-      commands::set_docker_mirror
+      commands::set_docker_mirror,
+      commands::export_stack
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 
 interface Container {
   id: String;
@@ -97,6 +98,36 @@ const updateMirror = async () => {
     addLog('镜像源设置成功，请重启 Docker Desktop 生效');
   } catch (e) {
     addLog(`设置失败: ${e}`);
+  }
+};
+
+// 导出逻辑
+const handleExport = async () => {
+  try {
+    const savePath = await save({
+      filters: [{
+        name: 'PHP-Stack Backup',
+        extensions: ['zip']
+      }],
+      defaultPath: 'php-stack-backup.zip'
+    });
+
+    if (!savePath) return;
+
+    addLog('正在准备导出数据...');
+    const result = await invoke('export_stack', {
+      savePath,
+      options: {
+        config: exportOptions.value.config,
+        mysql: exportOptions.value.mysql,
+        mysql_type: exportOptions.value.mysqlType,
+        projects: exportOptions.value.projects,
+        project_patterns: exportOptions.value.projects ? projectFilePatterns.value : ""
+      }
+    });
+    addLog(result as string);
+  } catch (e) {
+    addLog(`导出失败: ${e}`);
   }
 };
 
@@ -363,7 +394,10 @@ onMounted(() => {
                   </transition>
                 </div>
               </div>
-              <button class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition">
+              <button 
+                @click="handleExport"
+                class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition"
+              >
                 创建备份包 (.zip)
               </button>
             </div>

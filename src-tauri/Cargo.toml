@@ -29,3 +29,5 @@ zip = "2.2"
 handlebars = "6.2"
 glob = "0.3"
 futures-util = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+tauri-plugin-dialog = "2"

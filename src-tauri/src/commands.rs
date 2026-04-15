@@ -1,5 +1,6 @@
 use crate::docker::manager::{DockerManager, PsContainer};
 use crate::docker::mirror::MirrorManager;
+use crate::engine::export::{ExportEngine, ExportOptions};
 
 #[tauri::command]
 pub async fn check_docker() -> Result<(), String> {
@@ -38,4 +39,10 @@ pub async fn restart_container(name: String) -> Result<(), String> {
 #[tauri::command]
 pub fn set_docker_mirror(url: String) -> Result<(), String> {
     MirrorManager::set_docker_mirror(&url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn export_stack(save_path: String, options: ExportOptions) -> Result<String, String> {
+    ExportEngine::run_export(&save_path, options).await.map_err(|e| e.to_string())?;
+    Ok(format!("导出成功: {}", save_path))
 }

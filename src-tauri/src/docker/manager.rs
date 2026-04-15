@@ -45,7 +45,7 @@ impl DockerManager {
                 name,
                 image: c.image.unwrap_or_default(),
                 status: c.status.unwrap_or_default(),
-                state: c.state.unwrap_or_default(),
+                state: format!("{:?}", c.state.unwrap_or_default()),
                 ports: c.ports.unwrap_or_default().into_iter()
                     .filter_map(|p| p.public_port.map(|port| port as i32))
                     .collect(),
@@ -56,7 +56,7 @@ impl DockerManager {
     }
 
     pub async fn start_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.start_container::<String>(name, None).await?;
+        self.docker.start_container(name, None).await?;
         Ok(())
     }
 

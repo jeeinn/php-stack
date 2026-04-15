@@ -15,6 +15,7 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      commands::check_docker,
       commands::list_containers,
       commands::start_container,
       commands::stop_container,

@@ -25,6 +25,13 @@ impl DockerManager {
         Ok(Self { docker })
     }
 
+    pub async fn check_docker_availability(&self) -> Result<(), String> {
+        match self.docker.ping().await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Docker 服务不可用或未启动: {}", e)),
+        }
+    }
+
     pub async fn list_ps_containers(&self) -> Result<Vec<PsContainer>, Box<dyn std::error::Error>> {
         let mut filters = HashMap::new();
         filters.insert("name".to_string(), vec!["ps-".to_string()]);

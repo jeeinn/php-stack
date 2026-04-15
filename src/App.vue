@@ -14,6 +14,7 @@ interface Container {
 const containers = ref<Container[]>([]);
 const loading = ref(false);
 const logs = ref<string[]>([]);
+const dockerError = ref<string | null>(null);
 
 const addLog = (msg: string) => {
   const time = new Date().toLocaleTimeString();
@@ -21,7 +22,23 @@ const addLog = (msg: string) => {
   if (logs.value.length > 50) logs.value.pop();
 };
 
+const checkDocker = async () => {
+  try {
+    await invoke('check_docker');
+    dockerError.value = null;
+    return true;
+  } catch (e) {
+    dockerError.value = e as string;
+    addLog(`Docker 检查失败: ${e}`);
+    return false;
+  }
+};
+
 const refreshContainers = async () => {
+  if (!(await checkDocker())) {
+    containers.value = [];
+    return;
+  }
   try {
     loading.value = true;
     containers.value = await invoke('list_containers');
@@ -93,6 +110,23 @@ onMounted(() => {
           </button>
         </div>
       </header>
+
+      <!-- Docker Error Alert -->
+      <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-4 text-rose-400">
+        <div class="p-3 bg-rose-500/20 rounded-full text-rose-500">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="font-bold text-lg mb-1 text-rose-500">Docker 环境异常</h3>
+          <p class="text-sm opacity-90">{{ dockerError }}</p>
+        </div>
+        <button 
+          @click="refreshContainers"
+          class="px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-bold text-sm"
+        >
+          重试
+        </button>
+      </div>
 
       <!-- Container Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto mb-8 pr-2">

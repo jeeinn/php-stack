@@ -1,4 +1,5 @@
 pub mod docker;
+pub mod commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,6 +14,13 @@ pub fn run() {
       }
       Ok(())
     })
+    .invoke_handler(tauri::generate_handler![
+      commands::list_containers,
+      commands::start_container,
+      commands::stop_container,
+      commands::restart_container,
+      commands::set_docker_mirror
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

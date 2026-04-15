@@ -58,7 +58,7 @@ impl DockerManager {
     }
 
     pub async fn start_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.start_container(name, None::<StartContainerOptions<String>>).await?;
+        self.docker.start_container(name, None::<StartContainerOptions>).await?;
         Ok(())
     }
 

@@ -367,8 +367,14 @@ onMounted(() => {
           </button>
         </div>
         
-        <transition name="fade">
-          <div v-if="showLogs" class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner">
+        <transition 
+          name="fade"
+          @before-enter="el => { el.style.maxHeight = '0'; el.style.opacity = '0'; }"
+          @enter="(el, done) => { el.offsetHeight; el.style.maxHeight = '160px'; el.style.opacity = '1'; done(); }"
+          @before-leave="el => { el.style.maxHeight = '160px'; el.style.opacity = '1'; }"
+          @leave="(el, done) => { el.style.maxHeight = '0'; el.style.opacity = '0'; setTimeout(done, 300); }"
+        >
+          <div v-if="showLogs" class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden">
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
               {{ log }}
             </div>

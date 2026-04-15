@@ -1,6 +1,7 @@
 use bollard::Docker;
-use bollard::container::{StartContainerOptions, StopContainerOptions, RestartContainerOptions};
-use bollard::query_parameters::ListContainersOptions;
+use bollard::query_parameters::{
+    ListContainersOptions, StartContainerOptions, StopContainerOptions, RestartContainerOptions,
+};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
@@ -26,11 +27,11 @@ impl DockerManager {
 
     pub async fn list_ps_containers(&self) -> Result<Vec<PsContainer>, Box<dyn std::error::Error>> {
         let mut filters = HashMap::new();
-        filters.insert("name", vec!["ps-"]);
+        filters.insert("name".to_string(), vec!["ps-".to_string()]);
         
         let options = Some(ListContainersOptions {
             all: true,
-            filters,
+            filters: Some(filters),
             ..Default::default()
         });
 
@@ -57,17 +58,17 @@ impl DockerManager {
     }
 
     pub async fn start_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.start_container(name, None).await?;
+        self.docker.start_container(name, None::<StartContainerOptions<String>>).await?;
         Ok(())
     }
 
     pub async fn stop_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.stop_container(name, None).await?;
+        self.docker.stop_container(name, None::<StopContainerOptions>).await?;
         Ok(())
     }
 
     pub async fn restart_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.restart_container(name, None).await?;
+        self.docker.restart_container(name, None::<RestartContainerOptions>).await?;
         Ok(())
     }
 }

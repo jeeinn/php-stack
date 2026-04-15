@@ -16,6 +16,7 @@ const loading = ref(false);
 const logs = ref<string[]>([]);
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
+const showLogs = ref(true); // 控制日志面板显示隐藏
 
 const addLog = (msg: string) => {
   const time = new Date().toLocaleTimeString();
@@ -35,19 +36,24 @@ const checkDocker = async () => {
   }
 };
 
-const refreshContainers = async () => {
+const refreshContainers = async (silent = false) => {
+  if (!silent) loading.value = true;
   if (!(await checkDocker())) {
     containers.value = [];
+    if (!silent) loading.value = false;
     return;
   }
   try {
-    loading.value = true;
-    containers.value = await invoke('list_containers');
-    addLog('已刷新容器列表');
+    const result = await invoke('list_containers') as Container[];
+    // 只有当内容真正改变时才更新，减少 DOM 抖动
+    if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
+      containers.value = result;
+    }
+    if (!silent) addLog('已刷新容器列表');
   } catch (e) {
-    addLog(`错误: ${e}`);
+    if (!silent) addLog(`错误: ${e}`);
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 };
 
@@ -56,7 +62,7 @@ const startService = async (name: String) => {
     addLog(`正在启动服务: ${name}...`);
     await invoke('start_container', { name });
     addLog(`服务 ${name} 已启动`);
-    await refreshContainers();
+    await refreshContainers(true); // 使用静默刷新
   } catch (e) {
     addLog(`启动失败: ${e}`);
   }
@@ -67,7 +73,7 @@ const stopService = async (name: String) => {
     addLog(`正在停止服务: ${name}...`);
     await invoke('stop_container', { name });
     addLog(`服务 ${name} 已停止`);
-    await refreshContainers();
+    await refreshContainers(true); // 使用静默刷新
   } catch (e) {
     addLog(`停止失败: ${e}`);
   }
@@ -87,8 +93,8 @@ const updateMirror = async () => {
 
 onMounted(() => {
   refreshContainers();
-  // 每 5 秒自动刷新一次
-  setInterval(refreshContainers, 5000);
+  // 每 5 秒自动静默刷新一次
+  setInterval(() => refreshContainers(true), 5000);
 });
 </script>
 
@@ -344,16 +350,31 @@ onMounted(() => {
       </div>
 
       <!-- Log Panel (Global) -->
-      <div class="mt-auto">
-        <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-slate-400">
-          <span class="w-2 h-2 bg-blue-500 rounded-full"></span> 实时日志
-        </h2>
-        <div class="bg-black/40 backdrop-blur-sm p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner">
-          <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0">
-            {{ log }}
-          </div>
-          <div v-if="logs.length === 0" class="text-slate-600 italic">等待操作中...</div>
+      <div class="mt-auto border-t border-slate-800 pt-4 bg-slate-950/50 backdrop-blur-md">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-lg font-bold flex items-center gap-2 text-slate-400">
+            <span class="w-2 h-2 bg-blue-500 rounded-full" :class="{ 'animate-pulse': loading }"></span> 
+            实时日志
+          </h2>
+          <button 
+            @click="showLogs = !showLogs"
+            class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+          >
+            {{ showLogs ? '隐藏' : '显示' }}
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path v-if="showLogs" d="m6 9 6 6 6-6"/><path v-else d="m18 15-6-6-6 6"/>
+            </svg>
+          </button>
         </div>
+        
+        <transition name="fade">
+          <div v-if="showLogs" class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner">
+            <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
+              {{ log }}
+            </div>
+            <div v-if="logs.length === 0" class="text-slate-600 italic">等待操作中...</div>
+          </div>
+        </transition>
       </div>
     </div>
   </div>
@@ -370,5 +391,23 @@ onMounted(() => {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* 日志面板切换动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 0.3s ease;
+  max-height: 160px;
+  opacity: 1;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  overflow: hidden;
 }
 </style>

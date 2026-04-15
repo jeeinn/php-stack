@@ -61,6 +61,7 @@ const refreshContainers = async (silent = false) => {
 const exportOptions = ref({
   config: true,
   mysql: false,
+  mysqlType: 'all', // 'schema' or 'all'
   projects: false,
 });
 const projectFilePatterns = ref('.env\nsrc/config/*.php');
@@ -329,9 +330,21 @@ onMounted(() => {
                 <label class="flex items-center gap-2 text-sm text-slate-400">
                   <input type="checkbox" v-model="exportOptions.config" disabled /> PHP-Stack 核心配置
                 </label>
-                <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-                  <input type="checkbox" v-model="exportOptions.mysql" /> MySQL 数据库 (SQL)
-                </label>
+                <div class="space-y-2">
+                  <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                    <input type="checkbox" v-model="exportOptions.mysql" /> MySQL 数据库 (SQL)
+                  </label>
+                  <transition name="fade">
+                    <div v-show="exportOptions.mysql" class="pl-6 flex gap-4 overflow-hidden">
+                      <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">
+                        <input type="radio" v-model="exportOptions.mysqlType" value="schema" class="accent-blue-500" /> 数据库结构
+                      </label>
+                      <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">
+                        <input type="radio" v-model="exportOptions.mysqlType" value="all" class="accent-blue-500" /> 数据库结构+数据
+                      </label>
+                    </div>
+                  </transition>
+                </div>
                 <div class="space-y-2">
                   <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
                     <input type="checkbox" v-model="exportOptions.projects" /> 项目敏感文件 (.env 等)

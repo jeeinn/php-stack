@@ -57,6 +57,14 @@ const refreshContainers = async (silent = false) => {
   }
 };
 
+// 备份与恢复状态
+const exportOptions = ref({
+  config: true,
+  mysql: false,
+  projects: false,
+});
+const projectFilePatterns = ref('.env\nsrc/config/*.php');
+
 const startService = async (name: String) => {
   try {
     addLog(`正在启动服务: ${name}...`);
@@ -317,16 +325,30 @@ onMounted(() => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 一键导出环境
               </h3>
-              <div class="space-y-3 mb-6">
+              <div class="space-y-4 mb-6">
                 <label class="flex items-center gap-2 text-sm text-slate-400">
-                  <input type="checkbox" checked disabled /> PHP-Stack 核心配置
+                  <input type="checkbox" v-model="exportOptions.config" disabled /> PHP-Stack 核心配置
                 </label>
-                <label class="flex items-center gap-2 text-sm text-slate-400">
-                  <input type="checkbox" /> MySQL 数据库 (SQL)
+                <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                  <input type="checkbox" v-model="exportOptions.mysql" /> MySQL 数据库 (SQL)
                 </label>
-                <label class="flex items-center gap-2 text-sm text-slate-400">
-                  <input type="checkbox" /> 项目敏感文件 (.env)
-                </label>
+                <div class="space-y-2">
+                  <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                    <input type="checkbox" v-model="exportOptions.projects" /> 项目敏感文件 (.env 等)
+                  </label>
+                  <transition name="fade">
+                    <div v-show="exportOptions.projects" class="pl-6 overflow-hidden">
+                      <textarea 
+                        v-model="projectFilePatterns"
+                        placeholder="每行一个路径，支持 * 表达式"
+                        class="w-full h-24 bg-slate-900/50 border border-slate-700 rounded-lg p-2 text-xs font-mono text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
+                      ></textarea>
+                      <p class="text-[10px] text-slate-500 mt-1 italic">
+                        * 如果文本框留空则不导出对应项目文件
+                      </p>
+                    </div>
+                  </transition>
+                </div>
               </div>
               <button class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition">
                 创建备份包 (.zip)

@@ -1,6 +1,5 @@
 use bollard::Docker;
-use bollard::container::{ListContainersOptions, Config};
-use bollard::models::ContainerSummary;
+use bollard::container::ListContainersOptions;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
@@ -48,7 +47,7 @@ impl DockerManager {
                 status: c.status.unwrap_or_default(),
                 state: c.state.unwrap_or_default(),
                 ports: c.ports.unwrap_or_default().into_iter()
-                    .filter_map(|p| p.public_port)
+                    .filter_map(|p| p.public_port.map(|port| port as i32))
                     .collect(),
             }
         }).collect();

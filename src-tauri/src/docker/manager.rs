@@ -1,5 +1,6 @@
 use bollard::Docker;
-use bollard::container::ListContainersOptions;
+use bollard::container::{StartContainerOptions, StopContainerOptions, RestartContainerOptions};
+use bollard::query_parameters::ListContainersOptions;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
@@ -45,7 +46,7 @@ impl DockerManager {
                 name,
                 image: c.image.unwrap_or_default(),
                 status: c.status.unwrap_or_default(),
-                state: format!("{:?}", c.state.unwrap_or_default()),
+                state: format!("{:?}", c.state),
                 ports: c.ports.unwrap_or_default().into_iter()
                     .filter_map(|p| p.public_port.map(|port| port as i32))
                     .collect(),

@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use std::fs::{self, File};
 use std::io::{Write, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use zip::write::FileOptions;
 use crate::docker::manager::DockerManager;
 use glob::glob;
@@ -32,7 +32,7 @@ impl ExportEngine {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::create(save_path)?;
         let mut zip = zip::ZipWriter::new(file);
-        let zip_options = FileOptions::default()
+        let zip_options = FileOptions::<()>::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(0o755);
 
@@ -56,7 +56,7 @@ impl ExportEngine {
             let mysql_container = containers.iter().find(|c| c.name.contains("mysql"));
             
             if let Some(c) = mysql_container {
-                let dump_cmd = if options.mysql_type == "schema" {
+                let _dump_cmd = if options.mysql_type == "schema" {
                     "mysqldump -u root -proot --all-databases --no-data"
                 } else {
                     "mysqldump -u root -proot --all-databases"
@@ -127,7 +127,7 @@ impl ExportEngine {
             if path.is_dir() {
                 Self::add_dir_to_zip(zip, &path, &dest_path, exported_files)?;
             } else {
-                let zip_options = FileOptions::default()
+                let zip_options = FileOptions::<()>::default()
                     .compression_method(zip::CompressionMethod::Deflated);
                 zip.start_file(&dest_path, zip_options)?;
                 let mut f = File::open(path)?;

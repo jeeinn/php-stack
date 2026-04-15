@@ -367,14 +367,8 @@ onMounted(() => {
           </button>
         </div>
         
-        <transition 
-          name="fade"
-          @before-enter="el => { el.style.maxHeight = '0'; el.style.opacity = '0'; }"
-          @enter="(el, done) => { el.offsetHeight; el.style.maxHeight = '160px'; el.style.opacity = '1'; done(); }"
-          @before-leave="el => { el.style.maxHeight = '160px'; el.style.opacity = '1'; }"
-          @leave="(el, done) => { el.style.maxHeight = '0'; el.style.opacity = '0'; setTimeout(done, 300); }"
-        >
-          <div v-if="showLogs" class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden">
+        <transition name="fade">
+          <div v-show="showLogs" class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden">
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
               {{ log }}
             </div>
@@ -390,10 +384,10 @@ onMounted(() => {
 @reference "tailwindcss";
 
 .sidebar-item {
-  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-100;
+  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-100 border border-transparent;
 }
 .sidebar-item.active {
-  @apply bg-blue-600/10 text-blue-400 border border-blue-600/20;
+  @apply bg-blue-600/10 text-blue-400 border-blue-600/20;
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;

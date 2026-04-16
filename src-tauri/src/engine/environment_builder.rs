@@ -114,7 +114,36 @@ impl EnvironmentBuilder {
         }
     }
     
-    /// 生成优化的 docker-compose 配置
+    /// 生成优化的 docker-compose 配置（包含镜像构建）
+    pub async fn generate_compose_with_build(
+        &self,
+        spec: &EnvironmentSpec,
+    ) -> Result<crate::engine::compose_manager::DockerCompose, String> {
+        use crate::engine::compose_manager::{DockerCompose, NetworkConfig};
+        
+        let mut compose = DockerCompose {
+            version: None,  // Docker Compose v2+ 不再需要
+            networks: HashMap::from([
+                (spec.network_name.clone(), NetworkConfig {
+                    driver: "bridge".to_string(),
+                    external: Some(true),
+                })
+            ]),
+            services: HashMap::new(),
+            volumes: None,
+        };
+        
+        // 为每个服务生成配置
+        for service_spec in &spec.services {
+            let service_config = self.build_service_config_with_image_build(service_spec, &spec.network_name).await?;
+            let service_name = Self::get_service_name(service_spec);
+            compose.services.insert(service_name, service_config);
+        }
+        
+        Ok(compose)
+    }
+    
+    /// 生成优化的 docker-compose 配置（不包含镜像构建，用于预览）
     pub async fn generate_compose(
         &self,
         spec: &EnvironmentSpec,
@@ -141,6 +170,71 @@ impl EnvironmentBuilder {
         }
         
         Ok(compose)
+    }
+    
+    /// 构建单个服务的配置（包含镜像构建）
+    async fn build_service_config_with_image_build(
+        &self,
+        spec: &ServiceSpec,
+        network_name: &str,
+    ) -> Result<crate::engine::compose_manager::ServiceConfig, String> {
+        use crate::engine::compose_manager::ServiceConfig;
+        
+        let service_name = Self::get_service_name(spec);
+        
+        // 如果是 PHP 且有扩展，先构建自定义镜像
+        let image = if spec.software_type == SoftwareType::PHP {
+            if let Some(extensions) = &spec.extensions {
+                if !extensions.is_empty() {
+                    log::info!("🔨 构建 PHP 自定义镜像 (版本: {}, 扩展: {:?})", spec.version, extensions);
+                    build_custom_php_image(&spec.version, extensions).await?
+                } else {
+                    format!("php:{}-fpm", spec.version)
+                }
+            } else {
+                format!("php:{}-fpm", spec.version)
+            }
+        } else {
+            Self::get_image_name(spec)
+        };
+        
+        // 端口映射
+        let ports: Vec<String> = spec.ports.iter()
+            .map(|(host, container)| format!("{}:{}", host, container))
+            .collect();
+        
+        // 环境变量
+        let environment = Self::get_environment_vars(spec);
+        
+        // 数据卷
+        let volumes = Self::get_volumes(spec);
+        
+        // 依赖关系
+        let depends_on = Self::get_dependencies(spec);
+        
+        Ok(ServiceConfig {
+            image,
+            container_name: service_name.clone(),
+            networks: vec![network_name.to_string()],
+            ports: if ports.is_empty() { None } else { Some(ports) },
+            volumes: if volumes.as_ref().map_or(true, |v| v.is_empty()) {
+                None
+            } else {
+                volumes
+            },
+            environment: if environment.as_ref().map_or(true, |e| e.is_empty()) {
+                None
+            } else {
+                environment
+            },
+            depends_on: if depends_on.as_ref().map_or(true, |d| d.is_empty()) {
+                None
+            } else {
+                depends_on
+            },
+            restart: Some("unless-stopped".to_string()),
+            working_dir: None,
+        })
     }
     
     /// 构建单个服务的配置

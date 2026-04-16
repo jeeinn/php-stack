@@ -44,6 +44,7 @@ pub fn run() {
       commands::test_mirror_connection,
       commands::validate_environment_spec,
       commands::generate_compose_preview,
+      commands::deploy_environment_with_build,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

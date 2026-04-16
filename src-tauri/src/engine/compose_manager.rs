@@ -104,6 +104,20 @@ impl ComposeManager {
         Ok(())
     }
 
+    /// 保存 docker-compose 配置到文件
+    pub fn save_compose_file(&self, compose: &DockerCompose) -> Result<(), String> {
+        use std::fs;
+        
+        let yaml = serde_yaml::to_string(compose)
+            .map_err(|e| format!("序列化 YAML 失败: {}", e))?;
+        
+        fs::write(&self.compose_path, &yaml)
+            .map_err(|e| format!("写入文件失败: {}", e))?;
+        
+        log::info!("✅ docker-compose.yml 已保存 ({} 个服务)", compose.services.len());
+        Ok(())
+    }
+
     /// 构建单个服务的配置
     fn build_service_config(
         &self,

@@ -289,7 +289,7 @@ pub async fn validate_environment_spec(spec: EnvironmentSpec) -> Result<bool, St
     Ok(true)
 }
 
-/// 生成 docker-compose 配置（预览）
+/// 生成 docker-compose 配置（预览，不包含镜像构建）
 #[tauri::command]
 pub async fn generate_compose_preview(spec: EnvironmentSpec) -> Result<String, String> {
     let builder = EnvironmentBuilder::new();
@@ -300,4 +300,34 @@ pub async fn generate_compose_preview(spec: EnvironmentSpec) -> Result<String, S
         .map_err(|e| format!("序列化 YAML 失败: {}", e))?;
     
     Ok(yaml)
+}
+
+/// 生成并应用 docker-compose 配置（包含镜像构建）
+#[tauri::command]
+pub async fn deploy_environment_with_build(spec: EnvironmentSpec) -> Result<String, String> {
+    use crate::engine::compose_manager::ComposeManager;
+    
+    log::info!("🚀 开始部署环境...");
+    
+    // 1. 验证环境规格
+    CompatibilityChecker::validate(&spec)?;
+    log::info!("✅ 环境规格验证通过");
+    
+    // 2. 生成 compose 配置（包含镜像构建）
+    let builder = EnvironmentBuilder::new();
+    let compose = builder.generate_compose_with_build(&spec).await?;
+    log::info!("✅ Compose 配置生成成功");
+    
+    // 3. 写入 docker-compose.yml
+    let compose_manager = ComposeManager::new(".");
+    compose_manager.save_compose_file(&compose)
+        .map_err(|e| format!("保存 compose 文件失败: {}", e))?;
+    log::info!("✅ docker-compose.yml 已保存");
+    
+    // 4. 应用配置（启动容器）
+    compose_manager.apply_changes().await
+        .map_err(|e| format!("应用配置失败: {}", e))?;
+    log::info!("✅ 环境部署成功");
+    
+    Ok("环境部署成功".to_string())
 }

@@ -36,6 +36,8 @@ pub fn run() {
       // Phase 3: 智能重启优化
       commands::analyze_restart_impact,
       commands::smart_restart_service,
+      // Phase 4: 前端增强
+      commands::read_compose_file,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

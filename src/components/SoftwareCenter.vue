@@ -32,6 +32,24 @@ const showInstallModal = ref(false);
 const selectedVersion = ref<SoftwareVersion | null>(null);
 const customPort = ref<number | null>(null);
 
+// Phase 4: 影响评估和智能重启
+interface RestartImpact {
+  services_to_restart: string[];
+  dependency_chain: string[];
+  total_affected: number;
+}
+
+const showImpactDialog = ref(false);
+const restartImpact = ref<RestartImpact | null>(null);
+const restartingService = ref<string>('');
+const isAnalyzing = ref(false);
+const isRestarting = ref(false);
+
+// Phase 4: Compose 文件查看器
+const showComposeViewer = ref(false);
+const composeContent = ref<string>('');
+const isLoadingCompose = ref(false);
+
 // 软件类型配置（softwareTypeKey -> 后端期望的 Enum 名称）
 const softwareTypeMap: Record<SoftwareType, string> = {
   php: 'PHP',
@@ -138,6 +156,61 @@ const handleUninstall = async (name: string) => {
   }
 };
 
+// Phase 4: 分析重启影响
+const analyzeRestartImpact = async (containerName: string) => {
+  try {
+    isAnalyzing.value = true;
+    const impact = await invoke('analyze_restart_impact', { 
+      serviceName: containerName 
+    }) as RestartImpact;
+    
+    restartImpact.value = impact;
+    restartingService.value = containerName;
+    showImpactDialog.value = true;
+  } catch (e) {
+    console.error('分析失败:', e);
+    alert(`分析失败: ${e}`);
+  } finally {
+    isAnalyzing.value = false;
+  }
+};
+
+// Phase 4: 执行智能重启
+const executeSmartRestart = async () => {
+  try {
+    isRestarting.value = true;
+    const impact = await invoke('smart_restart_service', { 
+      serviceName: restartingService.value 
+    }) as RestartImpact;
+    
+    // 显示成功提示
+    alert(`✅ 智能重启完成！\n已重启 ${impact.total_affected} 个服务：\n${impact.services_to_restart.join(', ')}`);
+    
+    showImpactDialog.value = false;
+    await loadInstalled();
+  } catch (e) {
+    console.error('重启失败:', e);
+    alert(`重启失败: ${e}`);
+  } finally {
+    isRestarting.value = false;
+  }
+};
+
+// Phase 4: 查看 docker-compose.yml
+const viewComposeFile = async () => {
+  try {
+    isLoadingCompose.value = true;
+    const content = await invoke('read_compose_file') as string;
+    composeContent.value = content;
+    showComposeViewer.value = true;
+  } catch (e) {
+    console.error('读取失败:', e);
+    alert(`读取失败: ${e}`);
+  } finally {
+    isLoadingCompose.value = false;
+  }
+};
+
 // 判断是否已安装某个版本
 const isInstalled = (version: string): boolean => {
   return installedList.value.some(
@@ -156,6 +229,18 @@ const getInstalledInstance = (version: string): InstalledSoftware | undefined =>
   );
 };
 
+// Phase 4: 获取服务的依赖关系
+const getServiceDependencies = (softwareType: SoftwareType): string[] => {
+  const deps: Record<SoftwareType, string[]> = {
+    php: ['MySQL', 'Redis'],
+    mysql: [],
+    redis: [],
+    nginx: ['PHP'],
+    mongodb: [],
+  };
+  return deps[softwareType];
+};
+
 onMounted(() => {
   loadVersions();
   loadInstalled();
@@ -165,8 +250,22 @@ onMounted(() => {
 <template>
   <div class="flex-1 flex flex-col overflow-hidden">
     <header class="mb-8">
-      <h1 class="text-3xl font-bold mb-2">软件管理中心</h1>
-      <p class="text-slate-400">一键安装和管理开发环境软件</p>
+      <div class="flex justify-between items-start">
+        <div>
+          <h1 class="text-3xl font-bold mb-2">软件管理中心</h1>
+          <p class="text-slate-400">一键安装和管理开发环境软件</p>
+        </div>
+        
+        <!-- Phase 4: Compose 文件查看按钮 -->
+        <button
+          @click="viewComposeFile"
+          :disabled="isLoadingCompose"
+          class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2"
+        >
+          <span v-if="isLoadingCompose" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-400"></span>
+          📄 {{ isLoadingCompose ? '加载中...' : '查看 Compose' }}
+        </button>
+      </div>
     </header>
 
     <!-- 软件类型选择 -->
@@ -198,6 +297,15 @@ onMounted(() => {
           <div>
             <h3 class="text-xl font-bold">{{ version.version }}</h3>
             <p class="text-sm text-slate-500 mt-1">{{ version.description }}</p>
+            
+            <!-- Phase 4: 依赖关系图标 -->
+            <div v-if="getServiceDependencies(selectedType).length > 0" class="mt-2 flex items-center gap-1">
+              <span class="text-xs text-slate-500">依赖:</span>
+              <span v-for="dep in getServiceDependencies(selectedType)" :key="dep"
+                    class="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-xs rounded border border-slate-700">
+                {{ dep }}
+              </span>
+            </div>
           </div>
           <span
             v-if="version.is_stable"
@@ -215,6 +323,17 @@ onMounted(() => {
               状态: {{ getInstalledInstance(version.version)?.status || 'Unknown' }}
             </div>
           </div>
+          
+          <!-- Phase 4: 智能重启按钮 -->
+          <button
+            @click="analyzeRestartImpact(getInstalledInstance(version.version)!.name)"
+            :disabled="isAnalyzing"
+            class="w-full py-2 mb-2 bg-purple-600/20 hover:bg-purple-600 text-purple-400 hover:text-white border border-purple-600/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <span v-if="isAnalyzing && restartingService === getInstalledInstance(version.version)!.name" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400"></span>
+            {{ isAnalyzing && restartingService === getInstalledInstance(version.version)!.name ? '分析中...' : '🔄 智能重启' }}
+          </button>
+          
           <button
             @click="handleUninstall(getInstalledInstance(version.version)!.name)"
             class="w-full py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-600/30 rounded-lg text-sm font-medium transition-all"
@@ -297,6 +416,113 @@ onMounted(() => {
           >
             <span v-if="installing" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
             {{ installing ? '安装中...' : '确认安装' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 4: 影响评估对话框 -->
+    <div
+      v-if="showImpactDialog"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+      @click.self="showImpactDialog = false"
+    >
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="text-purple-400">🔄</span>
+          智能重启影响评估
+        </h3>
+
+        <div class="space-y-4 mb-6">
+          <!-- 目标服务 -->
+          <div class="p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+            <div class="text-sm text-purple-400 mb-1">目标服务</div>
+            <div class="font-mono text-white">{{ restartingService }}</div>
+          </div>
+
+          <!-- 影响范围 -->
+          <div v-if="restartImpact" class="space-y-3">
+            <div class="text-sm text-slate-400">
+              将影响 <span class="text-yellow-400 font-bold">{{ restartImpact.total_affected }}</span> 个服务
+            </div>
+
+            <!-- 依赖链 -->
+            <div class="bg-black/40 p-3 rounded-lg font-mono text-xs space-y-1">
+              <div v-for="(chain, i) in restartImpact.dependency_chain" :key="i" 
+                   :class="i === 0 ? 'text-purple-300' : 'text-blue-300/80'">
+                {{ chain }}
+              </div>
+            </div>
+
+            <!-- 需要重启的服务列表 -->
+            <div class="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+              <div class="text-sm text-slate-400 mb-2">需要重启的服务：</div>
+              <div class="flex flex-wrap gap-2">
+                <span v-for="service in restartImpact.services_to_restart" :key="service"
+                      class="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded border border-blue-500/30">
+                  {{ service }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 加载中 -->
+          <div v-if="isAnalyzing" class="py-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+            <p class="text-slate-500 mt-3">正在分析依赖关系...</p>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button
+            @click="showImpactDialog = false"
+            :disabled="isRestarting"
+            class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            @click="executeSmartRestart"
+            :disabled="isRestarting || isAnalyzing"
+            class="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <span v-if="isRestarting" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+            {{ isRestarting ? '重启中...' : '确认重启' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 4: Compose 文件查看器 -->
+    <div
+      v-if="showComposeViewer"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+      @click.self="showComposeViewer = false"
+    >
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-4xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-bold flex items-center gap-2">
+            <span class="text-indigo-400">📄</span>
+            docker-compose.yml
+          </h3>
+          <button
+            @click="showComposeViewer = false"
+            class="text-slate-400 hover:text-white transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto bg-black/40 p-4 rounded-lg font-mono text-xs text-green-300/90 border border-slate-700">
+          <pre class="whitespace-pre-wrap">{{ composeContent }}</pre>
+        </div>
+
+        <div class="mt-4 flex gap-3">
+          <button
+            @click="showComposeViewer = false"
+            class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition"
+          >
+            关闭
           </button>
         </div>
       </div>

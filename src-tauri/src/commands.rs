@@ -227,3 +227,19 @@ pub struct RestartImpactResult {
     pub dependency_chain: Vec<String>,
     pub total_affected: usize,
 }
+
+/// 【Phase 4】读取 docker-compose.yml 文件内容
+#[tauri::command]
+pub async fn read_compose_file() -> Result<String, String> {
+    use std::fs;
+    use crate::engine::software_manager::SoftwareManager;
+    
+    let manager = SoftwareManager::new().map_err(|e| e.to_string())?;
+    let compose_manager = manager.get_compose_manager();
+    let compose_path = compose_manager.get_compose_path();
+    
+    let content = fs::read_to_string(compose_path)
+        .map_err(|e| format!("读取文件失败: {}", e))?;
+    
+    Ok(content)
+}

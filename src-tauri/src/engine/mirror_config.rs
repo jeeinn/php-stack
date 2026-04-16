@@ -273,7 +273,9 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
             ));
         }
         
-        // PyPI 镜像源
+        // PyPI 镜像源（暂时禁用，PHP-FPM 镜像不包含 pip）
+        // 如果未来需要，可以先安装 Python
+        /*
         if self.pypi_mirror != MirrorSource::Default {
             let pypi_url = self.pypi_mirror.get_url("pypi");
             snippet.push_str(&format!(
@@ -284,6 +286,7 @@ RUN pip config set global.index-url {}
                 pypi_url.trim_end_matches('/')
             ));
         }
+        */
         
         snippet
     }

@@ -91,7 +91,7 @@ const handleInstall = async () => {
 
     // 构建安装规格
     const spec = {
-      software_type: selectedType.value.toUpperCase(),
+      software_type: selectedType.value.charAt(0).toUpperCase() + selectedType.value.slice(1), // 首字母大写
       version: selectedVersion.value.version,
       custom_image: null,
       port_mappings: portMappings,

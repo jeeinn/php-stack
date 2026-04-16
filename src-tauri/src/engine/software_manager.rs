@@ -8,10 +8,15 @@ use std::net::TcpListener;
 /// 软件类型枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SoftwareType {
+    #[serde(rename = "PHP")]
     PHP,
+    #[serde(rename = "MySQL")]
     MySQL,
+    #[serde(rename = "Redis")]
     Redis,
+    #[serde(rename = "Nginx")]
     Nginx,
+    #[serde(rename = "MongoDB")]
     MongoDB,
 }
 

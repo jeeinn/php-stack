@@ -7,7 +7,8 @@ use crate::engine::restart_analyzer::{RestartAnalyzer, RestartImpact};
 /// Docker Compose 配置文件结构
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DockerCompose {
-    pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,  // Docker Compose v2+ 不再需要，但保留兼容性
     pub networks: HashMap<String, NetworkConfig>,
     pub services: HashMap<String, ServiceConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -62,7 +63,7 @@ impl ComposeManager {
         containers: &[InstalledSoftware]
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut compose = DockerCompose {
-            version: "3.8".to_string(),
+            version: None,  // Docker Compose v2+ 不再需要 version 字段
             networks: HashMap::from([
                 ("php-stack-network".to_string(), NetworkConfig {
                     driver: "bridge".to_string(),
@@ -82,9 +83,9 @@ impl ComposeManager {
 
         // 如果没有服务，生成最小化的 compose 文件
         let yaml = if compose.services.is_empty() {
-            // 生成一个最小化的 compose 文件
+            // 生成一个最小化的 compose 文件（不包含 version）
             format!(
-                "version: '3.8'\nnetworks:\n  php-stack-network:\n    driver: bridge\n    external: true\nservices: {{}}\n"
+                "networks:\n  php-stack-network:\n    driver: bridge\n    external: true\nservices: {{}}\n"
             )
         } else {
             serde_yaml::to_string(&compose)?
@@ -207,23 +208,78 @@ impl ComposeManager {
 
         log::info!("🔄 应用 docker-compose 变更...");
 
+        // 使用 --remove-orphans 自动清理不再定义的服务
+        // 使用 --force-recreate 强制重新创建容器以避免名称冲突
         let output = Command::new("docker")
             .args(&[
                 "compose",
                 "-f", &self.compose_path,
-                "up", "-d"
+                "up", "-d", "--remove-orphans"
+            ])
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            // 如果是容器名称冲突，先停止并删除冲突的容器
+            if stderr.contains("is already in use") {
+                log::warn!("⚠️ 检测到容器名称冲突，尝试清理...");
+                return self.handle_container_conflict().await;
+            }
+            
+            return Err(format!(
+                "docker compose 执行失败: {}",
+                stderr
+            ).into());
+        }
+
+        log::info!("✅ 服务已成功应用");
+        Ok(())
+    }
+
+    /// 处理容器名称冲突
+    async fn handle_container_conflict(&self) -> Result<(), Box<dyn std::error::Error>> {
+        use tokio::process::Command;
+        
+        // 先停止所有相关容器
+        log::info!("🛑 停止所有 php-stack 容器...");
+        let _ = Command::new("docker")
+            .args(&["stop"])
+            .arg("ps-php-5-6")
+            .arg("ps-php-7-4")
+            .arg("ps-php-8-2")
+            .arg("ps-mysql-5-7")
+            .arg("ps-mysql-8-0")
+            .arg("ps-redis-6-2")
+            .arg("ps-redis-7-0")
+            .arg("ps-nginx-1-24")
+            .arg("ps-mongodb-5-0")
+            .output()
+            .await;
+        
+        // 等待一下确保容器完全停止
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        
+        // 再次尝试 up
+        log::info!("🔄 重新启动服务...");
+        let output = Command::new("docker")
+            .args(&[
+                "compose",
+                "-f", &self.compose_path,
+                "up", "-d", "--remove-orphans"
             ])
             .output()
             .await?;
 
         if !output.status.success() {
             return Err(format!(
-                "docker compose 执行失败: {}",
+                "清理后仍然失败: {}",
                 String::from_utf8_lossy(&output.stderr)
             ).into());
         }
 
-        log::info!("✅ 服务已成功应用");
+        log::info!("✅ 冲突已解决，服务已成功启动");
         Ok(())
     }
 

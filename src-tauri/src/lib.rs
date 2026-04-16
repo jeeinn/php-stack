@@ -30,7 +30,8 @@ pub fn run() {
       commands::uninstall_software,
       commands::list_installed_software,
       commands::check_port_available,
-      commands::allocate_ports
+      commands::allocate_ports,
+      commands::migrate_containers_to_network
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

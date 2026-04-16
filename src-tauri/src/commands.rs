@@ -124,3 +124,34 @@ pub fn allocate_ports(
         &preferred_ports,
     ))
 }
+
+/// 迁移已有容器到统一网络
+#[tauri::command]
+pub async fn migrate_containers_to_network() -> Result<String, String> {
+    use crate::engine::software_manager::SoftwareManager;
+    
+    let manager = SoftwareManager::new().map_err(|e| e.to_string())?;
+    let containers = manager.list_installed_software().await
+        .map_err(|e| format!("获取容器列表失败: {}", e))?;
+    
+    let mut migrated = 0;
+    let mut errors = Vec::new();
+    
+    for container in containers {
+        match manager.migrate_container_to_network(&container.name).await {
+            Ok(_) => migrated += 1,
+            Err(e) => errors.push(format!("{}: {}", container.name, e)),
+        }
+    }
+    
+    if errors.is_empty() {
+        Ok(format!("✅ 成功迁移 {} 个容器到统一网络", migrated))
+    } else {
+        Ok(format!(
+            "⚠️ 迁移完成：{} 个成功，{} 个失败\n失败详情:\n{}",
+            migrated,
+            errors.len(),
+            errors.join("\n")
+        ))
+    }
+}

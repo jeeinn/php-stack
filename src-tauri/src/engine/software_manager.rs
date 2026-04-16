@@ -95,15 +95,22 @@ pub struct InstalledSoftware {
     pub created_at: String,
 }
 
+use crate::engine::network_manager::NetworkManager;
+
 /// 软件管理器
 pub struct SoftwareManager {
     docker: Docker,
+    network_manager: NetworkManager,
 }
 
 impl SoftwareManager {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let docker = Docker::connect_with_local_defaults()?;
-        Ok(Self { docker })
+        let network_manager = NetworkManager::new()?;
+        Ok(Self { 
+            docker,
+            network_manager,
+        })
     }
 
     /// 获取可用软件版本清单
@@ -309,11 +316,9 @@ impl SoftwareManager {
             .start_container(&container_name, None)
             .await?;
 
-        // TODO: 将新容器加入统一网络（待完善）
-        // self.connect_to_network(&container_name).await?;
-
-        // TODO: 更新 docker-compose.yml（待完善）
-        // self.update_compose_file().await?;
+        // 将新容器加入统一网络
+        let alias = self.network_manager.extract_service_alias(&container_name);
+        self.network_manager.connect_container(&container_name, &alias).await?;
 
         Ok(container_name)
     }
@@ -510,6 +515,12 @@ impl SoftwareManager {
 
     // TODO: Docker Compose 集成 - 待完善
     // 详见 docs/v1.1-docker-compose-integration-plan.md
+
+    /// 公开方法：迁移容器到统一网络
+    pub async fn migrate_container_to_network(&self, container_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let alias = self.network_manager.extract_service_alias(container_name);
+        self.network_manager.connect_container(container_name, &alias).await
+    }
 }
 
 /// 端口分配器 - 自动查找可用端口

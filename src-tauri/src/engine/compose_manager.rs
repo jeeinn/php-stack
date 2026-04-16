@@ -142,15 +142,27 @@ impl ComposeManager {
             },
             container_name: container.name.clone(),
             networks: vec!["php-stack-network".to_string()],
-            // 关键修复：空端口时不输出 ports 字段
+            // 关键修复：空数组时不输出该字段
             ports: if ports.is_empty() { 
                 None 
             } else { 
                 Some(ports) 
             },
-            volumes,
-            environment,
-            depends_on,
+            volumes: if volumes.as_ref().map_or(true, |v| v.is_empty()) {
+                None
+            } else {
+                volumes
+            },
+            environment: if environment.as_ref().map_or(true, |e| e.is_empty()) {
+                None
+            } else {
+                environment
+            },
+            depends_on: if depends_on.as_ref().map_or(true, |d| d.is_empty()) {
+                None
+            } else {
+                depends_on
+            },
             restart: Some("unless-stopped".to_string()),
             working_dir: None,
         })

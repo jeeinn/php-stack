@@ -260,12 +260,13 @@ RUN sed -i 's|deb.debian.org/debian|{}|g' /etc/apt/sources.list && \
             ));
         }
         
-        // Composer 镜像源
+        // Composer 镜像源（先安装 Composer）
         if self.composer_mirror != MirrorSource::Default {
             let composer_url = self.composer_mirror.get_url("composer");
             snippet.push_str(&format!(
-                r#"# 配置 Composer 镜像源
-RUN composer config -g repo.packagist composer {}
+                r#"# 安装并配置 Composer 镜像源
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
+    composer config -g repo.packagist composer {}
 
 "#,
                 composer_url.trim_end_matches('/')

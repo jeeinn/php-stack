@@ -309,6 +309,12 @@ impl SoftwareManager {
             .start_container(&container_name, None)
             .await?;
 
+        // TODO: 将新容器加入统一网络（待完善）
+        // self.connect_to_network(&container_name).await?;
+
+        // TODO: 更新 docker-compose.yml（待完善）
+        // self.update_compose_file().await?;
+
         Ok(container_name)
     }
 
@@ -501,6 +507,9 @@ impl SoftwareManager {
 
         env
     }
+
+    // TODO: Docker Compose 集成 - 待完善
+    // 详见 docs/v1.1-docker-compose-integration-plan.md
 }
 
 /// 端口分配器 - 自动查找可用端口

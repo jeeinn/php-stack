@@ -268,7 +268,7 @@ updateSpec();
 .step1-select-stack h3 {
   font-size: 1.5rem;
   margin-bottom: 1.5rem;
-  color: #1a1a1a;
+  color: #f1f5f9; /* text-slate-100 */
 }
 
 .service-section {
@@ -278,12 +278,12 @@ updateSpec();
 .service-section h4 {
   font-size: 1.1rem;
   margin-bottom: 1rem;
-  color: #374151;
+  color: #cbd5e1; /* text-slate-300 */
 }
 
 .service-item {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: #1e293b; /* bg-slate-800 */
+  border: 1px solid #334155; /* border-slate-700 */
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -305,19 +305,21 @@ updateSpec();
 
 .service-name {
   font-weight: 600;
-  color: #1a1a1a;
+  color: #f1f5f9; /* text-slate-100 */
 }
 
 .version-select {
   padding: 0.25rem 0.5rem;
-  border: 1px solid #d1d5db;
+  background: #0f172a; /* bg-slate-900 */
+  border: 1px solid #475569; /* border-slate-600 */
   border-radius: 4px;
   font-size: 0.875rem;
+  color: #e2e8f0; /* text-slate-200 */
 }
 
 .service-hint {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #94a3b8; /* text-slate-400 */
   margin-top: 0.5rem;
 }
 
@@ -335,12 +337,17 @@ updateSpec();
   gap: 0.25rem;
   font-size: 0.875rem;
   cursor: pointer;
+  color: #cbd5e1; /* text-slate-300 */
+}
+
+.extension-checkbox input[type="checkbox"] {
+  accent-color: #3b82f6; /* blue-500 */
 }
 
 /* 镜像源配置 */
 .mirror-config-section {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
+  background: #1e3a8a; /* bg-blue-900 */
+  border: 1px solid #1e40af; /* border-blue-800 */
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 2rem;
@@ -348,7 +355,7 @@ updateSpec();
 
 .mirror-config-section h4 {
   margin-bottom: 1rem;
-  color: #0369a1;
+  color: #93c5fd; /* text-blue-300 */
 }
 
 .mirror-grid {
@@ -366,15 +373,17 @@ updateSpec();
 
 .mirror-item label {
   font-size: 0.875rem;
-  color: #374151;
+  color: #cbd5e1; /* text-slate-300 */
   min-width: 80px;
 }
 
 .mirror-item select {
   flex: 1;
   padding: 0.25rem 0.5rem;
-  border: 1px solid #d1d5db;
+  background: #0f172a; /* bg-slate-900 */
+  border: 1px solid #475569; /* border-slate-600 */
   border-radius: 4px;
+  color: #e2e8f0; /* text-slate-200 */
 }
 
 .mirror-actions {
@@ -385,7 +394,7 @@ updateSpec();
 .test-result {
   margin-top: 0.5rem;
   font-size: 0.875rem;
-  color: #059669;
+  color: #6ee7b7; /* text-emerald-300 */
 }
 
 /* 按钮 */
@@ -397,7 +406,7 @@ updateSpec();
 
 .btn-next {
   padding: 0.75rem 2rem;
-  background: #3b82f6;
+  background: #3b82f6; /* bg-blue-500 */
   color: white;
   border: none;
   border-radius: 8px;
@@ -408,24 +417,32 @@ updateSpec();
 }
 
 .btn-next:hover {
-  background: #2563eb;
+  background: #2563eb; /* bg-blue-600 */
 }
 
 .btn-primary {
   padding: 0.5rem 1rem;
-  background: #3b82f6;
+  background: #3b82f6; /* bg-blue-500 */
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
+.btn-primary:hover {
+  background: #2563eb; /* bg-blue-600 */
+}
+
 .btn-secondary {
   padding: 0.5rem 1rem;
-  background: white;
-  color: #3b82f6;
-  border: 1px solid #3b82f6;
+  background: #1e293b; /* bg-slate-800 */
+  color: #60a5fa; /* text-blue-400 */
+  border: 1px solid #3b82f6; /* border-blue-500 */
   border-radius: 4px;
   cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #334155; /* bg-slate-700 */
 }
 </style>

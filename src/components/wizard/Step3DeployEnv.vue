@@ -104,7 +104,7 @@ function getLogClass(log: string) {
 .step3-deploy h3 {
   font-size: 1.5rem;
   margin-bottom: 1.5rem;
-  color: #1a1a1a;
+  color: #f1f5f9; /* text-slate-100 */
 }
 
 /* 部署状态 */
@@ -116,18 +116,18 @@ function getLogClass(log: string) {
 }
 
 .deploy-status.deploying {
-  background: #dbeafe;
-  border: 1px solid #93c5fd;
+  background: #1e3a8a; /* bg-blue-900 */
+  border: 1px solid #1e40af; /* border-blue-800 */
 }
 
 .deploy-status.success {
-  background: #d1fae5;
-  border: 1px solid #6ee7b7;
+  background: #064e3b; /* bg-emerald-900 */
+  border: 1px solid #065f46; /* border-emerald-800 */
 }
 
 .deploy-status.failed {
-  background: #fee2e2;
-  border: 1px solid #fca5a5;
+  background: #7f1d1d; /* bg-red-900 */
+  border: 1px solid #991b1b; /* border-red-800 */
 }
 
 .status-indicator {
@@ -137,6 +137,7 @@ function getLogClass(log: string) {
   gap: 1rem;
   font-size: 1.1rem;
   font-weight: 600;
+  color: #f1f5f9; /* text-slate-100 */
 }
 
 .spinner {
@@ -159,11 +160,12 @@ function getLogClass(log: string) {
 /* 日志区域 */
 .logs-section h4 {
   margin-bottom: 1rem;
-  color: #374151;
+  color: #cbd5e1; /* text-slate-300 */
 }
 
 .logs-container {
-  background: #1e1e1e;
+  background: #0f172a; /* bg-slate-900 */
+  border: 1px solid #1e293b; /* border-slate-800 */
   border-radius: 8px;
   padding: 1rem;
   max-height: 300px;
@@ -174,30 +176,30 @@ function getLogClass(log: string) {
 }
 
 .log-line {
-  color: #d4d4d4;
+  color: #e2e8f0; /* text-slate-200 */
   padding: 0.25rem 0;
 }
 
 .log-success {
-  color: #6ee7b7;
+  color: #6ee7b7; /* text-emerald-300 */
 }
 
 .log-error {
-  color: #fca5a5;
+  color: #fca5a5; /* text-red-300 */
 }
 
 .log-warning {
-  color: #fcd34d;
+  color: #fcd34d; /* text-amber-300 */
 }
 
 .log-info {
-  color: #93c5fd;
+  color: #93c5fd; /* text-blue-300 */
 }
 
 /* 连接信息 */
 .connection-info {
-  background: #f0fdf4;
-  border: 1px solid #86efac;
+  background: #064e3b; /* bg-emerald-900 */
+  border: 1px solid #065f46; /* border-emerald-800 */
   border-radius: 8px;
   padding: 1rem;
   margin: 1.5rem 0;
@@ -205,7 +207,7 @@ function getLogClass(log: string) {
 
 .connection-info h4 {
   margin-bottom: 1rem;
-  color: #166534;
+  color: #6ee7b7; /* text-emerald-300 */
 }
 
 .info-grid {
@@ -222,16 +224,16 @@ function getLogClass(log: string) {
 
 .info-item label {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: #94a3b8; /* text-slate-400 */
 }
 
 .info-item code {
-  background: white;
+  background: #0f172a; /* bg-slate-900 */
   padding: 0.5rem;
   border-radius: 4px;
   font-size: 0.875rem;
-  color: #166534;
-  border: 1px solid #86efac;
+  color: #6ee7b7; /* text-emerald-300 */
+  border: 1px solid #065f46; /* border-emerald-800 */
 }
 
 /* 按钮 */
@@ -253,20 +255,21 @@ function getLogClass(log: string) {
 }
 
 .btn-prev {
-  background: #f3f4f6;
-  color: #374151;
+  background: #1e293b; /* bg-slate-800 */
+  color: #cbd5e1; /* text-slate-300 */
+  border: 1px solid #334155; /* border-slate-700 */
 }
 
 .btn-prev:hover {
-  background: #e5e7eb;
+  background: #334155; /* bg-slate-700 */
 }
 
 .btn-reset {
-  background: #3b82f6;
+  background: #3b82f6; /* bg-blue-500 */
   color: white;
 }
 
 .btn-reset:hover {
-  background: #2563eb;
+  background: #2563eb; /* bg-blue-600 */
 }
 </style>

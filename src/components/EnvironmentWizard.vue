@@ -114,6 +114,7 @@ function resetWizard() {
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem;
+  color: #e2e8f0; /* text-slate-200 */
 }
 
 .wizard-header {
@@ -124,12 +125,12 @@ function resetWizard() {
 .wizard-header h2 {
   font-size: 1.8rem;
   font-weight: bold;
-  color: #1a1a1a;
+  color: #f1f5f9; /* text-slate-100 */
   margin-bottom: 0.5rem;
 }
 
 .subtitle {
-  color: #666;
+  color: #94a3b8; /* text-slate-400 */
   font-size: 1rem;
 }
 
@@ -153,8 +154,8 @@ function resetWizard() {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #e5e7eb;
-  color: #6b7280;
+  background: #334155; /* bg-slate-700 */
+  color: #94a3b8; /* text-slate-400 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -163,37 +164,58 @@ function resetWizard() {
 }
 
 .step-item.active .step-number {
-  background: #3b82f6;
+  background: #3b82f6; /* bg-blue-500 */
   color: white;
 }
 
 .step-item.completed .step-number {
-  background: #10b981;
+  background: #10b981; /* bg-emerald-500 */
   color: white;
 }
 
 .step-title {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #94a3b8; /* text-slate-400 */
 }
 
 .step-item.active .step-title {
-  color: #3b82f6;
+  color: #60a5fa; /* text-blue-400 */
   font-weight: 600;
 }
 
 .step-connector {
   width: 60px;
   height: 2px;
-  background: #e5e7eb;
+  background: #334155; /* bg-slate-700 */
 }
 
-/* 步骤内容 */
+/* 步骤内容 - 可滚动 */
 .step-content {
-  background: white;
+  background: #0f172a; /* bg-slate-900 */
+  border: 1px solid #1e293b; /* border-slate-800 */
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   padding: 2rem;
   min-height: 400px;
+  max-height: calc(100vh - 280px); /* 限制最大高度 */
+  overflow-y: auto; /* 启用垂直滚动 */
+}
+
+/* 自定义滚动条样式 */
+.step-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.step-content::-webkit-scrollbar-track {
+  background: #1e293b; /* bg-slate-800 */
+  border-radius: 4px;
+}
+
+.step-content::-webkit-scrollbar-thumb {
+  background: #475569; /* bg-slate-600 */
+  border-radius: 4px;
+}
+
+.step-content::-webkit-scrollbar-thumb:hover {
+  background: #64748b; /* bg-slate-500 */
 }
 </style>

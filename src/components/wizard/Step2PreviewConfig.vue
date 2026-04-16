@@ -75,11 +75,12 @@ function parseSummary(spec: any) {
 .step2-preview h3 {
   font-size: 1.5rem;
   margin-bottom: 1.5rem;
-  color: #1a1a1a;
+  color: #f1f5f9; /* text-slate-100 */
 }
 
 .yaml-preview {
-  background: #1e1e1e;
+  background: #0f172a; /* bg-slate-900 */
+  border: 1px solid #1e293b; /* border-slate-800 */
   border-radius: 8px;
   padding: 1.5rem;
   overflow-x: auto;
@@ -93,12 +94,12 @@ function parseSummary(spec: any) {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 0.875rem;
   line-height: 1.6;
-  color: #d4d4d4;
+  color: #e2e8f0; /* text-slate-200 */
 }
 
 .config-summary {
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
+  background: #451a03; /* bg-amber-950 */
+  border: 1px solid #92400e; /* border-amber-700 */
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1.5rem;
@@ -107,7 +108,7 @@ function parseSummary(spec: any) {
 .config-summary p {
   margin: 0.5rem 0;
   font-size: 0.875rem;
-  color: #92400e;
+  color: #fcd34d; /* text-amber-300 */
 }
 
 .actions {
@@ -127,25 +128,27 @@ function parseSummary(spec: any) {
 }
 
 .btn-prev {
-  background: #f3f4f6;
-  color: #374151;
+  background: #1e293b; /* bg-slate-800 */
+  color: #cbd5e1; /* text-slate-300 */
+  border: 1px solid #334155; /* border-slate-700 */
 }
 
 .btn-prev:hover {
-  background: #e5e7eb;
+  background: #334155; /* bg-slate-700 */
 }
 
 .btn-next {
-  background: #10b981;
+  background: #10b981; /* bg-emerald-500 */
   color: white;
 }
 
 .btn-next:hover:not(:disabled) {
-  background: #059669;
+  background: #059669; /* bg-emerald-600 */
 }
 
 .btn-next:disabled {
-  background: #d1d5db;
+  background: #334155; /* bg-slate-700 */
+  color: #64748b; /* text-slate-500 */
   cursor: not-allowed;
 }
 </style>

@@ -403,21 +403,22 @@ mod tests {
     #[test]
     fn test_determine_dependencies() {
         let manager = ComposeManager::new(".");
+        let installed_services = vec!["mysql".to_string(), "redis".to_string(), "php".to_string()];
         
         // PHP 应该依赖 mysql 和 redis
-        let php_deps = manager.determine_dependencies(&SoftwareType::PHP);
+        let php_deps = manager.determine_dependencies(&SoftwareType::PHP, &installed_services);
         assert!(php_deps.is_some());
         let deps = php_deps.unwrap();
         assert!(deps.contains(&"mysql".to_string()));
         assert!(deps.contains(&"redis".to_string()));
         
         // Nginx 应该依赖 php
-        let nginx_deps = manager.determine_dependencies(&SoftwareType::Nginx);
+        let nginx_deps = manager.determine_dependencies(&SoftwareType::Nginx, &installed_services);
         assert!(nginx_deps.is_some());
         assert_eq!(nginx_deps.unwrap(), vec!["php".to_string()]);
         
         // MySQL 不应该有依赖
-        let mysql_deps = manager.determine_dependencies(&SoftwareType::MySQL);
+        let mysql_deps = manager.determine_dependencies(&SoftwareType::MySQL, &installed_services);
         assert!(mysql_deps.is_none());
     }
 
@@ -443,7 +444,8 @@ mod tests {
             created_at: "2026-04-16T00:00:00Z".to_string(),
         };
         
-        let config = manager.build_service_config(&container).unwrap();
+        let installed_services = vec!["mysql".to_string(), "redis".to_string()];
+        let config = manager.build_service_config(&container, &installed_services).unwrap();
         
         assert_eq!(config.image, "php:8.2");
         assert_eq!(config.container_name, "ps-php-8-2");

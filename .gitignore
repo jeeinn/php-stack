@@ -27,3 +27,6 @@ dist-ssr
 docker-compose.yml
 src-tauri/docker-compose.yml
 src-tauri/data/
+
+# Environment variables
+.env

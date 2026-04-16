@@ -243,3 +243,61 @@ pub async fn read_compose_file() -> Result<String, String> {
     
     Ok(content)
 }
+
+// ==================== V2.0: 环境构建器命令 ====================
+
+use crate::engine::mirror_config::MirrorConfig;
+use crate::engine::environment_builder::{EnvironmentSpec, CompatibilityChecker, EnvironmentBuilder};
+
+/// 获取当前镜像源配置
+#[tauri::command]
+pub async fn get_mirror_config() -> Result<MirrorConfig, String> {
+    MirrorConfig::load_from_env()
+}
+
+/// 更新镜像源配置
+#[tauri::command]
+pub async fn update_mirror_config(config: MirrorConfig) -> Result<(), String> {
+    config.save_to_env()?;
+    log::info!("✅ 镜像源配置已更新");
+    Ok(())
+}
+
+/// 测试镜像源连接
+#[tauri::command]
+pub async fn test_mirror_connection(source: crate::engine::mirror_config::MirrorSource) -> Result<bool, String> {
+    // 尝试访问镜像源
+    let url = source.get_url("apt");
+    if url.is_empty() {
+        return Ok(true); // Default source
+    }
+    
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+    
+    let response = client.get(&url).send().await;
+    
+    Ok(response.is_ok())
+}
+
+/// 验证环境规格
+#[tauri::command]
+pub async fn validate_environment_spec(spec: EnvironmentSpec) -> Result<bool, String> {
+    CompatibilityChecker::validate(&spec)?;
+    Ok(true)
+}
+
+/// 生成 docker-compose 配置（预览）
+#[tauri::command]
+pub async fn generate_compose_preview(spec: EnvironmentSpec) -> Result<String, String> {
+    let builder = EnvironmentBuilder::new();
+    let compose = builder.generate_compose(&spec).await?;
+    
+    // 序列化为 YAML
+    let yaml = serde_yaml::to_string(&compose)
+        .map_err(|e| format!("序列化 YAML 失败: {}", e))?;
+    
+    Ok(yaml)
+}

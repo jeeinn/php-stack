@@ -38,6 +38,12 @@ pub fn run() {
       commands::smart_restart_service,
       // Phase 4: 前端增强
       commands::read_compose_file,
+      // V2.0: 环境构建器
+      commands::get_mirror_config,
+      commands::update_mirror_config,
+      commands::test_mirror_connection,
+      commands::validate_environment_spec,
+      commands::generate_compose_preview,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

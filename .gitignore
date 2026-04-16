@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated files
+docker-compose.yml
+src-tauri/docker-compose.yml
+src-tauri/data/

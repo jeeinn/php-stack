@@ -31,7 +31,8 @@ pub fn run() {
       commands::list_installed_software,
       commands::check_port_available,
       commands::allocate_ports,
-      commands::migrate_containers_to_network
+      commands::migrate_containers_to_network,
+      commands::rebuild_compose_file
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

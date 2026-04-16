@@ -96,20 +96,27 @@ pub struct InstalledSoftware {
 }
 
 use crate::engine::network_manager::NetworkManager;
+use crate::engine::compose_manager::ComposeManager;
 
 /// 软件管理器
 pub struct SoftwareManager {
     docker: Docker,
     network_manager: NetworkManager,
+    compose_manager: ComposeManager,
 }
 
 impl SoftwareManager {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let docker = Docker::connect_with_local_defaults()?;
         let network_manager = NetworkManager::new()?;
+        // 关键修复：将 docker-compose.yml 生成到项目根目录（src-tauri 的父目录）
+        // 避免 cargo-watch 监听到文件变化而重新构建应用
+        let project_root = "..";
+        let compose_manager = ComposeManager::new(project_root);
         Ok(Self { 
             docker,
             network_manager,
+            compose_manager,
         })
     }
 
@@ -320,6 +327,9 @@ impl SoftwareManager {
         let alias = self.network_manager.extract_service_alias(&container_name);
         self.network_manager.connect_container(&container_name, &alias).await?;
 
+        // 更新 docker-compose.yml
+        self.update_compose_file().await?;
+
         Ok(container_name)
     }
 
@@ -342,6 +352,9 @@ impl SoftwareManager {
             .remove_container(name, None)
             .await?;
 
+        // 更新 docker-compose.yml
+        self.update_compose_file().await?;
+
         Ok(())
     }
 
@@ -353,52 +366,90 @@ impl SoftwareManager {
         let manager = DockerManager::new()?;
         let containers = manager.list_ps_containers().await?;
 
-        let installed = containers
-            .into_iter()
-            .map(|c| {
-                // 解析容器名称获取软件类型和版本
-                let parts: Vec<&str> = c.name.split('-').collect();
-                let software_type = if parts.len() >= 2 {
-                    parts[1]
-                } else {
-                    "unknown"
-                };
+        let mut installed = Vec::new();
+        
+        for c in containers {
+            // 解析容器名称获取软件类型和版本
+            let parts: Vec<&str> = c.name.split('-').collect();
+            let software_type = if parts.len() >= 2 {
+                parts[1]
+            } else {
+                "unknown"
+            };
 
-                let version = if parts.len() >= 3 {
-                    parts[2..].join("-").replace('-', ".")
-                } else {
-                    "unknown".to_string()
-                };
+            let version = if parts.len() >= 3 {
+                parts[2..].join("-").replace('-', ".")
+            } else {
+                "unknown".to_string()
+            };
 
-                InstalledSoftware {
-                    id: c.id,
-                    name: c.name.clone(),
-                    spec: SoftwareSpec {
-                        software_type: match software_type {
-                            "php" => SoftwareType::PHP,
-                            "mysql" => SoftwareType::MySQL,
-                            "redis" => SoftwareType::Redis,
-                            "nginx" => SoftwareType::Nginx,
-                            "mongodb" => SoftwareType::MongoDB,
-                            _ => SoftwareType::PHP, // 默认
-                        },
-                        version,
-                        custom_image: None,
-                        port_mappings: HashMap::new(),
-                        volume_path: None,
-                        env_vars: HashMap::new(),
-                        extra_args: Vec::new(),
+            // 关键修复：从 Docker 容器检查中提取端口映射
+            let port_mappings = self.extract_port_mappings(&c.id).await?;
+
+            installed.push(InstalledSoftware {
+                id: c.id.clone(),
+                name: c.name.clone(),
+                spec: SoftwareSpec {
+                    software_type: match software_type {
+                        "php" => SoftwareType::PHP,
+                        "mysql" => SoftwareType::MySQL,
+                        "redis" => SoftwareType::Redis,
+                        "nginx" => SoftwareType::Nginx,
+                        "mongodb" => SoftwareType::MongoDB,
+                        _ => SoftwareType::PHP, // 默认
                     },
-                    status: c.status,
-                    created_at: chrono::Local::now().to_rfc3339(),
-                }
-            })
-            .collect();
+                    version,
+                    custom_image: None,
+                    port_mappings,
+                    volume_path: None,
+                    env_vars: HashMap::new(),
+                    extra_args: Vec::new(),
+                },
+                status: c.status,
+                created_at: chrono::Local::now().to_rfc3339(),
+            });
+        }
 
         Ok(installed)
     }
 
     // ==================== 私有辅助方法 ====================
+
+    /// 从容器检查中提取端口映射
+    async fn extract_port_mappings(
+        &self,
+        container_id: &str,
+    ) -> Result<HashMap<u16, u16>, Box<dyn std::error::Error>> {
+        use bollard::models::ContainerInspectResponse;
+        
+        // 检查容器获取详细信息
+        let container_info: ContainerInspectResponse = self.docker.inspect_container(container_id, None).await?;
+        
+        let mut port_mappings = HashMap::new();
+        
+        if let Some(network_settings) = &container_info.network_settings {
+            if let Some(ports) = &network_settings.ports {
+                for (container_port_with_proto, host_bindings) in ports {
+                    // 解析容器端口（格式："6379/tcp"）
+                    let port_str = container_port_with_proto.split('/').next().unwrap_or("0");
+                    if let Ok(container_port) = port_str.parse::<u16>() {
+                        // 获取主机端口
+                        if let Some(bindings) = host_bindings {
+                            for binding in bindings {
+                                if let Some(ref host_port_str) = binding.host_port {
+                                    if let Ok(host_port) = host_port_str.parse::<u16>() {
+                                        port_mappings.insert(container_port, host_port);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(port_mappings)
+    }
 
     /// 检查容器是否存在
     async fn container_exists(&self, name: &str) -> Result<bool, Box<dyn std::error::Error>> {
@@ -520,6 +571,27 @@ impl SoftwareManager {
     pub async fn migrate_container_to_network(&self, container_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let alias = self.network_manager.extract_service_alias(container_name);
         self.network_manager.connect_container(container_name, &alias).await
+    }
+
+    /// 更新 docker-compose.yml 文件
+    async fn update_compose_file(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // 获取所有已安装的容器
+        let containers = self.list_installed_software().await?;
+        
+        // 重建 docker-compose.yml
+        self.compose_manager
+            .rebuild_from_containers(&containers)
+            .await?;
+        
+        // 应用变更（不会重启未变化的容器）
+        self.compose_manager.apply_changes().await?;
+        
+        Ok(())
+    }
+
+    /// 获取 ComposeManager 引用（用于外部调用）
+    pub fn get_compose_manager(&self) -> &ComposeManager {
+        &self.compose_manager
     }
 }
 

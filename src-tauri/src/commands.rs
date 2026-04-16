@@ -155,3 +155,23 @@ pub async fn migrate_containers_to_network() -> Result<String, String> {
         ))
     }
 }
+
+/// 【调试命令】手动重建 docker-compose.yml 文件
+#[tauri::command]
+pub async fn rebuild_compose_file() -> Result<String, String> {
+    use crate::engine::software_manager::SoftwareManager;
+    
+    let manager = SoftwareManager::new().map_err(|e| e.to_string())?;
+    let containers = manager.list_installed_software().await
+        .map_err(|e| format!("获取容器列表失败: {}", e))?;
+    
+    log::info!("🔧 手动触发 docker-compose.yml 重建，当前容器数: {}", containers.len());
+    
+    // 获取 ComposeManager 并重建文件
+    let compose_manager = manager.get_compose_manager();
+    compose_manager.rebuild_from_containers(&containers).await
+        .map_err(|e| format!("重建失败: {}", e))?;
+    
+    let compose_path = compose_manager.get_compose_path();
+    Ok(format!("✅ docker-compose.yml 已重建: {}", compose_path))
+}

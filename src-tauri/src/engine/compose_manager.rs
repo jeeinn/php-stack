@@ -1,0 +1,309 @@
+use serde::{Serialize, Deserialize};
+use std::fs;
+use std::collections::HashMap;
+use crate::engine::software_manager::{InstalledSoftware, SoftwareType};
+
+/// Docker Compose 配置文件结构
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DockerCompose {
+    pub version: String,
+    pub networks: HashMap<String, NetworkConfig>,
+    pub services: HashMap<String, ServiceConfig>,
+    pub volumes: Option<HashMap<String, VolumeConfig>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    pub driver: String,
+    pub external: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServiceConfig {
+    pub image: String,
+    pub container_name: String,
+    pub networks: Vec<String>,
+    pub ports: Option<Vec<String>>,
+    pub volumes: Option<Vec<String>>,
+    pub environment: Option<HashMap<String, String>>,
+    pub depends_on: Option<Vec<String>>,
+    pub restart: Option<String>,
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VolumeConfig {
+    pub driver: String,
+}
+
+pub struct ComposeManager {
+    compose_path: String,
+}
+
+impl ComposeManager {
+    pub fn new(project_root: &str) -> Self {
+        Self {
+            compose_path: format!("{}/docker-compose.yml", project_root),
+        }
+    }
+
+    /// 根据已安装的容器重建 docker-compose.yml
+    pub async fn rebuild_from_containers(
+        &self,
+        containers: &[InstalledSoftware]
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut compose = DockerCompose {
+            version: "3.8".to_string(),
+            networks: HashMap::from([
+                ("php-stack-network".to_string(), NetworkConfig {
+                    driver: "bridge".to_string(),
+                    external: Some(true), // 网络已由 NetworkManager 创建
+                })
+            ]),
+            services: HashMap::new(),
+            volumes: None,
+        };
+
+        // 为每个容器生成服务配置
+        for container in containers {
+            let service_name = self.extract_service_name(&container.name);
+            let service_config = self.build_service_config(container)?;
+            compose.services.insert(service_name, service_config);
+        }
+
+        // 如果没有服务，生成最小化的 compose 文件
+        let yaml = if compose.services.is_empty() {
+            // 生成一个最小化的 compose 文件
+            format!(
+                "version: '3.8'\nnetworks:\n  php-stack-network:\n    driver: bridge\n    external: true\nservices: {{}}\n"
+            )
+        } else {
+            serde_yaml::to_string(&compose)?
+        };
+        
+        fs::write(&self.compose_path, &yaml)?;
+
+        log::info!("✅ docker-compose.yml 已更新 ({} 个服务)", compose.services.len());
+        Ok(())
+    }
+
+    /// 构建单个服务的配置
+    fn build_service_config(
+        &self,
+        container: &InstalledSoftware
+    ) -> Result<ServiceConfig, Box<dyn std::error::Error>> {
+        let spec = &container.spec;
+        
+        // 端口映射: "宿主机端口:容器端口"
+        let ports: Vec<String> = spec.port_mappings.iter()
+            .map(|(container_port, host_port)| {
+                format!("{}:{}", host_port, container_port)
+            })
+            .collect();
+
+        // 数据卷挂载
+        let volumes = if let Some(volume_path) = &spec.volume_path {
+            if let Some(container_path) = spec.software_type.default_volume_path() {
+                Some(vec![format!("{}:{}", volume_path, container_path)])
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // 依赖关系
+        let depends_on = self.determine_dependencies(&spec.software_type);
+
+        // 构建环境变量（如果有）
+        let environment = if spec.env_vars.is_empty() { 
+            None 
+        } else { 
+            Some(spec.env_vars.clone()) 
+        };
+
+        Ok(ServiceConfig {
+            image: if let Some(ref custom_image) = spec.custom_image {
+                custom_image.clone()
+            } else {
+                format!("{}:{}", 
+                    spec.software_type.default_image_prefix(),
+                    spec.version
+                )
+            },
+            container_name: container.name.clone(),
+            networks: vec!["php-stack-network".to_string()],
+            // 关键修复：空端口时不输出 ports 字段
+            ports: if ports.is_empty() { 
+                None 
+            } else { 
+                Some(ports) 
+            },
+            volumes,
+            environment,
+            depends_on,
+            restart: Some("unless-stopped".to_string()),
+            working_dir: None,
+        })
+    }
+
+    /// 确定服务依赖关系
+    fn determine_dependencies(
+        &self,
+        software_type: &SoftwareType
+    ) -> Option<Vec<String>> {
+        match software_type {
+            SoftwareType::PHP => {
+                // PHP 通常依赖数据库和缓存
+                Some(vec![
+                    "mysql".to_string(),
+                    "redis".to_string(),
+                ])
+            }
+            SoftwareType::Nginx => {
+                // Nginx 依赖 PHP-FPM
+                Some(vec!["php".to_string()])
+            }
+            _ => None,
+        }
+    }
+
+    /// 从容器名提取服务名（去掉 ps- 前缀和版本号）
+    fn extract_service_name(&self, container_name: &str) -> String {
+        // ps-php-8-2 → php
+        // ps-mysql-5-7 → mysql
+        container_name
+            .trim_start_matches("ps-")
+            .split('-')
+            .next()
+            .unwrap_or(container_name)
+            .to_string()
+    }
+
+    /// 执行 docker-compose up -d（应用变更）
+    pub async fn apply_changes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        use tokio::process::Command;
+
+        log::info!("🔄 应用 docker-compose 变更...");
+
+        let output = Command::new("docker")
+            .args(&[
+                "compose",
+                "-f", &self.compose_path,
+                "up", "-d"
+            ])
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "docker compose 执行失败: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ).into());
+        }
+
+        log::info!("✅ 服务已成功应用");
+        Ok(())
+    }
+
+    /// 智能重启：只重启受影响的容器
+    pub async fn smart_restart(
+        &self,
+        affected_services: &[String]
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use tokio::process::Command;
+
+        for service in affected_services {
+            log::info!("🔄 重启服务: {}", service);
+            
+            let output = Command::new("docker")
+                .args(&[
+                    "compose",
+                    "-f", &self.compose_path,
+                    "restart", service
+                ])
+                .output()
+                .await?;
+
+            if !output.status.success() {
+                log::warn!("⚠️ 重启服务 {} 失败: {}", service, String::from_utf8_lossy(&output.stderr));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 获取当前 compose 文件路径
+    pub fn get_compose_path(&self) -> &str {
+        &self.compose_path
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_extract_service_name() {
+        let manager = ComposeManager::new(".");
+        
+        assert_eq!(manager.extract_service_name("ps-php-8-2"), "php");
+        assert_eq!(manager.extract_service_name("ps-mysql-5-7"), "mysql");
+        assert_eq!(manager.extract_service_name("ps-nginx-1-24"), "nginx");
+        assert_eq!(manager.extract_service_name("ps-redis-7-0"), "redis");
+    }
+
+    #[test]
+    fn test_determine_dependencies() {
+        let manager = ComposeManager::new(".");
+        
+        // PHP 应该依赖 mysql 和 redis
+        let php_deps = manager.determine_dependencies(&SoftwareType::PHP);
+        assert!(php_deps.is_some());
+        let deps = php_deps.unwrap();
+        assert!(deps.contains(&"mysql".to_string()));
+        assert!(deps.contains(&"redis".to_string()));
+        
+        // Nginx 应该依赖 php
+        let nginx_deps = manager.determine_dependencies(&SoftwareType::Nginx);
+        assert!(nginx_deps.is_some());
+        assert_eq!(nginx_deps.unwrap(), vec!["php".to_string()]);
+        
+        // MySQL 不应该有依赖
+        let mysql_deps = manager.determine_dependencies(&SoftwareType::MySQL);
+        assert!(mysql_deps.is_none());
+    }
+
+    #[test]
+    fn test_build_service_config_basic() {
+        let manager = ComposeManager::new(".");
+        
+        let container = InstalledSoftware {
+            id: "test-id".to_string(),
+            name: "ps-php-8-2".to_string(),
+            spec: crate::engine::software_manager::SoftwareSpec {
+                software_type: SoftwareType::PHP,
+                version: "8.2".to_string(),
+                custom_image: None,
+                port_mappings: HashMap::from([
+                    (9000, 9000),
+                ]),
+                volume_path: None,
+                env_vars: HashMap::new(),
+                extra_args: Vec::new(),
+            },
+            status: "running".to_string(),
+            created_at: "2026-04-16T00:00:00Z".to_string(),
+        };
+        
+        let config = manager.build_service_config(&container).unwrap();
+        
+        assert_eq!(config.image, "php:8.2");
+        assert_eq!(config.container_name, "ps-php-8-2");
+        assert_eq!(config.networks, vec!["php-stack-network"]);
+        assert!(config.ports.is_some());
+        assert_eq!(config.ports.unwrap(), vec!["9000:9000"]);
+        assert_eq!(config.restart, Some("unless-stopped".to_string()));
+    }
+}

@@ -26,6 +26,13 @@ const addLog = (msg: string) => {
   if (logs.value.length > 50) logs.value.pop();
 };
 
+// 判断容器是否运行中（兼容多种格式）
+const isRunning = (state: string): boolean => {
+  // 后端返回的格式："Some(RUNNING)" 或 "Some(Exceeded)" 等
+  const normalized = state.toLowerCase();
+  return normalized.includes('running');
+};
+
 const checkDocker = async () => {
   try {
     await invoke('check_docker');
@@ -39,10 +46,16 @@ const checkDocker = async () => {
 };
 
 const refreshContainers = async (silent = false) => {
-  if (!silent) loading.value = true;
+  if (!silent) {
+    loading.value = true;
+    addLog('正在刷新容器状态...');
+  }
   if (!(await checkDocker())) {
     containers.value = [];
-    if (!silent) loading.value = false;
+    if (!silent) {
+      loading.value = false;
+      addLog('Docker 不可用，已清空容器列表');
+    }
     return;
   }
   try {
@@ -50,12 +63,17 @@ const refreshContainers = async (silent = false) => {
     // 只有当内容真正改变时才更新，减少 DOM 抖动
     if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
       containers.value = result;
+      if (!silent) addLog(`容器列表已更新 (${result.length} 个容器)`);
+    } else if (!silent) {
+      addLog('容器状态未变化');
     }
-    if (!silent) addLog('已刷新容器列表');
   } catch (e) {
-    if (!silent) addLog(`错误: ${e}`);
+    if (!silent) addLog(`刷新失败: ${e}`);
   } finally {
-    if (!silent) loading.value = false;
+    if (!silent) {
+      loading.value = false;
+      addLog('刷新完成');
+    }
   }
 };
 
@@ -216,11 +234,11 @@ onMounted(() => {
             <div class="flex justify-between items-start mb-4">
               <span class="text-slate-400 text-xs font-mono uppercase tracking-wider">{{ c.image.split(':')[0] }}</span>
               <span 
-                :class="c.state.includes('Running') ? 'text-emerald-400' : 'text-rose-400'"
+                :class="isRunning(c.state) ? 'text-emerald-400' : 'text-rose-400'"
                 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-tighter"
               >
-                <span :class="c.state.includes('Running') ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
-                {{ c.state.includes('Running') ? 'Running' : 'Stopped' }}
+                <span :class="isRunning(c.state) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
+                {{ isRunning(c.state) ? 'Running' : 'Stopped' }}
               </span>
             </div>
             <div class="text-xl font-bold mb-1 truncate" :title="c.name">{{ c.name }}</div>
@@ -231,7 +249,7 @@ onMounted(() => {
             
             <div class="flex gap-2">
               <button 
-                v-if="!c.state.includes('Running')"
+                v-if="!isRunning(c.state)"
                 @click="startService(c.name)"
                 class="flex-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 rounded text-sm font-medium transition-all"
               >

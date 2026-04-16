@@ -234,8 +234,15 @@ function updateSpec() {
 async function testMirrorConnection() {
   try {
     testResult.value = '测试中...';
+    
+    // 转换为 PascalCase
+    const toPascalCase = (str: string) => {
+      if (str === 'default') return 'Default';
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    };
+    
     const result = await invoke<boolean>('test_mirror_connection', {
-      source: mirrorConfig.apt_mirror,
+      source: toPascalCase(mirrorConfig.apt_mirror),
     });
     testResult.value = result ? '✅ 连接成功' : '❌ 连接失败';
   } catch (error: any) {
@@ -246,12 +253,18 @@ async function testMirrorConnection() {
 // 保存镜像源配置
 async function saveMirrorConfig() {
   try {
+    // 将小写字符串转换为 PascalCase 以匹配后端枚举
+    const toPascalCase = (str: string) => {
+      if (str === 'default') return 'Default';
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    };
+    
     await invoke('update_mirror_config', {
       config: {
-        apt_mirror: mirrorConfig.apt_mirror,
-        composer_mirror: mirrorConfig.composer_mirror,
-        pypi_mirror: 'aliyun',
-        npm_mirror: 'taobao',
+        apt_mirror: toPascalCase(mirrorConfig.apt_mirror),
+        composer_mirror: toPascalCase(mirrorConfig.composer_mirror),
+        pypi_mirror: 'Aliyun',
+        npm_mirror: 'Taobao',
       },
     });
     alert('✅ 配置已保存');

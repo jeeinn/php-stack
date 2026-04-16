@@ -10,12 +10,14 @@ pub struct DockerCompose {
     pub version: String,
     pub networks: HashMap<String, NetworkConfig>,
     pub services: HashMap<String, ServiceConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub volumes: Option<HashMap<String, VolumeConfig>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NetworkConfig {
     pub driver: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub external: Option<bool>,
 }
 
@@ -24,11 +26,17 @@ pub struct ServiceConfig {
     pub image: String,
     pub container_name: String,
     pub networks: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ports: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub volumes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub restart: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_dir: Option<String>,
 }
 

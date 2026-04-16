@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
+import SoftwareCenter from './components/SoftwareCenter.vue';
 
 interface Container {
   id: String;
@@ -268,37 +269,9 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 3. 软件管理 (Software) - Placeholder -->
-      <div v-if="activeTab === 'software'" class="flex-1 flex flex-col">
-        <h1 class="text-3xl font-bold mb-8">软件管理 (Docker)</h1>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 class="text-xl font-bold mb-4">PHP 版本</h3>
-            <div class="space-y-3">
-              <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                <span>PHP 8.2</span>
-                <button class="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm">安装</button>
-              </div>
-              <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 opacity-50">
-                <span>PHP 7.4</span>
-                <span class="text-xs italic">待支持</span>
-              </div>
-            </div>
-          </div>
-          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 class="text-xl font-bold mb-4">其他服务</h3>
-            <div class="space-y-3">
-              <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                <span>MySQL 5.7</span>
-                <button class="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm">安装</button>
-              </div>
-              <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                <span>Redis 6.2</span>
-                <button class="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm">安装</button>
-              </div>
-            </div>
-          </div>
-        </div>
+      <!-- 3. 软件管理 (Software) -->
+      <div v-if="activeTab === 'software'">
+        <SoftwareCenter />
       </div>
 
       <!-- 4. 镜像源设置 (Mirrors) -->

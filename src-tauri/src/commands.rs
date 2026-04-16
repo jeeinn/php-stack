@@ -175,3 +175,55 @@ pub async fn rebuild_compose_file() -> Result<String, String> {
     let compose_path = compose_manager.get_compose_path();
     Ok(format!("✅ docker-compose.yml 已重建: {}", compose_path))
 }
+
+/// 【Phase 3】分析服务修改的影响范围
+#[tauri::command]
+pub async fn analyze_restart_impact(
+    service_name: String,
+) -> Result<RestartImpactResult, String> {
+    use crate::engine::software_manager::SoftwareManager;
+    
+    let manager = SoftwareManager::new().map_err(|e| e.to_string())?;
+    let containers = manager.list_installed_software().await
+        .map_err(|e| format!("获取容器列表失败: {}", e))?;
+    
+    let compose_manager = manager.get_compose_manager();
+    let impact = compose_manager.analyze_restart_impact(&service_name, &containers);
+    
+    // 转换为可序列化的结果
+    Ok(RestartImpactResult {
+        services_to_restart: impact.services_to_restart,
+        dependency_chain: impact.dependency_chain,
+        total_affected: impact.total_affected,
+    })
+}
+
+/// 【Phase 3】执行智能重启
+#[tauri::command]
+pub async fn smart_restart_service(
+    service_name: String,
+) -> Result<RestartImpactResult, String> {
+    use crate::engine::software_manager::SoftwareManager;
+    
+    let manager = SoftwareManager::new().map_err(|e| e.to_string())?;
+    let containers = manager.list_installed_software().await
+        .map_err(|e| format!("获取容器列表失败: {}", e))?;
+    
+    let compose_manager = manager.get_compose_manager();
+    let impact = compose_manager.smart_restart_with_analysis(&service_name, &containers).await
+        .map_err(|e| format!("智能重启失败: {}", e))?;
+    
+    Ok(RestartImpactResult {
+        services_to_restart: impact.services_to_restart,
+        dependency_chain: impact.dependency_chain,
+        total_affected: impact.total_affected,
+    })
+}
+
+/// 重启影响分析结果（可序列化版本）
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct RestartImpactResult {
+    pub services_to_restart: Vec<String>,
+    pub dependency_chain: Vec<String>,
+    pub total_affected: usize,
+}

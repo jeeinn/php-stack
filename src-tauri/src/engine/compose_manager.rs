@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::collections::HashMap;
 use crate::engine::software_manager::{InstalledSoftware, SoftwareType};
+use crate::engine::restart_analyzer::{RestartAnalyzer, RestartImpact};
 
 /// Docker Compose 配置文件结构
 #[derive(Debug, Serialize, Deserialize)]
@@ -231,6 +232,57 @@ impl ComposeManager {
         }
 
         Ok(())
+    }
+
+    /// 分析服务修改的影响范围（智能重启的核心）
+    pub fn analyze_restart_impact(
+        &self,
+        modified_service_name: &str,
+        installed_containers: &[InstalledSoftware],
+    ) -> RestartImpact {
+        // 提取服务名（去除版本号）
+        let service_name = RestartAnalyzer::extract_service_name(modified_service_name);
+        
+        // 获取所有已安装的服务名
+        let all_services: Vec<String> = installed_containers
+            .iter()
+            .map(|c| RestartAnalyzer::extract_service_name(&c.name))
+            .collect();
+        
+        log::info!("🔍 分析 {} 修改的影响范围...", service_name);
+        log::info!("   已安装服务: {:?}", all_services);
+        
+        // 使用分析引擎计算影响范围
+        let impact = RestartAnalyzer::analyze_dependencies(&service_name, &all_services);
+        
+        log::info!("✅ 影响分析完成: {} 个服务需要重启", impact.total_affected);
+        for chain in &impact.dependency_chain {
+            log::info!("   {}", chain);
+        }
+        
+        impact
+    }
+
+    /// 智能重启：基于依赖分析的最小化重启
+    pub async fn smart_restart_with_analysis(
+        &self,
+        modified_service_name: &str,
+        installed_containers: &[InstalledSoftware],
+    ) -> Result<RestartImpact, Box<dyn std::error::Error>> {
+        // 1. 分析影响范围
+        let impact = self.analyze_restart_impact(modified_service_name, installed_containers);
+        
+        // 2. 如果没有受影响的服务，直接返回
+        if impact.services_to_restart.is_empty() {
+            return Ok(impact);
+        }
+        
+        // 3. 执行智能重启
+        log::info!("🔄 开始智能重启 {} 个服务...", impact.services_to_restart.len());
+        self.smart_restart(&impact.services_to_restart).await?;
+        
+        log::info!("✅ 智能重启完成");
+        Ok(impact)
     }
 
     /// 获取当前 compose 文件路径

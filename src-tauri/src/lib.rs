@@ -32,7 +32,10 @@ pub fn run() {
       commands::check_port_available,
       commands::allocate_ports,
       commands::migrate_containers_to_network,
-      commands::rebuild_compose_file
+      commands::rebuild_compose_file,
+      // Phase 3: 智能重启优化
+      commands::analyze_restart_impact,
+      commands::smart_restart_service,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

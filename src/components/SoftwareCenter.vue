@@ -32,13 +32,21 @@ const showInstallModal = ref(false);
 const selectedVersion = ref<SoftwareVersion | null>(null);
 const customPort = ref<number | null>(null);
 
-// 软件类型配置
+// 软件类型配置（softwareTypeKey -> 后端期望的 Enum 名称）
+const softwareTypeMap: Record<SoftwareType, string> = {
+  php: 'PHP',
+  mysql: 'MySQL',
+  redis: 'Redis',
+  nginx: 'Nginx',
+  mongodb: 'MongoDB',
+};
+
 const softwareTypes = [
-  { key: 'php', label: 'PHP', icon: '🐘', color: 'blue' },
-  { key: 'mysql', label: 'MySQL', icon: '🐬', color: 'orange' },
-  { key: 'redis', label: 'Redis', icon: '🔴', color: 'red' },
-  { key: 'nginx', label: 'Nginx', icon: '🚀', color: 'green' },
-  { key: 'mongodb', label: 'MongoDB', icon: '🍃', color: 'emerald' },
+  { key: 'php' as SoftwareType, label: 'PHP', icon: '🐘', color: 'blue' },
+  { key: 'mysql' as SoftwareType, label: 'MySQL', icon: '🐬', color: 'orange' },
+  { key: 'redis' as SoftwareType, label: 'Redis', icon: '🔴', color: 'red' },
+  { key: 'nginx' as SoftwareType, label: 'Nginx', icon: '🚀', color: 'green' },
+  { key: 'mongodb' as SoftwareType, label: 'MongoDB', icon: '🍃', color: 'emerald' },
 ];
 
 // 加载可用版本
@@ -91,7 +99,7 @@ const handleInstall = async () => {
 
     // 构建安装规格
     const spec = {
-      software_type: selectedType.value.charAt(0).toUpperCase() + selectedType.value.slice(1), // 首字母大写
+      software_type: softwareTypeMap[selectedType.value], // 使用映射表获取正确的枚举名称
       version: selectedVersion.value.version,
       custom_image: null,
       port_mappings: portMappings,

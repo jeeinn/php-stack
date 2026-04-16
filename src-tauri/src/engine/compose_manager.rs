@@ -74,10 +74,17 @@ impl ComposeManager {
             volumes: None,
         };
 
+        // 提取所有已安装的服务名（用于动态依赖检查）
+        let installed_services: Vec<String> = containers
+            .iter()
+            .map(|c| self.extract_service_name(&c.name))
+            .collect();
+
         // 为每个容器生成服务配置
         for container in containers {
             let service_name = self.extract_service_name(&container.name);
-            let service_config = self.build_service_config(container)?;
+            // 传递已安装的服务列表，用于动态确定依赖
+            let service_config = self.build_service_config(container, &installed_services)?;
             compose.services.insert(service_name, service_config);
         }
 
@@ -100,7 +107,8 @@ impl ComposeManager {
     /// 构建单个服务的配置
     fn build_service_config(
         &self,
-        container: &InstalledSoftware
+        container: &InstalledSoftware,
+        installed_services: &[String]  // 新增：已安装的服务列表
     ) -> Result<ServiceConfig, Box<dyn std::error::Error>> {
         let spec = &container.spec;
         
@@ -122,8 +130,8 @@ impl ComposeManager {
             None
         };
 
-        // 依赖关系
-        let depends_on = self.determine_dependencies(&spec.software_type);
+        // 依赖关系：根据实际已安装的服务动态确定
+        let depends_on = self.determine_dependencies(&spec.software_type, installed_services);
 
         // 构建环境变量（如果有）
         let environment = if spec.env_vars.is_empty() { 
@@ -169,24 +177,34 @@ impl ComposeManager {
         })
     }
 
-    /// 确定服务依赖关系
+    /// 确定服务依赖关系（根据实际已安装的服务动态过滤）
     fn determine_dependencies(
         &self,
-        software_type: &SoftwareType
+        software_type: &SoftwareType,
+        installed_services: &[String]  // 新增：只返回已安装的依赖
     ) -> Option<Vec<String>> {
-        match software_type {
+        let potential_deps = match software_type {
             SoftwareType::PHP => {
-                // PHP 通常依赖数据库和缓存
-                Some(vec![
-                    "mysql".to_string(),
-                    "redis".to_string(),
-                ])
+                // PHP 可能依赖数据库和缓存
+                vec!["mysql".to_string(), "redis".to_string()]
             }
             SoftwareType::Nginx => {
                 // Nginx 依赖 PHP-FPM
-                Some(vec!["php".to_string()])
+                vec!["php".to_string()]
             }
-            _ => None,
+            _ => vec![],
+        };
+        
+        // 只保留已安装的依赖服务
+        let actual_deps: Vec<String> = potential_deps
+            .into_iter()
+            .filter(|dep| installed_services.contains(dep))
+            .collect();
+        
+        if actual_deps.is_empty() {
+            None
+        } else {
+            Some(actual_deps)
         }
     }
 

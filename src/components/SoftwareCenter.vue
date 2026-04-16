@@ -162,7 +162,7 @@ onMounted(() => {
     </header>
 
     <!-- 软件类型选择 -->
-    <div class="flex gap-3 mb-6 overflow-x-auto pb-2">
+    <div class="flex gap-3 mb-6 overflow-x-auto pb-2 software-type-tabs">
       <button
         v-for="type in softwareTypes"
         :key="type.key"
@@ -299,7 +299,7 @@ onMounted(() => {
 <style scoped>
 @reference "tailwindcss";
 
-/* 自定义滚动条样式 */
+/* 自定义滚动条样式 - 垂直滚动 */
 .overflow-y-auto::-webkit-scrollbar {
   width: 8px;
 }
@@ -316,5 +316,24 @@ onMounted(() => {
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 1);
+}
+
+/* 自定义滚动条样式 - 横向滚动（软件类型标签） */
+.software-type-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+
+.software-type-tabs::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.3);
+  border-radius: 3px;
+}
+
+.software-type-tabs::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.6);
+  border-radius: 3px;
+}
+
+.software-type-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.9);
 }
 </style>

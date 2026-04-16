@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import SoftwareCenter from './components/SoftwareCenter.vue';
+import EnvironmentWizard from './components/EnvironmentWizard.vue';
 
 interface Container {
   id: String;
@@ -170,6 +171,11 @@ onMounted(() => {
         class="sidebar-item"
       >环境管理</div>
       <div 
+        @click="activeTab = 'wizard'"
+        :class="{ 'active': activeTab === 'wizard' }" 
+        class="sidebar-item"
+      >🚀 快速搭建</div>
+      <div 
         @click="activeTab = 'vhosts'"
         :class="{ 'active': activeTab === 'vhosts' }" 
         class="sidebar-item"
@@ -285,6 +291,11 @@ onMounted(() => {
             后续将支持一键添加 Nginx 站点配置，自动绑定本地域名和项目目录。
           </p>
         </div>
+      </div>
+
+      <!-- 2. 快速搭建 (Wizard) -->
+      <div v-if="activeTab === 'wizard'">
+        <EnvironmentWizard />
       </div>
 
       <!-- 3. 软件管理 (Software) -->

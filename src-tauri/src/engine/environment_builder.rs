@@ -270,6 +270,335 @@ impl EnvironmentBuilder {
     }
 }
 
+// ==================== PHP 扩展注册表 ====================
+
+/// PHP 扩展类型
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExtensionType {
+    Builtin,  // 内置扩展（直接启用）
+    Core,     // 核心扩展（docker-php-ext-install）
+    Pecl,     // PECL 扩展（pecl install）
+}
+
+/// 扩展元数据
+#[derive(Debug, Clone)]
+pub struct ExtensionMetadata {
+    pub name: String,
+    pub ext_type: ExtensionType,
+    pub system_deps: Vec<String>,      // 系统依赖包
+    pub pecl_version: Option<String>,  // PECL 版本号
+    pub config_flags: Vec<String>,     // 编译参数
+}
+
+/// PHP 扩展注册表
+pub struct ExtensionRegistry;
+
+impl ExtensionRegistry {
+    /// 获取扩展元数据
+    pub fn get_extension(name: &str) -> Option<ExtensionMetadata> {
+        match name {
+            // 内置扩展
+            "pdo" | "json" | "ctype" | "session" => Some(ExtensionMetadata {
+                name: name.to_string(),
+                ext_type: ExtensionType::Builtin,
+                system_deps: vec![],
+                pecl_version: None,
+                config_flags: vec![],
+            }),
+            
+            // 核心扩展
+            "mysqli" | "pdo_mysql" => Some(ExtensionMetadata {
+                name: name.to_string(),
+                ext_type: ExtensionType::Core,
+                system_deps: vec!["libmariadb-dev".to_string()],
+                pecl_version: None,
+                config_flags: vec![],
+            }),
+            "gd" => Some(ExtensionMetadata {
+                name: "gd".to_string(),
+                ext_type: ExtensionType::Core,
+                system_deps: vec![
+                    "libpng-dev".to_string(),
+                    "libjpeg-dev".to_string(),
+                    "libfreetype6-dev".to_string(),
+                ],
+                pecl_version: None,
+                config_flags: vec![
+                    "--with-freetype".to_string(),
+                    "--with-jpeg".to_string(),
+                ],
+            }),
+            "mbstring" | "curl" | "zip" | "intl" | "bcmath" | "soap" | "xml" | "opcache" => {
+                Some(ExtensionMetadata {
+                    name: name.to_string(),
+                    ext_type: ExtensionType::Core,
+                    system_deps: vec![],
+                    pecl_version: None,
+                    config_flags: vec![],
+                })
+            },
+            
+            // PECL 扩展
+            "redis" => Some(ExtensionMetadata {
+                name: "redis".to_string(),
+                ext_type: ExtensionType::Pecl,
+                system_deps: vec![],
+                pecl_version: Some("5.3.7".to_string()),
+                config_flags: vec![],
+            }),
+            "xdebug" => Some(ExtensionMetadata {
+                name: "xdebug".to_string(),
+                ext_type: ExtensionType::Pecl,
+                system_deps: vec![],
+                pecl_version: Some("3.3.0".to_string()),
+                config_flags: vec![],
+            }),
+            
+            _ => None,
+        }
+    }
+    
+    /// 检查扩展是否有效
+    pub fn is_valid_extension(name: &str) -> bool {
+        Self::get_extension(name).is_some()
+    }
+}
+
+// ==================== Dockerfile 生成器 ====================
+
+/// 生成自定义 PHP Dockerfile
+pub fn generate_php_dockerfile(
+    php_version: &str,
+    extensions: &[String],
+) -> Result<String, String> {
+    use crate::engine::mirror_config::MirrorConfig;
+    
+    // 加载镜像源配置
+    let mirror_config = MirrorConfig::load_from_env()?;
+    
+    let mut dockerfile = format!("FROM php:{}-fpm\n\n", php_version);
+    
+    // 添加镜像源配置
+    let mirror_snippet = mirror_config.to_dockerfile_snippet();
+    if !mirror_snippet.is_empty() {
+        dockerfile.push_str(&mirror_snippet);
+    }
+    
+    // 收集所有需要的系统依赖和扩展
+    let mut all_system_deps = Vec::new();
+    let mut core_extensions = Vec::new();
+    let mut pecl_extensions = Vec::new();
+    
+    for ext_name in extensions {
+        if let Some(metadata) = ExtensionRegistry::get_extension(ext_name) {
+            match metadata.ext_type {
+                ExtensionType::Builtin => {
+                    // 内置扩展无需安装
+                    log::info!("✅ 内置扩展: {}", ext_name);
+                }
+                ExtensionType::Core => {
+                    all_system_deps.extend(metadata.system_deps);
+                    core_extensions.push((ext_name.clone(), metadata.config_flags));
+                }
+                ExtensionType::Pecl => {
+                    all_system_deps.extend(metadata.system_deps);
+                    pecl_extensions.push((
+                        ext_name.clone(),
+                        metadata.pecl_version,
+                    ));
+                }
+            }
+        } else {
+            return Err(format!("未知或不支持的 PHP 扩展: {}", ext_name));
+        }
+    }
+    
+    // 去重并排序系统依赖
+    if !all_system_deps.is_empty() {
+        all_system_deps.sort();
+        all_system_deps.dedup();
+        
+        dockerfile.push_str("# 安装系统依赖\n");
+        dockerfile.push_str("RUN apt-get update && apt-get install -y --no-install-recommends \\\n");
+        for (i, dep) in all_system_deps.iter().enumerate() {
+            if i < all_system_deps.len() - 1 {
+                dockerfile.push_str(&format!("    {} \\\n", dep));
+            } else {
+                dockerfile.push_str(&format!("    {} && \\\n", dep));
+            }
+        }
+        dockerfile.push_str("    rm -rf /var/lib/apt/lists/*\n\n");
+    }
+    
+    // 安装核心扩展
+    if !core_extensions.is_empty() {
+        dockerfile.push_str("# 安装 PHP 核心扩展\n");
+        for (ext_name, config_flags) in &core_extensions {
+            if config_flags.is_empty() {
+                dockerfile.push_str(&format!(
+                    "RUN docker-php-ext-install -j$(nproc) {}\n",
+                    ext_name
+                ));
+            } else {
+                dockerfile.push_str(&format!(
+                    "RUN docker-php-ext-configure {} {} && \\\n    docker-php-ext-install -j$(nproc) {}\n",
+                    ext_name,
+                    config_flags.join(" "),
+                    ext_name
+                ));
+            }
+        }
+        dockerfile.push('\n');
+    }
+    
+    // 安装 PECL 扩展
+    if !pecl_extensions.is_empty() {
+        dockerfile.push_str("# 安装 PECL 扩展\n");
+        for (ext_name, version) in &pecl_extensions {
+            if let Some(ver) = version {
+                dockerfile.push_str(&format!(
+                    "RUN pecl install {}-{} && docker-php-ext-enable {}\n",
+                    ext_name, ver, ext_name
+                ));
+            } else {
+                dockerfile.push_str(&format!(
+                    "RUN pecl install {} && docker-php-ext-enable {}\n",
+                    ext_name, ext_name
+                ));
+            }
+        }
+        dockerfile.push('\n');
+    }
+    
+    // 设置工作目录
+    dockerfile.push_str("WORKDIR /var/www/html\n");
+    
+    Ok(dockerfile)
+}
+
+// ==================== 镜像构建 ====================
+
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
+
+/// 生成唯一的镜像标签
+fn generate_image_tag(php_version: &str, extensions: &[String]) -> String {
+    let mut sorted_exts = extensions.to_vec();
+    sorted_exts.sort();
+    
+    // 使用扩展列表的哈希作为标签的一部分
+    let hash = calculate_hash(&sorted_exts.join(","));
+    let short_hash = &hash.to_string()[..8];
+    
+    format!("php:{}-custom-{}", php_version, short_hash)
+}
+
+/// 计算哈希值
+fn calculate_hash(input: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// 检查镜像是否存在
+async fn image_exists(image_tag: &str) -> bool {
+    use tokio::process::Command;
+    
+    let output = Command::new("docker")
+        .args(&["image", "inspect", image_tag])
+        .output()
+        .await;
+    
+    output.map_or(false, |o| o.status.success())
+}
+
+/// 构建自定义 PHP 镜像
+pub async fn build_custom_php_image(
+    php_version: &str,
+    extensions: &[String],
+) -> Result<String, String> {
+    use tokio::process::Command;
+    use crate::engine::mirror_config::MirrorConfig;
+    
+    // 加载镜像源配置
+    let mirror_config = MirrorConfig::load_from_env()?;
+    
+    // 生成唯一的镜像标签
+    let image_tag = generate_image_tag(php_version, extensions);
+    
+    // 检查镜像是否已存在（缓存命中）
+    if image_exists(&image_tag).await {
+        log::info!("✅ 使用缓存镜像: {}", image_tag);
+        return Ok(image_tag);
+    }
+    
+    // 生成 Dockerfile
+    let dockerfile = generate_php_dockerfile(php_version, extensions)?;
+    
+    log::info!("📝 生成的 Dockerfile:\n{}", dockerfile);
+    
+    // 创建临时构建目录
+    let build_dir = format!("./build/php-{}-custom", php_version);
+    tokio::fs::create_dir_all(&build_dir).await
+        .map_err(|e| format!("创建构建目录失败: {}", e))?;
+    
+    tokio::fs::write(format!("{}/Dockerfile", build_dir), &dockerfile).await
+        .map_err(|e| format!("写入 Dockerfile 失败: {}", e))?;
+    
+    // 执行 docker build
+    log::info!("🔨 开始构建镜像: {}", image_tag);
+    log::info!("📦 扩展列表: {:?}", extensions);
+    
+    let start_time = std::time::Instant::now();
+    
+    // 准备构建参数
+    let mut build_args = vec!["build"];
+    
+    // 添加代理配置
+    let proxy_args = mirror_config.to_build_args();
+    for arg in &proxy_args {
+        build_args.push("--build-arg");
+        build_args.push(arg);
+    }
+    
+    build_args.extend_from_slice(&["-t", &image_tag, &build_dir]);
+    
+    let output = Command::new("docker")
+        .args(&build_args)
+        .output()
+        .await
+        .map_err(|e| format!("Docker 命令执行失败: {}", e))?;
+    
+    let elapsed = start_time.elapsed();
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
+        // 分析错误类型
+        if stderr.contains("timeout") || stderr.contains("network") {
+            return Err(format!(
+                "⚠️ 网络超时，请检查网络连接或切换镜像源\n\n错误详情:\n{}",
+                stderr
+            ));
+        } else if stderr.contains("not found") {
+            return Err(format!(
+                "❌ 扩展不存在或版本不兼容\n\n错误详情:\n{}",
+                stderr
+            ));
+        } else {
+            return Err(format!(
+                "❌ 镜像构建失败 (耗时: {:.2}s)\n\n错误详情:\n{}",
+                elapsed.as_secs_f64(),
+                stderr
+            ));
+        }
+    }
+    
+    log::info!("✅ 镜像构建成功 (耗时: {:.2}s): {}", elapsed.as_secs_f64(), image_tag);
+    
+    Ok(image_tag)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +660,53 @@ mod tests {
         
         let image = EnvironmentBuilder::get_image_name(&spec);
         assert_eq!(image, "mysql:8.0");
+    }
+    
+    #[test]
+    fn test_extension_registry() {
+        // 测试内置扩展
+        let ext = ExtensionRegistry::get_extension("pdo").unwrap();
+        assert_eq!(ext.ext_type, ExtensionType::Builtin);
+        
+        // 测试核心扩展
+        let ext = ExtensionRegistry::get_extension("mysqli").unwrap();
+        assert_eq!(ext.ext_type, ExtensionType::Core);
+        assert!(!ext.system_deps.is_empty());
+        
+        // 测试 PECL 扩展
+        let ext = ExtensionRegistry::get_extension("redis").unwrap();
+        assert_eq!(ext.ext_type, ExtensionType::Pecl);
+        assert!(ext.pecl_version.is_some());
+        
+        // 测试无效扩展
+        assert!(ExtensionRegistry::get_extension("invalid").is_none());
+    }
+    
+    #[test]
+    fn test_generate_php_dockerfile_basic() {
+        let dockerfile = generate_php_dockerfile("8.2", &["mysqli".to_string()]).unwrap();
+        
+        assert!(dockerfile.contains("FROM php:8.2-fpm"));
+        assert!(dockerfile.contains("docker-php-ext-install"));
+        assert!(dockerfile.contains("mysqli"));
+    }
+    
+    #[test]
+    fn test_generate_php_dockerfile_with_pecl() {
+        let dockerfile = generate_php_dockerfile("8.2", &["redis".to_string()]).unwrap();
+        
+        assert!(dockerfile.contains("pecl install"));
+        assert!(dockerfile.contains("redis"));
+        assert!(dockerfile.contains("docker-php-ext-enable"));
+    }
+    
+    #[test]
+    fn test_generate_image_tag() {
+        let tag1 = generate_image_tag("8.2", &["mysqli".to_string(), "redis".to_string()]);
+        let tag2 = generate_image_tag("8.2", &["redis".to_string(), "mysqli".to_string()]);
+        
+        // 顺序不同，但哈希应该相同
+        assert_eq!(tag1, tag2);
+        assert!(tag1.starts_with("php:8.2-custom-"));
     }
 }

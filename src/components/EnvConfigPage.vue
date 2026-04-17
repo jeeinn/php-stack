@@ -246,6 +246,25 @@ async function handleApply() {
     error.value = portConflicts.value.join('\n');
     return;
   }
+  
+  // 检查配置文件是否存在
+  try {
+    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    if (existingFiles.length > 0) {
+      // 有文件存在，显示确认对话框
+      const fileList = existingFiles.map(f => `- ${f}`).join('\n');
+      const confirmed = confirm(
+        `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`
+      );
+      if (!confirmed) {
+        return; // 用户取消
+      }
+    }
+  } catch (e) {
+    console.error('检查配置文件失败:', e);
+    // 如果检查失败，继续执行（不阻断用户操作）
+  }
+  
   applying.value = true;
   error.value = null;
   successMsg.value = null;

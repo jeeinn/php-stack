@@ -28,6 +28,7 @@ pub fn run() {
       commands::validate_env_config,
       commands::generate_env_config,
       commands::preview_compose,
+      commands::check_config_files_exist,
       commands::apply_env_config,
       commands::start_environment,
       // 统一镜像源管理

@@ -220,6 +220,34 @@ pub fn preview_compose(config: EnvConfig) -> Result<String, String> {
     Ok(ConfigGenerator::generate_compose(&config))
 }
 
+/// 检查配置文件是否存在
+#[tauri::command]
+pub fn check_config_files_exist() -> Result<Vec<String>, String> {
+    let project_root = get_project_root()?;
+    let mut existing_files = Vec::new();
+    
+    // 检查关键文件
+    let files_to_check = [
+        (".env", "环境配置文件"),
+        ("docker-compose.yml", "Docker Compose 配置"),
+    ];
+    
+    for (filename, description) in &files_to_check {
+        let file_path = project_root.join(filename);
+        if file_path.exists() {
+            existing_files.push(format!("{} ({})", filename, description));
+        }
+    }
+    
+    // 检查 services 目录
+    let services_dir = project_root.join("services");
+    if services_dir.exists() {
+        existing_files.push("services/ (服务配置目录)".to_string());
+    }
+    
+    Ok(existing_files)
+}
+
 /// 应用配置（写入 .env、docker-compose.yml、创建目录）
 #[tauri::command]
 pub async fn apply_env_config(config: EnvConfig, app_handle: tauri::AppHandle) -> Result<(), String> {

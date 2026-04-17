@@ -345,8 +345,14 @@ impl ConfigGenerator {
                     // Copy Dockerfile from template
                     let dockerfile_template = if service.version.starts_with("5.") {
                         "php56/Dockerfile"
-                    } else if service.version.starts_with("7.") {
+                    } else if service.version.starts_with("7.0") || service.version.starts_with("7.1") || service.version.starts_with("7.2") || service.version.starts_with("7.3") {
+                        "php74/Dockerfile"  // Use php74 template for PHP 7.0-7.3
+                    } else if service.version.starts_with("7.4") {
                         "php74/Dockerfile"
+                    } else if service.version.starts_with("8.0") {
+                        "php80/Dockerfile"
+                    } else if service.version.starts_with("8.1") {
+                        "php82/Dockerfile"  // Use php82 template for PHP 8.1
                     } else {
                         "php82/Dockerfile"
                     };
@@ -360,6 +366,8 @@ impl ConfigGenerator {
                         "php56/php.ini"
                     } else if service.version.starts_with("7.") {
                         "php74/php.ini"
+                    } else if service.version.starts_with("8.0") {
+                        "php80/php.ini"
                     } else {
                         "php82/php.ini"
                     };
@@ -373,6 +381,8 @@ impl ConfigGenerator {
                         "php56/php-fpm.conf"
                     } else if service.version.starts_with("7.") {
                         "php74/php-fpm.conf"
+                    } else if service.version.starts_with("8.0") {
+                        "php80/php-fpm.conf"
                     } else {
                         "php82/php-fpm.conf"
                     };

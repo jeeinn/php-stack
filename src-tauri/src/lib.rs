@@ -17,34 +17,12 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      // Dashboard
       commands::check_docker,
       commands::list_containers,
       commands::start_container,
       commands::stop_container,
       commands::restart_container,
-      commands::set_docker_mirror,
-      commands::export_stack,
-      // 软件管理中心命令
-      commands::get_available_versions,
-      commands::install_software,
-      commands::uninstall_software,
-      commands::list_installed_software,
-      commands::check_port_available,
-      commands::allocate_ports,
-      commands::migrate_containers_to_network,
-      commands::rebuild_compose_file,
-      // Phase 3: 智能重启优化
-      commands::analyze_restart_impact,
-      commands::smart_restart_service,
-      // Phase 4: 前端增强
-      commands::read_compose_file,
-      // V2.0: 环境构建器
-      commands::get_mirror_config,
-      commands::update_mirror_config,
-      commands::test_mirror_connection,
-      commands::validate_environment_spec,
-      commands::generate_compose_preview,
-      commands::deploy_environment_with_build,
       // 可视化配置生成
       commands::validate_env_config,
       commands::generate_env_config,

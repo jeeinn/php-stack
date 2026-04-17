@@ -6,3 +6,4 @@ pub mod restart_analyzer;
 pub mod mirror_config;      // V2.0: 镜像源配置
 pub mod environment_builder; // V2.0: 环境构建器
 pub mod env_parser;          // V2.0: Env 解析器/格式化器
+pub mod backup_manifest;     // V2.0: 备份清单数据模型与序列化

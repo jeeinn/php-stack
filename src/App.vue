@@ -22,6 +22,7 @@ const logs = ref<string[]>([]);
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
 const showLogs = ref(true); // 控制日志面板显示隐藏
+const sidebarCollapsed = ref(false); // 控制侧边栏展开/收缩
 
 const addLog = (msg: string) => {
   const time = new Date().toLocaleTimeString();
@@ -118,37 +119,89 @@ onMounted(() => {
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-200">
     <!-- Sidebar -->
-    <div class="w-64 bg-slate-900 p-6 flex flex-col gap-4 border-r border-slate-800 overflow-y-auto">
-      <div class="text-2xl font-bold text-blue-400 mb-6 flex items-center gap-2">
-        <span class="bg-blue-500 text-white p-1 rounded">PS</span> PHP-Stack
+    <div 
+      class="bg-slate-900 flex flex-col border-r border-slate-800 overflow-y-auto transition-all duration-300 ease-in-out"
+      :class="sidebarCollapsed ? 'w-20 p-3' : 'w-64 p-6'"
+    >
+      <!-- Logo -->
+      <div class="mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
+        <span class="bg-blue-500 text-white p-1 rounded font-bold">PS</span>
+        <span v-if="!sidebarCollapsed" class="text-2xl font-bold text-blue-400">PHP-Stack</span>
       </div>
-      <div 
-        @click="activeTab = 'dashboard'"
-        :class="{ 'active': activeTab === 'dashboard' }" 
-        class="sidebar-item"
-      >环境管理</div>
-      <div 
-        @click="activeTab = 'env-config'"
-        :class="{ 'active': activeTab === 'env-config' }" 
-        class="sidebar-item"
-      >⚙️ 环境配置</div>
-      <div 
-        @click="activeTab = 'mirrors-unified'"
-        :class="{ 'active': activeTab === 'mirrors-unified' }" 
-        class="sidebar-item"
-      >🌐 镜像源</div>
-      <div 
-        @click="activeTab = 'backup-new'"
-        :class="{ 'active': activeTab === 'backup-new' }" 
-        class="sidebar-item"
-      >💾 备份</div>
-      <div 
-        @click="activeTab = 'restore-new'"
-        :class="{ 'active': activeTab === 'restore-new' }" 
-        class="sidebar-item"
-      >📥 恢复</div>
-      <div class="mt-auto pt-4 border-t border-slate-800 text-sm text-slate-500 text-center">
-        v1.0.0-beta
+      
+      <!-- Menu Items -->
+      <div class="flex flex-col gap-2">
+        <div 
+          @click="activeTab = 'dashboard'"
+          :class="{ 'active': activeTab === 'dashboard' }" 
+          class="sidebar-item"
+          :title="sidebarCollapsed ? '环境管理' : ''"
+        >
+          <span class="text-lg">🏠</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">环境管理</span>
+        </div>
+        <div 
+          @click="activeTab = 'env-config'"
+          :class="{ 'active': activeTab === 'env-config' }" 
+          class="sidebar-item"
+          :title="sidebarCollapsed ? '环境配置' : ''"
+        >
+          <span class="text-lg">⚙️</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">环境配置</span>
+        </div>
+        <div 
+          @click="activeTab = 'mirrors-unified'"
+          :class="{ 'active': activeTab === 'mirrors-unified' }" 
+          class="sidebar-item"
+          :title="sidebarCollapsed ? '镜像源' : ''"
+        >
+          <span class="text-lg">🌐</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">镜像源</span>
+        </div>
+        <div 
+          @click="activeTab = 'backup-new'"
+          :class="{ 'active': activeTab === 'backup-new' }" 
+          class="sidebar-item"
+          :title="sidebarCollapsed ? '备份' : ''"
+        >
+          <span class="text-lg">💾</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">备份</span>
+        </div>
+        <div 
+          @click="activeTab = 'restore-new'"
+          :class="{ 'active': activeTab === 'restore-new' }" 
+          class="sidebar-item"
+          :title="sidebarCollapsed ? '恢复' : ''"
+        >
+          <span class="text-lg">📥</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">恢复</span>
+        </div>
+      </div>
+      
+      <!-- Version & Toggle Button -->
+      <div class="mt-auto pt-4 border-t border-slate-800">
+        <div v-if="!sidebarCollapsed" class="text-sm text-slate-500 text-center mb-3">
+          v1.0.0-beta
+        </div>
+        
+        <!-- Toggle Button -->
+        <button 
+          @click="sidebarCollapsed = !sidebarCollapsed"
+          class="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-center text-slate-400 hover:text-slate-200"
+          :title="sidebarCollapsed ? '展开侧边栏' : '收缩侧边栏'"
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            class="w-5 h-5 transition-transform duration-300"
+            :class="sidebarCollapsed ? 'rotate-180' : ''"
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            stroke-width="2"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -289,7 +342,7 @@ onMounted(() => {
 @reference "tailwindcss";
 
 .sidebar-item {
-  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-100 border border-transparent;
+  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-100 border border-transparent flex items-center;
 }
 .sidebar-item.active {
   @apply bg-blue-600/10 text-blue-400 border-blue-600/20;

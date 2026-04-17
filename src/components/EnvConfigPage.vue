@@ -148,7 +148,11 @@ async function handleApply() {
   try {
     const config = buildConfig();
     await invoke('apply_env_config', { config });
-    error.value = null;
+    // 显示成功消息
+    const successMsg = import.meta.env.DEV 
+      ? '配置已成功应用！配置文件已生成在项目根目录。' 
+      : '配置已成功应用！配置文件已生成在程序所在目录。';
+    alert(successMsg);
     showPreview.value = false;
   } catch (e) {
     error.value = e as string;

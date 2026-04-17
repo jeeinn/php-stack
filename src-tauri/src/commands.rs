@@ -5,6 +5,28 @@ use crate::engine::backup_engine::BackupEngine;
 use crate::engine::backup_manifest::BackupOptions;
 use crate::engine::restore_engine::{RestoreEngine, RestorePreview};
 
+/// 获取项目根目录（用于配置文件生成）
+fn get_project_root() -> Result<std::path::PathBuf, String> {
+    if cfg!(debug_assertions) {
+        // 开发模式：使用项目根目录（src-tauri 的父目录）
+        Ok(std::env::current_exe()
+            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .parent() // target/debug/
+            .and_then(|p| p.parent()) // target/
+            .and_then(|p| p.parent()) // src-tauri/
+            .and_then(|p| p.parent()) // 项目根目录
+            .ok_or("无法获取项目根目录")?
+            .to_path_buf())
+    } else {
+        // 生产模式：使用可执行文件所在目录
+        Ok(std::env::current_exe()
+            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .parent()
+            .ok_or("无法获取程序所在目录")?
+            .to_path_buf())
+    }
+}
+
 #[tauri::command]
 pub async fn check_docker() -> Result<(), String> {
     let manager = DockerManager::new().map_err(|e| format!("未找到 Docker 安装: {}", e))?;
@@ -63,8 +85,9 @@ pub fn preview_compose(config: EnvConfig) -> Result<String, String> {
 
 /// 应用配置（写入 .env、docker-compose.yml、创建目录）
 #[tauri::command]
-pub async fn apply_env_config(config: EnvConfig) -> Result<(), String> {
-    ConfigGenerator::apply(&config, &std::path::Path::new(".")).await
+pub async fn apply_env_config(config: EnvConfig, _app_handle: tauri::AppHandle) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    ConfigGenerator::apply(&config, &project_root).await
 }
 
 // ==================== 统一镜像源管理命令 ====================
@@ -78,15 +101,17 @@ pub fn get_mirror_presets() -> Result<Vec<MirrorPreset>, String> {
 /// 应用镜像源预设方案
 #[tauri::command]
 pub async fn apply_mirror_preset(preset_name: String) -> Result<(), String> {
-    let env_path = std::path::Path::new(".env");
-    UnifiedMirrorManager::apply_preset(&preset_name, env_path)
+    let project_root = get_project_root()?;
+    let env_path = project_root.join(".env");
+    UnifiedMirrorManager::apply_preset(&preset_name, &env_path)
 }
 
 /// 更新单个镜像源类别
 #[tauri::command]
 pub fn update_single_mirror(category: String, source: String) -> Result<(), String> {
-    let env_path = std::path::Path::new(".env");
-    UnifiedMirrorManager::update_single(&category, &source, env_path)
+    let project_root = get_project_root()?;
+    let env_path = project_root.join(".env");
+    UnifiedMirrorManager::update_single(&category, &source, &env_path)
 }
 
 /// 测试镜像源连接（3秒超时）
@@ -98,8 +123,9 @@ pub async fn test_mirror(url: String) -> Result<bool, String> {
 /// 获取当前镜像源状态
 #[tauri::command]
 pub fn get_mirror_status() -> Result<serde_json::Value, String> {
-    let env_path = std::path::Path::new(".env");
-    let status = UnifiedMirrorManager::get_current_status(env_path)?;
+    let project_root = get_project_root()?;
+    let env_path = project_root.join(".env");
+    let status = UnifiedMirrorManager::get_current_status(&env_path)?;
     serde_json::to_value(&status)
         .map_err(|e| format!("序列化镜像源状态失败: {}", e))
 }
@@ -117,6 +143,7 @@ pub async fn create_backup(
     let save_path_clone = save_path.clone();
     let options_clone = options.clone();
     let app_handle_clone = app_handle.clone();
+    let project_root = get_project_root()?;
 
     // Use spawn to handle the non-Send future from BackupEngine
     let handle = tokio::task::spawn_blocking(move || {
@@ -125,7 +152,7 @@ pub async fn create_backup(
             BackupEngine::create_backup(
                 &save_path_clone,
                 options_clone,
-                &std::path::Path::new("."),
+                &project_root,
                 Some(&app_handle_clone),
             )
             .await
@@ -156,9 +183,10 @@ pub async fn execute_restore(
     port_overrides: std::collections::HashMap<String, u16>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    let project_root = get_project_root()?;
     let result = RestoreEngine::restore(
         &zip_path,
-        &std::path::Path::new("."),
+        &project_root,
         port_overrides,
         Some(&app_handle),
     )

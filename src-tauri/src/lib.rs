@@ -24,10 +24,12 @@ pub fn run() {
       commands::stop_container,
       commands::restart_container,
       // 可视化配置生成
+      commands::load_existing_config,
       commands::validate_env_config,
       commands::generate_env_config,
       commands::preview_compose,
       commands::apply_env_config,
+      commands::start_environment,
       // 统一镜像源管理
       commands::get_mirror_presets,
       commands::apply_mirror_preset,

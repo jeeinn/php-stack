@@ -69,6 +69,143 @@ pub fn validate_env_config(config: EnvConfig) -> Result<(), String> {
     ConfigGenerator::validate(&config)
 }
 
+/// 读取现有配置文件并解析为 EnvConfig
+#[tauri::command]
+pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
+    let project_root = get_project_root()?;
+    let env_path = project_root.join(".env");
+    let compose_path = project_root.join("docker-compose.yml");
+    
+    // 如果两个文件都不存在，返回 None
+    if !env_path.exists() || !compose_path.exists() {
+        return Ok(None);
+    }
+    
+    // 读取 .env 文件
+    let env_content = std::fs::read_to_string(&env_path)
+        .map_err(|e| format!("读取 .env 文件失败: {}", e))?;
+    let env_file = super::engine::env_parser::EnvFile::parse(&env_content)
+        .map_err(|e| format!("解析 .env 文件失败: {}", e))?;
+    let env_map = env_file.to_map();
+    
+    // 解析服务配置
+    let mut services: Vec<crate::engine::config_generator::ServiceEntry> = Vec::new();
+    
+    // 解析 PHP 服务（支持多版本）
+    // 查找所有 PHPxx_VERSION 格式的键
+    for (key, value) in &env_map {
+        if key.ends_with("_VERSION") && key.starts_with("PHP") {
+            // 提取版本号部分，如 PHP56_VERSION -> 56
+            let ver_part = &key[3..key.len() - 8]; // 去掉 "PHP" 和 "_VERSION"
+            
+            // 跳过纯数字的（这些是版本号的一部分，如 PHP56）
+            if ver_part.is_empty() {
+                continue;
+            }
+            
+            let version = value.clone();
+            let port_key = format!("PHP{}_HOST_PORT", ver_part);
+            let ext_key = format!("PHP{}_EXTENSIONS", ver_part);
+            
+            let host_port = env_map.get(&port_key)
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(9000);
+            
+            let extensions = env_map.get(&ext_key)
+                .map(|exts| exts.split(',').map(|s| s.trim().to_string()).collect());
+            
+            services.push(crate::engine::config_generator::ServiceEntry {
+                service_type: crate::engine::config_generator::ServiceType::PHP,
+                version,
+                host_port,
+                extensions,
+            });
+        }
+    }
+    
+    // 解析 MySQL 服务（支持多版本）
+    // 查找所有 MYSQLxx_VERSION 或 MYSQL_VERSION 格式的键
+    let mut mysql_index = 0;
+    for (key, value) in &env_map {
+        if key.ends_with("_VERSION") && key.starts_with("MYSQL") && !key.contains("ROOT") {
+            let version = value.clone();
+            
+            // 提取索引部分，如 MYSQL1_VERSION -> 1, MYSQL_VERSION -> 0
+            let index_part = &key[5..key.len() - 8]; // 去掉 "MYSQL" 和 "_VERSION"
+            let idx = if index_part.is_empty() {
+                0
+            } else {
+                index_part.parse::<usize>().unwrap_or(mysql_index)
+            };
+            
+            let port_key = if idx == 0 {
+                "MYSQL_HOST_PORT".to_string()
+            } else {
+                format!("MYSQL{}_HOST_PORT", idx)
+            };
+            
+            let host_port = env_map.get(&port_key)
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(3306 + idx as u16);
+            
+            services.push(crate::engine::config_generator::ServiceEntry {
+                service_type: crate::engine::config_generator::ServiceType::MySQL,
+                version,
+                host_port,
+                extensions: None,
+            });
+            
+            mysql_index += 1;
+        }
+    }
+    
+    // 解析 Redis 服务
+    if let Some(version) = env_map.get("REDIS_VERSION") {
+        let host_port = env_map.get("REDIS_HOST_PORT")
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(6379);
+        
+        services.push(crate::engine::config_generator::ServiceEntry {
+            service_type: crate::engine::config_generator::ServiceType::Redis,
+            version: version.clone(),
+            host_port,
+            extensions: None,
+        });
+    }
+    
+    // 解析 Nginx 服务
+    if let Some(version) = env_map.get("NGINX_VERSION") {
+        let host_port = env_map.get("NGINX_HTTP_HOST_PORT")
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(80);
+        
+        services.push(crate::engine::config_generator::ServiceEntry {
+            service_type: crate::engine::config_generator::ServiceType::Nginx,
+            version: version.clone(),
+            host_port,
+            extensions: None,
+        });
+    }
+    
+    // 如果没有解析到任何服务，返回 None
+    if services.is_empty() {
+        return Ok(None);
+    }
+    
+    let source_dir = env_map.get("SOURCE_DIR")
+        .cloned()
+        .unwrap_or_else(|| "./www".to_string());
+    let timezone = env_map.get("TZ")
+        .cloned()
+        .unwrap_or_else(|| "Asia/Shanghai".to_string());
+    
+    Ok(Some(EnvConfig {
+        services,
+        source_dir,
+        timezone,
+    }))
+}
+
 /// 生成 .env 文件内容预览
 #[tauri::command]
 pub fn generate_env_config(config: EnvConfig) -> Result<String, String> {
@@ -88,6 +225,34 @@ pub fn preview_compose(config: EnvConfig) -> Result<String, String> {
 pub async fn apply_env_config(config: EnvConfig, _app_handle: tauri::AppHandle) -> Result<(), String> {
     let project_root = get_project_root()?;
     ConfigGenerator::apply(&config, &project_root).await
+}
+
+/// 一键启动环境（docker compose up -d）
+#[tauri::command]
+pub async fn start_environment(_app_handle: tauri::AppHandle) -> Result<String, String> {
+    use std::process::Command;
+    
+    let project_root = get_project_root()?;
+    let compose_file = project_root.join("docker-compose.yml");
+    
+    if !compose_file.exists() {
+        return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
+    }
+    
+    // 执行 docker compose up -d
+    let output = Command::new("docker")
+        .args(&["compose", "up", "-d"])
+        .current_dir(&project_root)
+        .output()
+        .map_err(|e| format!("执行 docker compose 失败: {}", e))?;
+    
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Docker Compose 启动失败:\n{}", stderr))
+    }
 }
 
 // ==================== 统一镜像源管理命令 ====================

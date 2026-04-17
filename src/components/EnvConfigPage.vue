@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { ask } from '@tauri-apps/plugin-dialog';
 import type { ServiceEntry, EnvConfig } from '../types/env-config';
 
 // Available versions (filtered based on official PHP support status)
@@ -252,9 +253,15 @@ async function handleApply() {
     const existingFiles = await invoke<string[]>('check_config_files_exist');
     if (existingFiles.length > 0) {
       // 有文件存在，显示确认对话框
-      const fileList = existingFiles.map(f => `- ${f}`).join('\n');
-      const confirmed = confirm(
-        `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`
+      const fileList = existingFiles.map(f => `• ${f}`).join('\n');
+      const confirmed = await ask(
+        `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`,
+        {
+          title: '配置文件已存在',
+          kind: 'warning',
+          okLabel: '覆盖',
+          cancelLabel: '取消'
+        }
       );
       if (!confirmed) {
         return; // 用户取消

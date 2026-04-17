@@ -336,30 +336,38 @@ impl EnvironmentBuilder {
         }
     }
     
-    /// 获取数据卷配置
+    /// 获取数据卷配置（参考 dnmp 项目）
     fn get_volumes(spec: &ServiceSpec) -> Option<Vec<String>> {
         let volume_path = match spec.software_type {
             SoftwareType::MySQL => "./data/mysql:/var/lib/mysql",
             SoftwareType::Redis => "./data/redis:/data",
-            SoftwareType::Nginx => "./data/www:/var/www/html",
+            SoftwareType::Nginx => {
+                // Nginx 需要挂载 www 目录和配置文件
+                return Some(vec![
+                    "./data/www:/var/www/html".to_string(),
+                    "./nginx/conf.d:/etc/nginx/conf.d".to_string(),
+                ]);
+            }
+            SoftwareType::PHP => {
+                // PHP 也需要挂载 www 目录
+                return Some(vec![
+                    "./data/www:/var/www/html".to_string(),
+                ]);
+            }
             _ => return None,
         };
         
         Some(vec![volume_path.to_string()])
     }
     
-    /// 获取依赖关系
+    /// 获取依赖关系（参考 dnmp 项目）
     fn get_dependencies(spec: &ServiceSpec) -> Option<Vec<String>> {
         match spec.software_type {
-            SoftwareType::PHP => {
-                // PHP 可能依赖 MySQL 和 Redis
-                Some(vec!["mysql".to_string(), "redis".to_string()])
-            }
             SoftwareType::Nginx => {
-                // Nginx 依赖 PHP-FPM
+                // Nginx 必须依赖 PHP-FPM（参考 dnmp 项目）
                 Some(vec!["php".to_string()])
             }
-            _ => None,
+            _ => None,  // V1.0: 简化依赖，PHP不强制依赖MySQL/Redis
         }
     }
 }
@@ -437,7 +445,7 @@ impl ExtensionRegistry {
                 name: "redis".to_string(),
                 ext_type: ExtensionType::Pecl,
                 system_deps: vec![],
-                pecl_version: Some("5.3.7".to_string()),
+                pecl_version: Some("6.0.2".to_string()),  // PHP 8.2+ 需要 6.0+
                 config_flags: vec![],
             }),
             "xdebug" => Some(ExtensionMetadata {

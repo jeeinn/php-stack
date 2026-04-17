@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import MirrorPanel from './components/MirrorPanel.vue';
 import BackupPage from './components/BackupPage.vue';
@@ -105,6 +106,12 @@ onMounted(() => {
   refreshContainers();
   // 每 5 秒自动静默刷新一次
   setInterval(() => refreshContainers(true), 5000);
+  
+  // 监听后端发送的日志事件
+  listen('env-log', (event) => {
+    const msg = event.payload as string;
+    addLog(msg);
+  });
 });
 </script>
 

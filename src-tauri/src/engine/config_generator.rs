@@ -295,7 +295,29 @@ impl ConfigGenerator {
                 .map_err(|e| format!("创建目录失败: {}", e))?;
         }
         
-        // Copy file
+        // Skip if destination exists and is identical to template
+        if dest_path.exists() {
+            use std::io::Read;
+            let mut template_file = std::fs::File::open(&template_path)
+                .map_err(|e| format!("打开模板文件失败: {}", e))?;
+            let mut dest_file = std::fs::File::open(dest_path)
+                .map_err(|e| format!("打开目标文件失败: {}", e))?;
+            
+            let mut template_buf = Vec::new();
+            let mut dest_buf = Vec::new();
+            
+            template_file.read_to_end(&mut template_buf)
+                .map_err(|e| format!("读取模板文件失败: {}", e))?;
+            dest_file.read_to_end(&mut dest_buf)
+                .map_err(|e| format!("读取目标文件失败: {}", e))?;
+            
+            if template_buf == dest_buf {
+                // Files are identical, skip copy
+                return Ok(());
+            }
+        }
+        
+        // Copy file (will overwrite if different)
         std::fs::copy(&template_path, dest_path)
             .map_err(|e| format!("复制文件 {:?} 到 {:?} 失败: {}", template_path, dest_path, e))?;
         

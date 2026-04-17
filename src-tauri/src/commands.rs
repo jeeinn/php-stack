@@ -276,10 +276,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     
     emit_log("✅ docker-compose.yml 存在");
     emit_log("🔧 执行: docker compose up -d");
+    emit_log("⏳ 这可能需要几分钟时间（首次构建需下载镜像和安装扩展）...");
     
     // 执行 docker compose up -d
     let output = Command::new("docker")
-        .args(&["compose", "up", "-d"])
+        .args(&["compose", "up", "-d", "--build"])
         .current_dir(&project_root)
         .output()
         .map_err(|e| {

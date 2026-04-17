@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { ask } from '@tauri-apps/plugin-dialog';
 import type { ServiceEntry, EnvConfig } from '../types/env-config';
 
 // Available versions (filtered based on official PHP support status)
@@ -39,6 +38,12 @@ const successMsg = ref<string | null>(null);
 const previewEnv = ref('');
 const previewCompose = ref('');
 const showPreviewModal = ref(false);
+
+// 确认对话框状态
+const showConfirmDialog = ref(false);
+const confirmMessage = ref('');
+const confirmTitle = ref('');
+const confirmResolve = ref<((value: boolean) => void) | null>(null);
 
 // Load existing config on mount
 onMounted(async () => {
@@ -241,6 +246,25 @@ async function handlePreview() {
   }
 }
 
+// 显示确认对话框（Promise 封装）
+function showConfirmDialogFn(title: string, message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmTitle.value = title;
+    confirmMessage.value = message;
+    confirmResolve.value = resolve;
+    showConfirmDialog.value = true;
+  });
+}
+
+// 处理确认对话框按钮
+function handleConfirmDialog(result: boolean) {
+  showConfirmDialog.value = false;
+  if (confirmResolve.value) {
+    confirmResolve.value(result);
+    confirmResolve.value = null;
+  }
+}
+
 // Apply
 async function handleApply() {
   if (portConflicts.value.length > 0) {
@@ -254,14 +278,9 @@ async function handleApply() {
     if (existingFiles.length > 0) {
       // 有文件存在，显示确认对话框
       const fileList = existingFiles.map(f => `• ${f}`).join('\n');
-      const confirmed = await ask(
-        `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`,
-        {
-          title: '配置文件已存在',
-          kind: 'warning',
-          okLabel: '覆盖',
-          cancelLabel: '取消'
-        }
+      const confirmed = await showConfirmDialogFn(
+        '配置文件已存在',
+        `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`
       );
       if (!confirmed) {
         return; // 用户取消
@@ -507,6 +526,42 @@ async function handleStart() {
           </button>
           <button @click="handleApply" :disabled="applying" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50">
             {{ applying ? '应用中...' : '应用配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 确认对话框 -->
+    <div v-if="showConfirmDialog" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
+        <!-- 标题栏 -->
+        <div class="p-6 border-b border-slate-800">
+          <div class="flex items-start gap-3">
+            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-lg font-semibold text-slate-100">{{ confirmTitle }}</h3>
+              <p class="mt-2 text-sm text-slate-400 whitespace-pre-line">{{ confirmMessage }}</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 按钮栏 -->
+        <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
+          <button 
+            @click="handleConfirmDialog(false)" 
+            class="px-5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition text-slate-300"
+          >
+            取消
+          </button>
+          <button 
+            @click="handleConfirmDialog(true)" 
+            class="px-5 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition text-white"
+          >
+            覆盖
           </button>
         </div>
       </div>

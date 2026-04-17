@@ -4,8 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ServiceEntry, EnvConfig } from '../types/env-config';
 
 // Available versions (filtered based on official PHP support status)
-// Only include: legacy versions (5.6, 7.4) and actively supported versions (8.2+)
-const phpVersions = ['5.6', '7.4', '8.2', '8.3', '8.4'];
+// Include: legacy versions (5.6, 7.4) and all actively supported versions (8.0-8.5)
+const phpVersions = ['5.6', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'];
 const mysqlVersions = ['5.7', '8.0', '8.4'];
 const redisVersions = ['6.2-alpine', '7.0-alpine', '7.2-alpine'];
 const nginxVersions = ['1.24-alpine', '1.25-alpine', '1.26-alpine', '1.27-alpine'];

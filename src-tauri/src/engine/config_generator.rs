@@ -272,10 +272,11 @@ impl ConfigGenerator {
         // Determine template source path
         let template_path = if cfg!(debug_assertions) {
             // Development mode: src-tauri/services/
+            // current_exe() -> src-tauri/target/debug/app.exe
             exe_dir
-                .parent() // target/debug/
-                .and_then(|p| p.parent()) // target/
-                .and_then(|p| p.parent()) // src-tauri/
+                .parent()       // target/debug/
+                .and_then(|p| p.parent())   // target/
+                .and_then(|p| p.parent())   // src-tauri/
                 .map(|p| p.join("services").join(template_name))
         } else {
             // Production mode: executable_dir/services/
@@ -350,15 +351,17 @@ impl ConfigGenerator {
                     } else if service.version.starts_with("8.0") {
                         "php80/Dockerfile"
                     } else if service.version.starts_with("8.1") {
-                        "php82/Dockerfile"  // Use php82 template for PHP 8.1
+                        "php81/Dockerfile"
                     } else if service.version.starts_with("8.2") {
                         "php82/Dockerfile"
                     } else if service.version.starts_with("8.3") {
                         "php83/Dockerfile"
                     } else if service.version.starts_with("8.4") {
                         "php84/Dockerfile"
+                    } else if service.version.starts_with("8.5") {
+                        "php85/Dockerfile"
                     } else {
-                        "php84/Dockerfile"  // Default to latest for unknown versions
+                        "php85/Dockerfile"  // Default to latest for unknown versions
                     };
                     Self::copy_template_file(
                         dockerfile_template,
@@ -373,15 +376,17 @@ impl ConfigGenerator {
                     } else if service.version.starts_with("8.0") {
                         "php80/php.ini"
                     } else if service.version.starts_with("8.1") {
-                        "php82/php.ini"
+                        "php81/php.ini"
                     } else if service.version.starts_with("8.2") {
                         "php82/php.ini"
                     } else if service.version.starts_with("8.3") {
                         "php83/php.ini"
                     } else if service.version.starts_with("8.4") {
                         "php84/php.ini"
+                    } else if service.version.starts_with("8.5") {
+                        "php85/php.ini"
                     } else {
-                        "php84/php.ini"
+                        "php85/php.ini"
                     };
                     Self::copy_template_file(
                         php_ini_template,
@@ -396,15 +401,17 @@ impl ConfigGenerator {
                     } else if service.version.starts_with("8.0") {
                         "php80/php-fpm.conf"
                     } else if service.version.starts_with("8.1") {
-                        "php82/php-fpm.conf"
+                        "php81/php-fpm.conf"
                     } else if service.version.starts_with("8.2") {
                         "php82/php-fpm.conf"
                     } else if service.version.starts_with("8.3") {
                         "php83/php-fpm.conf"
                     } else if service.version.starts_with("8.4") {
                         "php84/php-fpm.conf"
+                    } else if service.version.starts_with("8.5") {
+                        "php85/php-fpm.conf"
                     } else {
-                        "php84/php-fpm.conf"
+                        "php85/php-fpm.conf"
                     };
                     Self::copy_template_file(
                         fpm_conf_template,

@@ -274,9 +274,8 @@ impl ConfigGenerator {
             // Development mode: src-tauri/services/
             // current_exe() -> src-tauri/target/debug/app.exe
             exe_dir
-                .parent()       // target/debug/
-                .and_then(|p| p.parent())   // target/
-                .and_then(|p| p.parent())   // src-tauri/
+                .parent()       // target/debug/ -> target/
+                .and_then(|p| p.parent())   // target/ -> src-tauri/
                 .map(|p| p.join("services").join(template_name))
         } else {
             // Production mode: executable_dir/services/

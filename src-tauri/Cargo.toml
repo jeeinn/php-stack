@@ -33,3 +33,7 @@ futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
 reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+proptest = "1"
+sha2 = "0.10"

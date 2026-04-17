@@ -5,3 +5,4 @@ pub mod compose_manager;
 pub mod restart_analyzer;
 pub mod mirror_config;      // V2.0: 镜像源配置
 pub mod environment_builder; // V2.0: 环境构建器
+pub mod env_parser;          // V2.0: Env 解析器/格式化器

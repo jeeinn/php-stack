@@ -4,6 +4,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import SoftwareCenter from './components/SoftwareCenter.vue';
 import EnvironmentWizard from './components/EnvironmentWizard.vue';
+import EnvConfigPage from './components/EnvConfigPage.vue';
+import MirrorPanel from './components/MirrorPanel.vue';
+import BackupPage from './components/BackupPage.vue';
+import RestorePage from './components/RestorePage.vue';
 
 interface Container {
   id: String;
@@ -186,15 +190,35 @@ onMounted(() => {
         class="sidebar-item"
       >软件管理 (Docker)</div>
       <div 
+        @click="activeTab = 'env-config'"
+        :class="{ 'active': activeTab === 'env-config' }" 
+        class="sidebar-item"
+      >⚙️ 环境配置</div>
+      <div 
+        @click="activeTab = 'mirrors-unified'"
+        :class="{ 'active': activeTab === 'mirrors-unified' }" 
+        class="sidebar-item"
+      >🌐 镜像源</div>
+      <div 
+        @click="activeTab = 'backup-new'"
+        :class="{ 'active': activeTab === 'backup-new' }" 
+        class="sidebar-item"
+      >💾 备份</div>
+      <div 
+        @click="activeTab = 'restore-new'"
+        :class="{ 'active': activeTab === 'restore-new' }" 
+        class="sidebar-item"
+      >📥 恢复</div>
+      <div 
         @click="activeTab = 'mirrors'"
         :class="{ 'active': activeTab === 'mirrors' }" 
-        class="sidebar-item"
-      >镜像源设置</div>
+        class="sidebar-item text-xs opacity-60"
+      >镜像源设置 (旧)</div>
       <div 
         @click="activeTab = 'backup'"
         :class="{ 'active': activeTab === 'backup' }" 
-        class="sidebar-item"
-      >备份与恢复</div>
+        class="sidebar-item text-xs opacity-60"
+      >备份与恢复 (旧)</div>
       <div class="mt-auto pt-4 border-t border-slate-800 text-sm text-slate-500 text-center">
         v1.0.0-beta
       </div>
@@ -303,7 +327,27 @@ onMounted(() => {
         <SoftwareCenter />
       </div>
 
-      <!-- 4. 镜像源设置 (Mirrors) -->
+      <!-- New: 环境配置 (EnvConfig) -->
+      <div v-if="activeTab === 'env-config'">
+        <EnvConfigPage />
+      </div>
+
+      <!-- New: 统一镜像源管理 (MirrorPanel) -->
+      <div v-if="activeTab === 'mirrors-unified'">
+        <MirrorPanel />
+      </div>
+
+      <!-- New: 备份 (BackupPage) -->
+      <div v-if="activeTab === 'backup-new'">
+        <BackupPage />
+      </div>
+
+      <!-- New: 恢复 (RestorePage) -->
+      <div v-if="activeTab === 'restore-new'">
+        <RestorePage />
+      </div>
+
+      <!-- 4. 镜像源设置 (Mirrors) - Legacy -->
       <div v-if="activeTab === 'mirrors'" class="flex-1 flex flex-col">
         <h1 class="text-3xl font-bold mb-8">镜像源设置</h1>
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-2xl">

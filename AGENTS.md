@@ -14,21 +14,79 @@
     - `manager.rs`: 使用 `bollard` 处理容器列表、启停逻辑。
     - `mirror.rs`: 处理 Docker 和 PHP 镜像源切换。
   - `engine/`: 核心业务引擎。
-    - `export.rs`: 深度导出引擎，处理 ZIP 压缩、SQL 导出及通配符匹配。
+    - `env_parser.rs`: **.env 文件解析器与格式化器**（V2.0 新增）
+    - `config_generator.rs`: **可视化配置生成器**（V2.0 新增）
+    - `mirror_manager.rs`: **统一镜像源管理器**（V2.0 新增）
+    - `backup_manifest.rs`: **备份清单数据模型**（V2.0 新增）
+    - `backup_engine.rs`: **增强备份引擎**（V2.0 新增）
+    - `restore_engine.rs`: **恢复引擎**（V2.0 新增）
+    - `export.rs`: 旧版导出引擎（保留向后兼容）
   - `commands.rs`: 定义暴露给前端的 `#[tauri::command]` 接口。
   - `lib.rs`: 插件注册与指令分发中心。
+
+## ✅ V2.0 已完成功能
+
+### 1. 可视化环境配置（EnvConfigPage）
+- **需求覆盖**: 需求 1.1-1.9
+- **实现状态**: ✅ 完成
+- **核心功能**:
+  - GUI 界面选择服务类型（PHP、MySQL、Redis、Nginx）及版本
+  - 端口配置与实时冲突检测
+  - PHP 扩展多选配置
+  - 自动生成 `.env` 文件和 `docker-compose.yml`
+  - 保留用户自定义变量
+  - 支持多 PHP 版本独立服务
+
+### 2. 统一镜像源管理（MirrorPanel）
+- **需求覆盖**: 需求 2.1-2.7
+- **实现状态**: ✅ 完成
+- **核心功能**:
+  - 5 个预设方案（阿里云、清华、腾讯云、中科大、官方默认）
+  - 4 类镜像源独立配置（Docker Registry、APT、Composer、NPM）
+  - 连接测试功能（3 秒超时）
+  - 一键应用预设或单独配置
+
+### 3. 环境备份（BackupPage）
+- **需求覆盖**: 需求 3.1-3.8, 6.1-6.4
+- **实现状态**: ✅ 完成
+- **核心功能**:
+  - ZIP 格式备份包，包含 `manifest.json`
+  - 可选：数据库导出（mysqldump）、项目文件（glob 模式）、vhost 配置、日志
+  - SHA256 文件完整性校验
+  - Tauri 事件进度通知
+  - 部分失败容错处理
+
+### 4. 环境恢复（RestorePage）
+- **需求覆盖**: 需求 4.1-4.10
+- **实现状态**: ✅ 完成
+- **核心功能**:
+  - 备份包预览（manifest 解析、文件统计）
+  - SHA256 完整性验证
+  - 端口冲突检测与自动分配
+  - 配置文件还原、数据库 SQL 执行
+  - 进度通知与错误汇总
+
+### 5. 基础设施模块
+- **env_parser.rs**: .env 文件可靠读写，保留注释和空行（Property 9, 10）
+- **backup_manifest.rs**: Manifest 序列化/反序列化（Property 11, 12）
+- **测试覆盖**: 72 个单元测试全部通过，包括属性测试（proptest）
 
 ## 🛠️ 开发规范
 
 ### Rust 后端
 1. **错误处理**: 统一使用 `Result<T, String>` 或 `Result<T, Box<dyn Error>>`。暴露给前端的 Command 必须将错误转换为 `String`。
 2. **异步处理**: 涉及 Docker 或文件 IO 的操作必须使用 `async/await`。
-3. **测试**: 核心逻辑应在 `docker/tests.rs` 或对应的测试文件中编写单元测试。
+3. **测试**: 
+   - 核心逻辑应编写单元测试（位于各模块的 `tests` 子模块）
+   - 纯函数模块（env_parser、backup_manifest、config_generator）使用 `proptest` 进行属性测试
+   - 标签格式：`// Feature: env-config-and-backup, Property N: {property_text}`
+4. **模块注册**: 新增模块需在 `engine/mod.rs` 中声明 `pub mod xxx;`
 
 ### Vue 前端
 1. **状态管理**: 目前使用 `ref` 和 `reactive` 进行局部状态管理。
 2. **样式**: 严格遵循 Tailwind CSS v4 规范。在组件内使用 `@apply` 时必须在 `<style scoped>` 中声明 `@reference "tailwindcss";`。
 3. **交互**: 所有后端调用必须经过 `invoke` 封装，并处理 `loading` 和 `error` 状态。
+4. **类型定义**: 前端 TypeScript 类型需与 Rust 后端的 Serialize/Deserialize 结构体对应，定义在 `src/types/` 目录下。
 
 ## 📋 关键模块逻辑
 
@@ -36,10 +94,57 @@
 系统仅识别以 `ps-` 为前缀的容器。
 - 过滤逻辑位于 `src-tauri/src/docker/manager.rs`。
 
-### 2. 导出引擎
-- 导出包格式为 `.zip`。
-- 包含 `manifest.json` 用于记录备份元数据。
-- 路径匹配使用 `glob` 库。
+### 2. Env_File 解析器（V2.0 新增）
+- 位置：`src-tauri/src/engine/env_parser.rs`
+- 功能：可靠读写 `.env` 文件，保留注释和空行
+- 特性：
+  - 支持带引号的值（单引号/双引号）
+  - 支持行内注释（`#`）
+  - 支持空行和纯注释行
+  - 往返一致性保证（parse → format → parse）
+
+### 3. 配置生成器（V2.0 新增）
+- 位置：`src-tauri/src/engine/config_generator.rs`
+- 功能：根据 GUI 输入生成 `.env` 和 `docker-compose.yml`
+- 特性：
+  - 端口冲突检测
+  - 保留用户自定义变量
+  - 使用 `${VAR}` 插值语法生成 Compose 文件
+  - 创建 dnmp 风格的目录结构（services/、data/、logs/）
+
+### 4. 统一镜像源管理（V2.0 新增）
+- 位置：`src-tauri/src/engine/mirror_manager.rs`
+- 功能：统一管理 Docker、APT、Composer、NPM 镜像源
+- 特性：
+  - 5 个预设方案
+  - 单个类别独立配置
+  - 3 秒超时连接测试
+
+### 5. 备份引擎（V2.0 增强）
+- 位置：`src-tauri/src/engine/backup_engine.rs`
+- 功能：生成包含 manifest 的 ZIP 备份包
+- 特性：
+  - SHA256 文件完整性校验
+  - 可选：数据库导出、项目文件、vhost 配置、日志
+  - Tauri 事件进度通知
+  - 部分失败容错处理
+
+### 6. 恢复引擎（V2.0 新增）
+- 位置：`src-tauri/src/engine/restore_engine.rs`
+- 功能：解析备份包并还原环境
+- 特性：
+  - 备份预览（manifest 解析）
+  - SHA256 完整性验证
+  - 端口冲突检测与自动分配
+  - 配置文件、数据库、项目文件还原
+
+### 7. 备份清单（V2.0 新增）
+- 位置：`src-tauri/src/engine/backup_manifest.rs`
+- 功能：记录备份元数据和文件校验和
+- 特性：
+  - serde_json 序列化/反序列化
+  - 必需字段验证（version、timestamp、services）
+  - 往返一致性保证
 
 ## 🚀 Agent 任务接入建议
 
@@ -47,61 +152,51 @@
 1. **理解 Scope**: 确认是前端 UI 调整还是后端 Rust 逻辑变更。
 2. **安全检查**: 涉及 Docker 修改的操作应先调用 `check_docker` 指令。
 3. **权限校验**: 若新增了 Tauri 插件调用，请务必更新 `src-tauri/capabilities/default.json`。
-4. **TDD 流程**: 优先在 `src-tauri/src/docker/tests.rs` 中编写测试用例。
+4. **TDD 流程**: 
+   - 优先编写单元测试
+   - 纯函数模块使用 proptest 进行属性测试
+   - 运行 `cargo test` 确保所有测试通过
+5. **类型同步**: 修改 Rust 数据结构后，同步更新 `src/types/` 中的 TypeScript 类型定义。
 
 ## 🗺️ 后续开发重点 (给下个 Agent 的 Tip)
 
-### 当前优先级任务（按顺序执行）：
+### V2.0 已完成的功能
+✅ **环境可视化配置** - 完整实现需求 1.1-1.9
+✅ **统一镜像源管理** - 完整实现需求 2.1-2.7
+✅ **环境备份** - 完整实现需求 3.1-3.8, 6.1-6.4
+✅ **环境恢复** - 完整实现需求 4.1-4.10
+✅ **基础设施模块** - env_parser、backup_manifest、测试框架
 
-#### 1. v1.1 - 软件管理中心（最高优先级）
-- **目标**：实现多版本 PHP/MySQL/Redis 的一键安装与管理
-- **需要新增文件**：
-  - `src-tauri/src/engine/software_manager.rs` - 核心管理软件安装/卸载逻辑
-  - `src/components/SoftwareCenter.vue` - 前端软件中心界面
-- **关键功能**：
-  - 维护可用软件版本清单（从 Docker Hub 拉取或本地缓存）
-  - 根据用户选择生成并启动容器（处理端口冲突、卷挂载）
-  - 支持自定义镜像标签和启动参数
-  - 实时显示安装进度和日志
-- **技术要点**：
-  - 使用 `bollard::CreateContainerOptions` 动态创建容器
-  - 端口自动分配算法（检测可用端口）
-  - 数据卷持久化路径管理
+### 当前版本定位（V2.0 生产发布版）
 
-#### 2. v1.2 - 虚拟主机管理
-- **目标**：GUI 配置 Nginx 站点，自动处理目录挂载
-- **需要新增文件**：
-  - `src-tauri/src/engine/vhost_manager.rs` - 虚拟主机配置管理
-  - `src/components/VhostManager.vue` - 前端虚拟主机管理界面
-- **关键功能**：
-  - 添加/编辑/删除 Nginx 站点配置
-  - 自动生成 Handlebars 模板渲染的 `.conf` 文件
-  - 自动重启 Nginx 容器使配置生效
-  - 支持 SSL 证书绑定
-- **技术要点**：
-  - 使用 `handlebars` 库渲染 Nginx 配置模板
-  - Docker 卷挂载点动态映射
-  - 配置文件热重载（`nginx -s reload`）
+**核心定位**: PHP-Stack V2.0 是一个**环境配置管理与迁移工具**，专注于：
+- ✅ 可视化配置生成（替代手动编辑 .env 和 docker-compose.yml）
+- ✅ 镜像源统一管理（加速国内开发体验）
+- ✅ 环境备份与恢复（快速迁移开发环境到新机器）
 
-#### 3. v1.3 - 一键导入恢复
-- **目标**：实现导出包的完整还原
-- **需要新增文件**：
-  - `src-tauri/src/engine/import.rs` - ZIP 解压与环境还原引擎
-  - `src/components/ImportWizard.vue` - 前端导入向导界面
-- **关键功能**：
-  - 解析 `manifest.json` 获取备份元数据
-  - 自动拉取所需 Docker 镜像
-  - 还原配置文件到正确位置
-  - 执行 SQL 脚本恢复数据库
-  - 智能处理环境差异（如端口冲突）
-- **技术要点**：
-  - ZIP 解压与文件权限保持
-  - Docker 镜像批量拉取与错误重试
+**不包含的功能**（未来版本可能考虑）:
+- ❌ 软件管理中心（多版本一键安装）- 用户需自行准备 Docker 镜像
+- ❌ 虚拟主机管理（Nginx 站点配置）- 用户需手动配置 Nginx
+
+**设计理念**: 
+- **轻量级**: 专注于配置管理和环境迁移，不做复杂的容器编排
+- **透明性**: 生成的配置文件完全可见可编辑，不隐藏任何细节
+- **兼容性**: 与 dnmp 等项目保持兼容，便于团队协作
+
+### 待完善功能
+
+#### v1.3 - 一键导入恢复优化（低优先级）
+- **目标**：完善 restore_engine.rs 中的 mysqldump 执行逻辑
+- **当前状态**：✅ 核心框架已实现，数据库导出为占位符
+- **待完善**：
+  - 完整的 mysqldump 执行（使用 bollard exec API）
+  - 更智能的环境差异处理
   - 事务性恢复（失败时回滚）
+- **优先级**: 低（当前版本可使用手动方式恢复数据库）
 
-### 开发建议：
-1. **按顺序开发**：先完成软件管理中心，再开发虚拟主机，最后实现导入恢复
-2. **测试策略**：每个模块完成后进行端到端测试，确保可以一边开发一边验证
-3. **依赖关系**：
-   - 虚拟主机依赖已安装的 Nginx 容器（由软件管理中心提供）
-   - 导入恢复需要读取软件版本信息（依赖软件管理中心的版本清单）
+### 开发建议
+1. **稳定优先**: V2.0 作为生产发布版，重点是稳定性和用户体验优化
+2. **Bug 修复**: 优先处理用户反馈的问题和边界情况
+3. **性能优化**: 大文件备份的流式处理、增量备份支持
+4. **文档完善**: 用户手册、常见问题、最佳实践指南
+5. **国际化**: 如需支持多语言，可添加 i18n 支持

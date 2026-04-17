@@ -153,7 +153,7 @@ onMounted(() => {
           <h1 class="text-3xl font-bold">运行状态</h1>
           <div class="flex gap-4">
             <button 
-              @click="refreshContainers" 
+              @click="() => refreshContainers()" 
               :disabled="loading"
               class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
             >
@@ -172,7 +172,7 @@ onMounted(() => {
             <p class="text-sm opacity-90">{{ dockerError }}</p>
           </div>
           <button 
-            @click="refreshContainers"
+            @click="() => refreshContainers()"
             class="px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-bold text-sm"
           >
             重试
@@ -181,18 +181,18 @@ onMounted(() => {
 
         <!-- Container Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto mb-8 pr-2">
-          <div v-for="c in containers" :key="c.id" class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-blue-500/50 transition-colors shadow-lg">
+          <div v-for="c in containers" :key="String(c.id)" class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-blue-500/50 transition-colors shadow-lg">
             <div class="flex justify-between items-start mb-4">
-              <span class="text-slate-400 text-xs font-mono uppercase tracking-wider">{{ c.image.split(':')[0] }}</span>
+              <span class="text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
               <span 
-                :class="isRunning(c.state) ? 'text-emerald-400' : 'text-rose-400'"
+                :class="isRunning(String(c.state)) ? 'text-emerald-400' : 'text-rose-400'"
                 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-tighter"
               >
-                <span :class="isRunning(c.state) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
-                {{ isRunning(c.state) ? 'Running' : 'Stopped' }}
+                <span :class="isRunning(String(c.state)) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
+                {{ isRunning(String(c.state)) ? 'Running' : 'Stopped' }}
               </span>
             </div>
-            <div class="text-xl font-bold mb-1 truncate" :title="c.name">{{ c.name }}</div>
+            <div class="text-xl font-bold mb-1 truncate" :title="String(c.name)">{{ String(c.name) }}</div>
             <div class="text-slate-500 text-xs mb-4">
               <span v-if="c.ports.length > 0">Ports: {{ c.ports.join(', ') }}</span>
               <span v-else>No public ports</span>
@@ -200,15 +200,15 @@ onMounted(() => {
             
             <div class="flex gap-2">
               <button 
-                v-if="!isRunning(c.state)"
-                @click="startService(c.name)"
+                v-if="!isRunning(String(c.state))"
+                @click="startService(String(c.name))"
                 class="flex-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 rounded text-sm font-medium transition-all"
               >
                 启动
               </button>
               <button 
                 v-else
-                @click="stopService(c.name)"
+                @click="stopService(String(c.name))"
                 class="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-600/30 rounded text-sm font-medium transition-all"
               >
                 停止

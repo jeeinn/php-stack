@@ -165,7 +165,7 @@ onMounted(() => {
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-200">
     <!-- Sidebar -->
-    <div class="w-64 bg-slate-900 p-6 flex flex-col gap-4 border-r border-slate-800">
+    <div class="w-64 bg-slate-900 p-6 flex flex-col gap-4 border-r border-slate-800 overflow-y-auto">
       <div class="text-2xl font-bold text-blue-400 mb-6 flex items-center gap-2">
         <span class="bg-blue-500 text-white p-1 rounded">PS</span> PHP-Stack
       </div>
@@ -328,22 +328,22 @@ onMounted(() => {
       </div>
 
       <!-- New: 环境配置 (EnvConfig) -->
-      <div v-if="activeTab === 'env-config'">
+      <div v-if="activeTab === 'env-config'" class="flex-1 flex flex-col overflow-hidden">
         <EnvConfigPage />
       </div>
 
       <!-- New: 统一镜像源管理 (MirrorPanel) -->
-      <div v-if="activeTab === 'mirrors-unified'">
+      <div v-if="activeTab === 'mirrors-unified'" class="flex-1 flex flex-col overflow-hidden">
         <MirrorPanel />
       </div>
 
       <!-- New: 备份 (BackupPage) -->
-      <div v-if="activeTab === 'backup-new'">
+      <div v-if="activeTab === 'backup-new'" class="flex-1 flex flex-col overflow-hidden">
         <BackupPage />
       </div>
 
       <!-- New: 恢复 (RestorePage) -->
-      <div v-if="activeTab === 'restore-new'">
+      <div v-if="activeTab === 'restore-new'" class="flex-1 flex flex-col overflow-hidden">
         <RestorePage />
       </div>
 

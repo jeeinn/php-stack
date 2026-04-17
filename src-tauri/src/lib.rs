@@ -45,6 +45,23 @@ pub fn run() {
       commands::validate_environment_spec,
       commands::generate_compose_preview,
       commands::deploy_environment_with_build,
+      // 可视化配置生成
+      commands::validate_env_config,
+      commands::generate_env_config,
+      commands::preview_compose,
+      commands::apply_env_config,
+      // 统一镜像源管理
+      commands::get_mirror_presets,
+      commands::apply_mirror_preset,
+      commands::update_single_mirror,
+      commands::test_mirror,
+      commands::get_mirror_status,
+      // 备份
+      commands::create_backup,
+      // 恢复
+      commands::preview_restore,
+      commands::verify_backup,
+      commands::execute_restore,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

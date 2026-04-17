@@ -275,12 +275,30 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     }
     
     emit_log("✅ docker-compose.yml 存在");
+    
+    // 第一步：清理旧容器（避免名称冲突）
+    emit_log("🧹 清理旧容器...");
+    let down_output = Command::new("docker")
+        .args(&["compose", "down", "--remove-orphans"])
+        .current_dir(&project_root)
+        .output()
+        .map_err(|e| {
+            let err_msg = format!("清理旧容器失败: {}", e);
+            emit_log(&format!("⚠️ {}", err_msg));
+            err_msg
+        })?;
+    
+    if !down_output.status.success() {
+        let stderr = String::from_utf8_lossy(&down_output.stderr);
+        emit_log(&format!("⚠️ 清理警告: {}", stderr.lines().next().unwrap_or("")));
+    } else {
+        emit_log("✅ 旧容器已清理");
+    }
+    
+    // 第二步：启动新容器
     emit_log("🔧 执行: docker compose up -d");
     emit_log("⏳ 首次启动可能需要几分钟（下载镜像、安装扩展）...");
     
-    // 执行 docker compose up -d
-    // Docker Compose 会自动检测 Dockerfile 和配置文件的变化
-    // 只在必要时重新构建，充分利用缓存
     let output = Command::new("docker")
         .args(&["compose", "up", "-d"])
         .current_dir(&project_root)

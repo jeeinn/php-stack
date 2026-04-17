@@ -260,6 +260,48 @@ impl ConfigGenerator {
         lines.join("\n")
     }
 
+    /// Copy template file from src-tauri/services to project services directory
+    fn copy_template_file(template_name: &str, dest_path: &Path) -> Result<(), String> {
+        // Get the executable directory
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .parent()
+            .ok_or("无法获取程序所在目录")?
+            .to_path_buf();
+        
+        // Determine template source path
+        let template_path = if cfg!(debug_assertions) {
+            // Development mode: src-tauri/services/
+            exe_dir
+                .parent() // target/debug/
+                .and_then(|p| p.parent()) // target/
+                .and_then(|p| p.parent()) // src-tauri/
+                .map(|p| p.join("services").join(template_name))
+        } else {
+            // Production mode: executable_dir/services/
+            Some(exe_dir.join("services").join(template_name))
+        };
+        
+        let template_path = template_path
+            .ok_or("无法定位模板目录")?;
+        
+        if !template_path.exists() {
+            return Err(format!("模板文件不存在: {:?}", template_path));
+        }
+        
+        // Create destination directory if needed
+        if let Some(parent) = dest_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("创建目录失败: {}", e))?;
+        }
+        
+        // Copy file
+        std::fs::copy(&template_path, dest_path)
+            .map_err(|e| format!("复制文件 {:?} 到 {:?} 失败: {}", template_path, dest_path, e))?;
+        
+        Ok(())
+    }
+
     /// Create services/, data/, logs/ directory structure.
     pub fn generate_service_dirs(config: &EnvConfig, root: &Path) -> Result<(), String> {
         // Create top-level directories
@@ -278,20 +320,44 @@ impl ConfigGenerator {
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/php{}/ 目录失败: {}", ver, e))?;
 
-                    // Write a basic Dockerfile
-                    let dockerfile = format!(
-                        "FROM php:{}-fpm\n\n# Install extensions as needed\n",
-                        service.version
-                    );
-                    std::fs::write(service_dir.join("Dockerfile"), dockerfile)
-                        .map_err(|e| format!("写入 Dockerfile 失败: {}", e))?;
+                    // Copy Dockerfile from template
+                    let dockerfile_template = if service.version.starts_with("5.") {
+                        "php56/Dockerfile"
+                    } else if service.version.starts_with("7.") {
+                        "php74/Dockerfile"
+                    } else {
+                        "php82/Dockerfile"
+                    };
+                    Self::copy_template_file(
+                        dockerfile_template,
+                        &service_dir.join("Dockerfile"),
+                    )?;
 
-                    // Write a basic php.ini
-                    std::fs::write(
-                        service_dir.join("php.ini"),
-                        "; PHP configuration\n[PHP]\n",
-                    )
-                    .map_err(|e| format!("写入 php.ini 失败: {}", e))?;
+                    // Copy php.ini from template
+                    let php_ini_template = if service.version.starts_with("5.") {
+                        "php56/php.ini"
+                    } else if service.version.starts_with("7.") {
+                        "php74/php.ini"
+                    } else {
+                        "php82/php.ini"
+                    };
+                    Self::copy_template_file(
+                        php_ini_template,
+                        &service_dir.join("php.ini"),
+                    )?;
+
+                    // Copy php-fpm.conf from template
+                    let fpm_conf_template = if service.version.starts_with("5.") {
+                        "php56/php-fpm.conf"
+                    } else if service.version.starts_with("7.") {
+                        "php74/php-fpm.conf"
+                    } else {
+                        "php82/php-fpm.conf"
+                    };
+                    Self::copy_template_file(
+                        fpm_conf_template,
+                        &service_dir.join("php-fpm.conf"),
+                    )?;
 
                     // Create log directory
                     std::fs::create_dir_all(root.join(format!("logs/php{}", ver)))
@@ -302,12 +368,11 @@ impl ConfigGenerator {
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/mysql/ 目录失败: {}", e))?;
 
-                    // Write a basic mysql.cnf
-                    std::fs::write(
-                        service_dir.join("mysql.cnf"),
-                        "[mysqld]\n# MySQL configuration\n",
-                    )
-                    .map_err(|e| format!("写入 mysql.cnf 失败: {}", e))?;
+                    // Copy mysql.cnf from template
+                    Self::copy_template_file(
+                        "mysql/mysql.cnf",
+                        &service_dir.join("mysql.cnf"),
+                    )?;
 
                     // Create data and log directories
                     std::fs::create_dir_all(root.join("data/mysql"))
@@ -320,14 +385,13 @@ impl ConfigGenerator {
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/redis/ 目录失败: {}", e))?;
 
-                    // Write a basic redis.conf
-                    std::fs::write(
-                        service_dir.join("redis.conf"),
-                        "# Redis configuration\nbind 0.0.0.0\n",
-                    )
-                    .map_err(|e| format!("写入 redis.conf 失败: {}", e))?;
+                    // Copy redis.conf from template
+                    Self::copy_template_file(
+                        "redis/redis.conf",
+                        &service_dir.join("redis.conf"),
+                    )?;
 
-                    // Create data and log directories
+                    // Create data directory
                     std::fs::create_dir_all(root.join("data/redis"))
                         .map_err(|e| format!("创建 data/redis/ 目录失败: {}", e))?;
                 }
@@ -337,6 +401,18 @@ impl ConfigGenerator {
                         .map_err(|e| format!("创建 services/nginx/ 目录失败: {}", e))?;
                     std::fs::create_dir_all(root.join("services/nginx/conf.d"))
                         .map_err(|e| format!("创建 services/nginx/conf.d/ 目录失败: {}", e))?;
+
+                    // Copy nginx.conf from template
+                    Self::copy_template_file(
+                        "nginx/nginx.conf",
+                        &service_dir.join("nginx.conf"),
+                    )?;
+
+                    // Copy default.conf from template
+                    Self::copy_template_file(
+                        "nginx/conf.d/default.conf",
+                        &service_dir.join("conf.d/default.conf"),
+                    )?;
 
                     // Create log directory
                     std::fs::create_dir_all(root.join("logs/nginx"))

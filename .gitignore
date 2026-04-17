@@ -23,12 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 
-# Generated files
+# Generated files (runtime generated, not templates)
 .env
 docker-compose.yml
 data/
-services/
 logs/
+
+# Ignore runtime services directory (but keep src-tauri/services templates)
+services/
+!src-tauri/services/
 
 # Environment variables
 .env

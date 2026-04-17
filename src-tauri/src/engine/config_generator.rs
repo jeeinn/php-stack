@@ -460,6 +460,12 @@ impl ConfigGenerator {
                     std::fs::create_dir_all(root.join("services/nginx/conf.d"))
                         .map_err(|e| format!("创建 services/nginx/conf.d/ 目录失败: {}", e))?;
 
+                    // Copy Dockerfile from template
+                    Self::copy_template_file(
+                        "nginx/Dockerfile",
+                        &service_dir.join("Dockerfile"),
+                    )?;
+
                     // Copy nginx.conf from template
                     Self::copy_template_file(
                         "nginx/nginx.conf",

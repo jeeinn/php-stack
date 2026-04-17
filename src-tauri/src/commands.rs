@@ -222,36 +222,97 @@ pub fn preview_compose(config: EnvConfig) -> Result<String, String> {
 
 /// 应用配置（写入 .env、docker-compose.yml、创建目录）
 #[tauri::command]
-pub async fn apply_env_config(config: EnvConfig, _app_handle: tauri::AppHandle) -> Result<(), String> {
+pub async fn apply_env_config(config: EnvConfig, app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+    
+    // 辅助函数：发送日志到前端并打印到终端
+    let emit_log = |msg: &str| {
+        eprintln!("[APPLY_CONFIG] {}", msg); // 终端输出
+        let _ = app_handle.emit("env-log", msg); // 前端UI显示
+    };
+    
+    emit_log("📝 开始应用配置...");
+    
     let project_root = get_project_root()?;
-    ConfigGenerator::apply(&config, &project_root).await
+    emit_log(&format!("📁 目标目录: {:?}", project_root));
+    
+    emit_log("🔧 生成配置文件和目录结构...");
+    
+    match ConfigGenerator::apply(&config, &project_root).await {
+        Ok(()) => {
+            emit_log("✅ 配置应用成功！");
+            Ok(())
+        }
+        Err(e) => {
+            emit_log(&format!("❌ 配置应用失败: {}", e));
+            Err(e)
+        }
+    }
 }
 
 /// 一键启动环境（docker compose up -d）
 #[tauri::command]
-pub async fn start_environment(_app_handle: tauri::AppHandle) -> Result<String, String> {
+pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
     use std::process::Command;
+    use tauri::Emitter;
+    
+    // 辅助函数：发送日志到前端并打印到终端
+    let emit_log = |msg: &str| {
+        eprintln!("[START_ENV] {}", msg); // 终端输出
+        let _ = app_handle.emit("env-log", msg); // 前端UI显示
+    };
+    
+    emit_log("🚀 开始启动环境...");
     
     let project_root = get_project_root()?;
+    emit_log(&format!("📁 项目根目录: {:?}", project_root));
+    
     let compose_file = project_root.join("docker-compose.yml");
     
     if !compose_file.exists() {
+        emit_log("❌ docker-compose.yml 文件不存在");
         return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
     }
+    
+    emit_log("✅ docker-compose.yml 存在");
+    emit_log("🔧 执行: docker compose up -d");
     
     // 执行 docker compose up -d
     let output = Command::new("docker")
         .args(&["compose", "up", "-d"])
         .current_dir(&project_root)
         .output()
-        .map_err(|e| format!("执行 docker compose 失败: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("执行 docker compose 失败: {}", e);
+            emit_log(&format!("❌ {}", err_msg));
+            err_msg
+        })?;
+    
+    // 输出 stdout
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !stdout.is_empty() {
+        emit_log("📤 Docker Compose 输出:");
+        for line in stdout.lines() {
+            emit_log(&format!("   {}", line));
+        }
+    }
+    
+    // 输出 stderr（警告信息）
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.is_empty() {
+        emit_log("⚠️ Docker Compose 警告/错误:");
+        for line in stderr.lines() {
+            emit_log(&format!("   {}", line));
+        }
+    }
     
     if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        emit_log("✅ 环境启动成功！");
         Ok(stdout.to_string())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Docker Compose 启动失败:\n{}", stderr))
+        let err_msg = format!("Docker Compose 启动失败:\n{}", stderr);
+        emit_log(&format!("❌ {}", err_msg));
+        Err(err_msg)
     }
 }
 

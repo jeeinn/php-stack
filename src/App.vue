@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
-import SoftwareCenter from './components/SoftwareCenter.vue';
-import EnvironmentWizard from './components/EnvironmentWizard.vue';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import MirrorPanel from './components/MirrorPanel.vue';
 import BackupPage from './components/BackupPage.vue';
@@ -82,15 +79,6 @@ const refreshContainers = async (silent = false) => {
   }
 };
 
-// 备份与恢复状态
-const exportOptions = ref({
-  config: true,
-  mysql: false,
-  mysqlType: 'all', // 'schema' or 'all'
-  projects: false,
-});
-const projectFilePatterns = ref('.env\nsrc/config/*.php');
-
 const startService = async (name: String) => {
   try {
     addLog(`正在启动服务: ${name}...`);
@@ -110,48 +98,6 @@ const stopService = async (name: String) => {
     await refreshContainers(true); // 使用静默刷新
   } catch (e) {
     addLog(`停止失败: ${e}`);
-  }
-};
-
-// 镜像源设置
-const dockerMirrorUrl = ref('https://registry.docker-cn.com');
-const updateMirror = async () => {
-  try {
-    addLog(`正在设置 Docker 镜像源: ${dockerMirrorUrl.value}...`);
-    await invoke('set_docker_mirror', { url: dockerMirrorUrl.value });
-    addLog('镜像源设置成功，请重启 Docker Desktop 生效');
-  } catch (e) {
-    addLog(`设置失败: ${e}`);
-  }
-};
-
-// 导出逻辑
-const handleExport = async () => {
-  try {
-    const savePath = await save({
-      filters: [{
-        name: 'PHP-Stack Backup',
-        extensions: ['zip']
-      }],
-      defaultPath: 'php-stack-backup.zip'
-    });
-
-    if (!savePath) return;
-
-    addLog('正在准备导出数据...');
-    const result = await invoke('export_stack', {
-      savePath,
-      options: {
-        config: exportOptions.value.config,
-        mysql: exportOptions.value.mysql,
-        mysql_type: exportOptions.value.mysqlType,
-        projects: exportOptions.value.projects,
-        project_patterns: exportOptions.value.projects ? projectFilePatterns.value : ""
-      }
-    });
-    addLog(result as string);
-  } catch (e) {
-    addLog(`导出失败: ${e}`);
   }
 };
 
@@ -175,21 +121,6 @@ onMounted(() => {
         class="sidebar-item"
       >环境管理</div>
       <div 
-        @click="activeTab = 'wizard'"
-        :class="{ 'active': activeTab === 'wizard' }" 
-        class="sidebar-item"
-      >🚀 快速搭建</div>
-      <div 
-        @click="activeTab = 'vhosts'"
-        :class="{ 'active': activeTab === 'vhosts' }" 
-        class="sidebar-item"
-      >虚拟主机 (Vhosts)</div>
-      <div 
-        @click="activeTab = 'software'"
-        :class="{ 'active': activeTab === 'software' }" 
-        class="sidebar-item"
-      >软件管理 (Docker)</div>
-      <div 
         @click="activeTab = 'env-config'"
         :class="{ 'active': activeTab === 'env-config' }" 
         class="sidebar-item"
@@ -209,16 +140,6 @@ onMounted(() => {
         :class="{ 'active': activeTab === 'restore-new' }" 
         class="sidebar-item"
       >📥 恢复</div>
-      <div 
-        @click="activeTab = 'mirrors'"
-        :class="{ 'active': activeTab === 'mirrors' }" 
-        class="sidebar-item text-xs opacity-60"
-      >镜像源设置 (旧)</div>
-      <div 
-        @click="activeTab = 'backup'"
-        :class="{ 'active': activeTab === 'backup' }" 
-        class="sidebar-item text-xs opacity-60"
-      >备份与恢复 (旧)</div>
       <div class="mt-auto pt-4 border-t border-slate-800 text-sm text-slate-500 text-center">
         v1.0.0-beta
       </div>
@@ -306,28 +227,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 2. 虚拟主机 (Vhosts) - Placeholder -->
-      <div v-if="activeTab === 'vhosts'" class="flex-1 flex flex-col">
-        <h1 class="text-3xl font-bold mb-8">虚拟主机管理</h1>
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center">
-          <div class="text-slate-500 mb-4 text-lg">此功能正在快马加鞭开发中...</div>
-          <p class="text-slate-600 max-w-md mx-auto">
-            后续将支持一键添加 Nginx 站点配置，自动绑定本地域名和项目目录。
-          </p>
-        </div>
-      </div>
-
-      <!-- 2. 快速搭建 (Wizard) -->
-      <div v-if="activeTab === 'wizard'">
-        <EnvironmentWizard />
-      </div>
-
-      <!-- 3. 软件管理 (Software) -->
-      <div v-if="activeTab === 'software'">
-        <SoftwareCenter />
-      </div>
-
-      <!-- New: 环境配置 (EnvConfig) -->
+      <!-- 环境配置 (EnvConfig) -->
       <div v-if="activeTab === 'env-config'" class="flex-1 flex flex-col overflow-hidden">
         <EnvConfigPage />
       </div>
@@ -345,123 +245,6 @@ onMounted(() => {
       <!-- New: 恢复 (RestorePage) -->
       <div v-if="activeTab === 'restore-new'" class="flex-1 flex flex-col overflow-hidden">
         <RestorePage />
-      </div>
-
-      <!-- 4. 镜像源设置 (Mirrors) - Legacy -->
-      <div v-if="activeTab === 'mirrors'" class="flex-1 flex flex-col">
-        <h1 class="text-3xl font-bold mb-8">镜像源设置</h1>
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-2xl">
-          <div class="mb-8">
-            <label class="block text-sm font-medium text-slate-400 mb-2 uppercase tracking-wider">Docker 镜像加速源</label>
-            <div class="flex gap-3">
-              <input 
-                v-model="dockerMirrorUrl"
-                type="text" 
-                class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="https://..."
-              />
-              <button 
-                @click="updateMirror"
-                class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-medium transition"
-              >
-                应用
-              </button>
-            </div>
-            <div class="mt-3 flex gap-2">
-              <button @click="dockerMirrorUrl = 'https://registry.docker-cn.com'" class="text-xs px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 text-slate-400">官方中国</button>
-              <button @click="dockerMirrorUrl = 'https://mirrors.ustc.edu.cn'" class="text-xs px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 text-slate-400">中科大</button>
-              <button @click="dockerMirrorUrl = 'https://mirror.ccs.tencentyun.com'" class="text-xs px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 text-slate-400">腾讯云</button>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-slate-400 mb-2 uppercase tracking-wider">PHP 扩展与 Composer 源</label>
-            <div class="p-4 bg-slate-800/30 border border-slate-700 rounded-xl space-y-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="font-medium">Composer 全局源</div>
-                  <div class="text-xs text-slate-500 mt-1">设置后将加速 PHP 依赖安装</div>
-                </div>
-                <select class="bg-slate-800 border border-slate-700 rounded-md px-3 py-1 text-sm outline-none">
-                  <option>阿里云 (aliyun)</option>
-                  <option>华为云 (huawei)</option>
-                  <option>官方 (packagist.org)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 5. 备份与恢复 (Backup) - Placeholder -->
-      <div v-if="activeTab === 'backup'" class="flex-1 flex flex-col">
-        <h1 class="text-3xl font-bold mb-8">备份与恢复</h1>
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8">
-          <div class="flex items-start gap-6 mb-8">
-            <div class="flex-1 p-6 bg-slate-800/30 border border-slate-700 rounded-2xl">
-              <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                一键导出环境
-              </h3>
-              <div class="space-y-4 mb-6">
-                <label class="flex items-center gap-2 text-sm text-slate-400">
-                  <input type="checkbox" v-model="exportOptions.config" disabled /> PHP-Stack 核心配置
-                </label>
-                <div class="space-y-2">
-                  <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-                    <input type="checkbox" v-model="exportOptions.mysql" /> MySQL 数据库 (SQL)
-                  </label>
-                  <transition name="fade">
-                    <div v-show="exportOptions.mysql" class="pl-6 flex gap-4 overflow-hidden">
-                      <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">
-                        <input type="radio" v-model="exportOptions.mysqlType" value="schema" class="accent-blue-500" /> 数据库结构
-                      </label>
-                      <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors">
-                        <input type="radio" v-model="exportOptions.mysqlType" value="all" class="accent-blue-500" /> 数据库结构+数据
-                      </label>
-                    </div>
-                  </transition>
-                </div>
-                <div class="space-y-2">
-                  <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-                    <input type="checkbox" v-model="exportOptions.projects" /> 项目敏感文件 (.env 等)
-                  </label>
-                  <transition name="fade">
-                    <div v-show="exportOptions.projects" class="pl-6 overflow-hidden">
-                      <textarea 
-                        v-model="projectFilePatterns"
-                        placeholder="每行一个路径，支持 * 表达式"
-                        class="w-full h-24 bg-slate-900/50 border border-slate-700 rounded-lg p-2 text-xs font-mono text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
-                      ></textarea>
-                      <p class="text-[10px] text-slate-500 mt-1 italic">
-                        * 如果文本框留空则不导出对应项目文件
-                      </p>
-                    </div>
-                  </transition>
-                </div>
-              </div>
-              <button 
-                @click="handleExport"
-                class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition"
-              >
-                创建备份包 (.zip)
-              </button>
-            </div>
-
-            <div class="flex-1 p-6 bg-slate-800/30 border border-slate-700 rounded-2xl">
-              <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-emerald-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                快速恢复环境
-              </h3>
-              <div class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center mb-6">
-                <p class="text-slate-500 text-sm">将 .zip 备份包拖拽至此处</p>
-              </div>
-              <button class="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-bold transition">
-                选择文件
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Log Panel (Global) -->

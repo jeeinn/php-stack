@@ -4,6 +4,7 @@ use crate::engine::mirror_manager::{MirrorManager as UnifiedMirrorManager, Mirro
 use crate::engine::backup_engine::BackupEngine;
 use crate::engine::backup_manifest::BackupOptions;
 use crate::engine::restore_engine::{RestoreEngine, RestorePreview};
+use crate::engine::version_manifest::{VersionManifest, ServiceType as VmServiceType};
 
 /// 获取项目根目录（用于配置文件生成）
 fn get_project_root() -> Result<std::path::PathBuf, String> {
@@ -523,4 +524,109 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
     }
     
     Ok(())
+}
+
+/// 获取所有可用的版本映射配置
+#[tauri::command]
+pub fn get_version_mappings() -> Result<serde_json::Value, String> {
+    use std::collections::HashMap;
+    
+    let manifest = VersionManifest::new();
+    let mut result = HashMap::new();
+    
+    // PHP 版本
+    let mut php_versions = Vec::new();
+    for version in manifest.get_available_versions(&VmServiceType::Php) {
+        if let Some(info) = manifest.get_image_info(&VmServiceType::Php, version) {
+            php_versions.push(serde_json::json!({
+                "version": version,
+                "image": info.image,
+                "tag": info.tag,
+                "full_name": info.full_name(),
+                "eol": info.eol,
+                "description": info.description
+            }));
+        }
+    }
+    result.insert("php".to_string(), serde_json::Value::Array(php_versions));
+    
+    // MySQL 版本
+    let mut mysql_versions = Vec::new();
+    for version in manifest.get_available_versions(&VmServiceType::Mysql) {
+        if let Some(info) = manifest.get_image_info(&VmServiceType::Mysql, version) {
+            mysql_versions.push(serde_json::json!({
+                "version": version,
+                "image": info.image,
+                "tag": info.tag,
+                "full_name": info.full_name(),
+                "eol": info.eol,
+                "description": info.description
+            }));
+        }
+    }
+    result.insert("mysql".to_string(), serde_json::Value::Array(mysql_versions));
+    
+    // Redis 版本
+    let mut redis_versions = Vec::new();
+    for version in manifest.get_available_versions(&VmServiceType::Redis) {
+        if let Some(info) = manifest.get_image_info(&VmServiceType::Redis, version) {
+            redis_versions.push(serde_json::json!({
+                "version": version,
+                "image": info.image,
+                "tag": info.tag,
+                "full_name": info.full_name(),
+                "eol": info.eol,
+                "description": info.description
+            }));
+        }
+    }
+    result.insert("redis".to_string(), serde_json::Value::Array(redis_versions));
+    
+    // Nginx 版本
+    let mut nginx_versions = Vec::new();
+    for version in manifest.get_available_versions(&VmServiceType::Nginx) {
+        if let Some(info) = manifest.get_image_info(&VmServiceType::Nginx, version) {
+            nginx_versions.push(serde_json::json!({
+                "version": version,
+                "image": info.image,
+                "tag": info.tag,
+                "full_name": info.full_name(),
+                "eol": info.eol,
+                "description": info.description
+            }));
+        }
+    }
+    result.insert("nginx".to_string(), serde_json::Value::Array(nginx_versions));
+    
+    Ok(serde_json::to_value(result).map_err(|e| format!("序列化失败: {}", e))?)
+}
+
+/// 验证指定的版本是否存在
+#[tauri::command]
+pub fn validate_version(service_type: String, version: String) -> Result<bool, String> {
+    let manifest = VersionManifest::new();
+    let vm_service_type = match service_type.as_str() {
+        "php" => VmServiceType::Php,
+        "mysql" => VmServiceType::Mysql,
+        "redis" => VmServiceType::Redis,
+        "nginx" => VmServiceType::Nginx,
+        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+    };
+    
+    Ok(manifest.is_version_valid(&vm_service_type, &version))
+}
+
+/// 获取推荐版本
+#[tauri::command]
+pub fn get_recommended_version(service_type: String) -> Result<Option<String>, String> {
+    let manifest = VersionManifest::new();
+    let vm_service_type = match service_type.as_str() {
+        "php" => VmServiceType::Php,
+        "mysql" => VmServiceType::Mysql,
+        "redis" => VmServiceType::Redis,
+        "nginx" => VmServiceType::Nginx,
+        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+    };
+    
+    Ok(manifest.get_recommended_version(&vm_service_type).map(|s| s.to_string()))
 }

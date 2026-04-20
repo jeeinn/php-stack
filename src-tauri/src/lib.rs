@@ -45,6 +45,10 @@ pub fn run() {
       commands::preview_restore,
       commands::verify_backup,
       commands::execute_restore,
+      // 版本管理
+      commands::get_version_mappings,
+      commands::validate_version,
+      commands::get_recommended_version,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

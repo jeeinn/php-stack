@@ -6,6 +6,7 @@ import EnvConfigPage from './components/EnvConfigPage.vue';
 import MirrorPanel from './components/MirrorPanel.vue';
 import BackupPage from './components/BackupPage.vue';
 import RestorePage from './components/RestorePage.vue';
+import SoftwareSettings from './components/SoftwareSettings.vue';
 
 interface Container {
   id: String;
@@ -204,6 +205,15 @@ onMounted(() => {
           <span class="text-lg">📥</span>
           <span v-if="!sidebarCollapsed" class="ml-2">恢复</span>
         </div>
+        <div 
+          @click="activeTab = 'software-settings'"
+          :class="{ 'active': activeTab === 'software-settings' }" 
+          class="sidebar-item"
+          :title="sidebarCollapsed ? '软件设置' : ''"
+        >
+          <span class="text-lg">🔧</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">软件设置</span>
+        </div>
       </div>
       
       <!-- Version & Toggle Button -->
@@ -336,6 +346,11 @@ onMounted(() => {
       <!-- New: 恢复 (RestorePage) -->
       <div v-if="activeTab === 'restore-new'" class="flex-1 flex flex-col overflow-hidden">
         <RestorePage />
+      </div>
+
+      <!-- New: 软件设置 (SoftwareSettings) -->
+      <div v-if="activeTab === 'software-settings'" class="flex-1 flex flex-col overflow-hidden">
+        <SoftwareSettings />
       </div>
 
       <!-- Log Panel (Global) -->

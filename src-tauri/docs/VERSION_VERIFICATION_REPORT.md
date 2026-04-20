@@ -1,7 +1,8 @@
 # Docker 镜像版本核对报告
 
 > **核对日期**: 2026-04-20  
-> **参考来源**: dnmp 项目、Docker Hub 官方信息、互联网公开资料
+> **参考来源**: dnmp 项目、Docker Hub API、官方文档
+> **验证方式**: Docker Hub API v2 直接查询
 
 ---
 
@@ -61,17 +62,18 @@ MYSQL_VERSION=8.0.34       # MySQL 8.0
 | 8.4 | `8.4-lts` | - | ✅ LTS (最新版) | ✅ 正确 |
 
 ### 关键发现
-⚠️ **MySQL 8.4 标签特殊说明**:
-- MySQL 8.4 是新的 LTS 版本（2024-04 发布）
-- Docker Hub 标签为 `8.4-lts` 而非 `8.4`
-- 这是正确的配置！
+✅ **MySQL 8.4 标签已校正**:
+- Docker Hub API 返回的标签是 `8.4` 而非 `8.4-lts`
+- `lts` 是一个独立的标签，指向最新的 LTS 版本
+- `8.4` 是浮动标签，指向 8.4.x 的最新小版本
+- **已修正为 `8.4`**
 
 ### 验证结果
 ✅ **所有 MySQL 版本标签正确**
-- Docker Hub 官方标签:
-  - `mysql:5.7` → 指向最新的 5.7.x
-  - `mysql:8.0` → 指向最新的 8.0.x
-  - `mysql:8.4-lts` → MySQL 8.4 LTS 专用标签
+- Docker Hub API 验证:
+  - `mysql:5.7` → 存在 ✅
+  - `mysql:8.0` → 存在 ✅
+  - `mysql:8.4` → 存在 ✅ (修正前为 `8.4-lts`)
 
 ### 建议调整
 无。当前配置完全正确。
@@ -198,6 +200,59 @@ NGINX_VERSION=1.19.1-alpine  # Nginx 1.19 (较旧)
 
 ## 📝 事实依据总结
 
+### Docker Hub API 验证结果
+
+**验证时间**: 2026-04-20  
+**API Endpoint**: `https://hub.docker.com/v2/repositories/library/{image}/tags/`
+
+#### MySQL 标签验证
+```bash
+# 查询 8.4 相关标签
+curl "https://hub.docker.com/v2/repositories/library/mysql/tags/?page_size=50&name=8.4"
+
+# 返回的标签包括:
+- 8.4.8 (具体小版本)
+- 8.4-oracle
+- 8.4-oraclelinux9
+- 8.4 ✅ (浮动标签，指向最新 8.4.x)
+
+# 查询 lts 标签
+curl "https://hub.docker.com/v2/repositories/library/mysql/tags/?page_size=100&name=lts"
+
+# 返回的标签包括:
+- lts ✅ (指向最新的 LTS 版本，当前是 8.4.x)
+- lts-oracle
+- lts-oraclelinux9
+```
+
+**结论**: MySQL 8.4 应该使用 `8.4` 标签，而非 `8.4-lts`
+
+#### Redis 标签验证
+```bash
+# 查询 8.2-alpine 标签
+curl "https://hub.docker.com/v2/repositories/library/redis/tags/?page_size=30&name=8.2"
+
+# 返回的标签包括:
+- 8.2.5-alpine3.22 (具体版本)
+- 8.2-alpine ✅ (浮动标签)
+```
+
+**结论**: Redis 8.2 使用 `8.2-alpine` 标签正确
+
+#### Nginx 标签验证
+```bash
+# 查询 1.27-alpine 标签
+curl "https://hub.docker.com/v2/repositories/library/nginx/tags/?page_size=30&name=1.27"
+
+# 返回的标签包括:
+- 1.27.5-perl
+- 1.27-alpine ✅ (浮动标签)
+```
+
+**结论**: Nginx 1.27 使用 `1.27-alpine` 标签正确
+
+---
+
 ### PHP
 - ✅ dnmp: 5.6.40, 7.4.33, 8.0.30, 8.2.27
 - ✅ 官方: https://www.php.net/supported-versions.php
@@ -205,8 +260,8 @@ NGINX_VERSION=1.19.1-alpine  # Nginx 1.19 (较旧)
 
 ### MySQL
 - ✅ dnmp: 5.7.42, 8.0.34
-- ✅ 官方: https://dev.mysql.com/doc/relnotes/mysql/8.4/en/
-- ✅ Docker Hub: `mysql:8.4-lts` 标签存在（特殊 LTS 标签）
+- ✅ Docker Hub API: `mysql:8.4` 标签存在 (已修正)
+- ❌ ~~Docker Hub: `mysql:8.4-lts` 标签不存在~~
 
 ### Redis
 - ✅ dnmp: 8.2.2-alpine

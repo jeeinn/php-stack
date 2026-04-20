@@ -65,7 +65,7 @@
     },
     "8.4": {
       "image": "mysql",
-      "tag": "8.4-lts",
+      "tag": "8.4",
       "eol": false,
       "description": "MySQL 8.4 LTS (最新长期支持版)"
     }

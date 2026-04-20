@@ -177,8 +177,8 @@ mod tests {
         let info = manifest.get_image_info(&ServiceType::Mysql, "8.4");
         assert!(info.is_some());
         let info = info.unwrap();
-        assert_eq!(info.tag, "8.4-lts");
-        assert_eq!(info.full_name(), "mysql:8.4-lts");
+        assert_eq!(info.tag, "8.4");
+        assert_eq!(info.full_name(), "mysql:8.4");
     }
 
     #[test]

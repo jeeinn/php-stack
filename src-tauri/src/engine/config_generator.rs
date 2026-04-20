@@ -171,12 +171,13 @@ impl ConfigGenerator {
                     };
                     
                     // Get the correct image tag (user override > default manifest)
+                    // 注意：使用 version_base（纯版本号）来查找用户覆盖配置
                     let image_tag = override_manager
-                        .get_merged_image_info(&VmServiceType::Redis, &service.version)
+                        .get_merged_image_info(&VmServiceType::Redis, version_base)
                         .map(|info| info.tag.clone())
                         .unwrap_or_else(|| {
                             manifest
-                                .get_image_info(&VmServiceType::Redis, &service.version)
+                                .get_image_info(&VmServiceType::Redis, version_base)
                                 .map(|info| info.tag.clone())
                                 .unwrap_or(service.version.clone())
                         });
@@ -201,12 +202,13 @@ impl ConfigGenerator {
                     };
                     
                     // Get the correct image tag (user override > default manifest)
+                    // 注意：使用 version_base（纯版本号）来查找用户覆盖配置
                     let image_tag = override_manager
-                        .get_merged_image_info(&VmServiceType::Nginx, &service.version)
+                        .get_merged_image_info(&VmServiceType::Nginx, version_base)
                         .map(|info| info.tag.clone())
                         .unwrap_or_else(|| {
                             manifest
-                                .get_image_info(&VmServiceType::Nginx, &service.version)
+                                .get_image_info(&VmServiceType::Nginx, version_base)
                                 .map(|info| info.tag.clone())
                                 .unwrap_or(service.version.clone())
                         });

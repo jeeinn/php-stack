@@ -405,6 +405,14 @@ pub fn get_mirror_status() -> Result<serde_json::Value, String> {
         .map_err(|e| format!("序列化镜像源状态失败: {}", e))
 }
 
+/// 获取当前匹配的预设名称
+#[tauri::command]
+pub fn get_current_mirror_preset() -> Result<String, String> {
+    let project_root = get_project_root()?;
+    let env_path = project_root.join(".env");
+    UnifiedMirrorManager::detect_current_preset(&env_path)
+}
+
 // ==================== 备份命令 ====================
 
 /// 创建环境备份

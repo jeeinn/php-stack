@@ -37,6 +37,7 @@ pub fn run() {
       commands::update_single_mirror,
       commands::test_mirror,
       commands::get_mirror_status,
+      commands::get_current_mirror_preset,
       // 备份
       commands::create_backup,
       // 恢复

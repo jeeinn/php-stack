@@ -75,6 +75,17 @@ async function loadStatus() {
   }
 }
 
+async function loadCurrentPreset() {
+  try {
+    const presetName = await invoke<string>('get_current_mirror_preset');
+    selectedPreset.value = presetName;
+  } catch (e) {
+    console.error('加载当前预设失败:', e);
+    // 如果检测失败，默认选中“官方默认”
+    selectedPreset.value = '官方默认';
+  }
+}
+
 function applyPresetToCategories() {
   const preset = presets.value.find(p => p.name === selectedPreset.value);
   if (!preset) return;
@@ -125,6 +136,7 @@ async function handleApply() {
 onMounted(() => {
   loadPresets();
   loadStatus();
+  loadCurrentPreset();
 });
 </script>
 

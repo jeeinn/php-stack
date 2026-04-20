@@ -195,6 +195,38 @@ impl MirrorManager {
             npm: env_file.get("NPM_MIRROR").unwrap_or("default").to_string(),
         })
     }
+
+    /// 检测当前配置匹配的预设名称
+    ///
+    /// 比较当前 .env 中的配置与所有预设，返回最匹配的预设名称。
+    /// 如果没有任何预设完全匹配，返回 "官方默认"。
+    pub fn detect_current_preset(env_path: &Path) -> Result<String, String> {
+        let status = Self::get_current_status(env_path)?;
+        let presets = Self::get_presets();
+
+        // 尝试找到完全匹配的预设
+        for preset in &presets {
+            if status.docker_registry == preset.docker_registry
+                && status.apt.as_str() == preset.apt.as_str()
+                && status.composer.as_str() == preset.composer.as_str()
+                && status.npm == preset.npm
+            {
+                return Ok(preset.name.clone());
+            }
+        }
+
+        // 如果没有完全匹配，检查是否为空配置（首次使用）
+        if status.docker_registry.is_empty()
+            && (status.apt == "default" || status.apt.is_empty())
+            && (status.composer == "default" || status.composer.is_empty())
+            && (status.npm == "default" || status.npm.is_empty() || status.npm == "https://registry.npmjs.org")
+        {
+            return Ok("官方默认".to_string());
+        }
+
+        // 否则返回"官方默认"作为fallback
+        Ok("官方默认".to_string())
+    }
 }
 
 #[cfg(test)]

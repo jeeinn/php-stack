@@ -29,6 +29,9 @@ docker-compose.yml
 data/
 logs/
 
+# User custom version overrides (machine-specific)
+src-tauri/.user_version_overrides.json
+
 # Ignore runtime services directory (but keep src-tauri/services templates)
 services/
 !src-tauri/services/

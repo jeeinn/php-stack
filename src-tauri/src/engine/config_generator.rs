@@ -117,51 +117,54 @@ impl ConfigGenerator {
                     // Generate service directory name: mysql{major}{minor}
                     // e.g., MySQL 5.7 -> mysql57, MySQL 8.0 -> mysql80
                     let version_parts: Vec<&str> = service.version.split('.').collect();
-                    let service_dir_name = if version_parts.len() >= 2 {
-                        format!("mysql{}{}", version_parts[0], version_parts[1])
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
                     } else {
-                        "mysql80".to_string() // Default to mysql80 for unknown versions
+                        "80".to_string()
                     };
+                    let service_dir_name = format!("mysql{}", ver);
                     
-                    env.set("MYSQL_VERSION", &service.version);
-                    env.set("MYSQL_HOST_PORT", &service.host_port.to_string());
+                    env.set(&format!("MYSQL{}_VERSION", ver), &service.version);
+                    env.set(&format!("MYSQL{}_HOST_PORT", ver), &service.host_port.to_string());
                     env.set("MYSQL_ROOT_PASSWORD", "root");
-                    env.set("MYSQL_CONF_FILE", &format!("./services/{}/mysql.cnf", service_dir_name));
-                    env.set("MYSQL_DATA_DIR", &format!("./data/{}", service_dir_name));
-                    env.set("MYSQL_LOG_DIR", &format!("./logs/{}", service_dir_name));
+                    env.set(&format!("MYSQL{}_CONF_FILE", ver), &format!("./services/{}/mysql.cnf", service_dir_name));
+                    env.set(&format!("MYSQL{}_DATA_DIR", ver), &format!("./data/{}", service_dir_name));
+                    env.set(&format!("MYSQL{}_LOG_DIR", ver), &format!("./logs/{}", service_dir_name));
                 }
                 ServiceType::Redis => {
                     // Generate service directory name: redis{major}{minor}
                     // e.g., Redis 6.2-alpine -> redis62, Redis 7.0-alpine -> redis70
                     let version_base = service.version.split('-').next().unwrap_or(&service.version);
                     let version_parts: Vec<&str> = version_base.split('.').collect();
-                    let service_dir_name = if version_parts.len() >= 2 {
-                        format!("redis{}{}", version_parts[0], version_parts[1])
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
                     } else {
-                        "redis72".to_string() // Default to redis72 for unknown versions
+                        "72".to_string()
                     };
+                    let service_dir_name = format!("redis{}", ver);
                     
-                    env.set("REDIS_VERSION", &service.version);
-                    env.set("REDIS_HOST_PORT", &service.host_port.to_string());
-                    env.set("REDIS_CONF_FILE", &format!("./services/{}/redis.conf", service_dir_name));
-                    env.set("REDIS_DATA_DIR", &format!("./data/{}", service_dir_name));
+                    env.set(&format!("REDIS{}_VERSION", ver), &service.version);
+                    env.set(&format!("REDIS{}_HOST_PORT", ver), &service.host_port.to_string());
+                    env.set(&format!("REDIS{}_CONF_FILE", ver), &format!("./services/{}/redis.conf", service_dir_name));
+                    env.set(&format!("REDIS{}_DATA_DIR", ver), &format!("./data/{}", service_dir_name));
                 }
                 ServiceType::Nginx => {
                     // Generate service directory name: nginx{major}{minor}
                     // e.g., Nginx 1.24-alpine -> nginx124, Nginx 1.27-alpine -> nginx127
                     let version_base = service.version.split('-').next().unwrap_or(&service.version);
                     let version_parts: Vec<&str> = version_base.split('.').collect();
-                    let service_dir_name = if version_parts.len() >= 2 {
-                        format!("nginx{}{}", version_parts[0], version_parts[1])
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
                     } else {
-                        "nginx127".to_string() // Default to nginx127 for unknown versions
+                        "127".to_string()
                     };
+                    let service_dir_name = format!("nginx{}", ver);
                     
-                    env.set("NGINX_VERSION", &service.version);
-                    env.set("NGINX_HTTP_HOST_PORT", &service.host_port.to_string());
-                    env.set("NGINX_BUILD_CONTEXT", &format!("./services/{}", service_dir_name));
-                    env.set("NGINX_CONF_FILE", &format!("./services/{}/nginx.conf", service_dir_name));
-                    env.set("NGINX_CONFD_DIR", &format!("./services/{}/conf.d", service_dir_name));
+                    env.set(&format!("NGINX{}_VERSION", ver), &service.version);
+                    env.set(&format!("NGINX{}_HTTP_HOST_PORT", ver), &service.host_port.to_string());
+                    env.set(&format!("NGINX{}_BUILD_CONTEXT", ver), &format!("./services/{}", service_dir_name));
+                    env.set(&format!("NGINX{}_CONF_FILE", ver), &format!("./services/{}/nginx.conf", service_dir_name));
+                    env.set(&format!("NGINX{}_CONFD_DIR", ver), &format!("./services/{}/conf.d", service_dir_name));
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
                 }
             }
@@ -219,21 +222,27 @@ impl ConfigGenerator {
                     lines.push(String::new());
                 }
                 ServiceType::MySQL => {
-                    lines.push(format!("  mysql:"));
-                    lines.push(format!("    image: mysql:${{MYSQL_VERSION}}"));
-                    lines.push(format!("    container_name: ps-mysql"));
+                    let version_parts: Vec<&str> = service.version.split('.').collect();
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "80".to_string()
+                    };
+                    
+                    lines.push(format!("  mysql{}:", ver));
+                    lines.push(format!("    image: mysql:${{MYSQL{}_VERSION}}", ver));
+                    lines.push(format!("    container_name: ps-mysql{}", ver));
                     lines.push(format!("    ports:"));
-                    lines.push(format!("      - \"${{MYSQL_HOST_PORT}}:3306\""));
+                    lines.push(format!("      - \"${{MYSQL{}_HOST_PORT}}:3306\"", ver));
                     lines.push(format!("    volumes:"));
                     lines.push(format!(
-                        "      - ${{MYSQL_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro"
-                    ));
-                    // Use MYSQL_DATA_DIR variable from .env
-                    lines.push(format!(
-                        "      - ${{MYSQL_DATA_DIR}}:/var/lib/mysql/:rw"
+                        "      - ${{MYSQL{}_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro", ver
                     ));
                     lines.push(format!(
-                        "      - ${{MYSQL_LOG_DIR}}:/var/log/mysql/:rw"
+                        "      - ${{MYSQL{}_DATA_DIR}}:/var/lib/mysql/:rw", ver
+                    ));
+                    lines.push(format!(
+                        "      - ${{MYSQL{}_LOG_DIR}}:/var/log/mysql/:rw", ver
                     ));
                     lines.push(format!("    restart: always"));
                     lines.push(format!("    environment:"));
@@ -246,18 +255,25 @@ impl ConfigGenerator {
                     lines.push(String::new());
                 }
                 ServiceType::Redis => {
-                    lines.push(format!("  redis:"));
-                    lines.push(format!("    image: redis:${{REDIS_VERSION}}"));
-                    lines.push(format!("    container_name: ps-redis"));
+                    let version_base = service.version.split('-').next().unwrap_or(&service.version);
+                    let version_parts: Vec<&str> = version_base.split('.').collect();
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "72".to_string()
+                    };
+                    
+                    lines.push(format!("  redis{}:", ver));
+                    lines.push(format!("    image: redis:${{REDIS{}_VERSION}}", ver));
+                    lines.push(format!("    container_name: ps-redis{}", ver));
                     lines.push(format!("    ports:"));
-                    lines.push(format!("      - \"${{REDIS_HOST_PORT}}:6379\""));
+                    lines.push(format!("      - \"${{REDIS{}_HOST_PORT}}:6379\"", ver));
                     lines.push(format!("    volumes:"));
                     lines.push(format!(
-                        "      - ${{REDIS_CONF_FILE}}:/etc/redis.conf:ro"
+                        "      - ${{REDIS{}_CONF_FILE}}:/etc/redis.conf:ro", ver
                     ));
-                    // Use REDIS_DATA_DIR variable from .env
                     lines.push(format!(
-                        "      - ${{REDIS_DATA_DIR}}:/data/:rw"
+                        "      - ${{REDIS{}_DATA_DIR}}:/data/:rw", ver
                     ));
                     lines.push(format!("    restart: always"));
                     lines.push(format!("    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]"));
@@ -266,19 +282,27 @@ impl ConfigGenerator {
                     lines.push(String::new());
                 }
                 ServiceType::Nginx => {
-                    lines.push(format!("  nginx:"));
+                    let version_base = service.version.split('-').next().unwrap_or(&service.version);
+                    let version_parts: Vec<&str> = version_base.split('.').collect();
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "127".to_string()
+                    };
+                    
+                    lines.push(format!("  nginx{}:", ver));
                     lines.push(format!("    build:"));
-                    lines.push(format!("      context: ${{NGINX_BUILD_CONTEXT}}"));
-                    lines.push(format!("    container_name: ps-nginx"));
+                    lines.push(format!("      context: ${{NGINX{}_BUILD_CONTEXT}}", ver));
+                    lines.push(format!("    container_name: ps-nginx{}", ver));
                     lines.push(format!("    ports:"));
-                    lines.push(format!("      - \"${{NGINX_HTTP_HOST_PORT}}:80\""));
+                    lines.push(format!("      - \"${{NGINX{}_HTTP_HOST_PORT}}:80\"", ver));
                     lines.push(format!("    volumes:"));
                     lines.push(format!("      - ${{SOURCE_DIR}}:/www/:rw"));
                     lines.push(format!(
-                        "      - ${{NGINX_CONF_FILE}}:/etc/nginx/nginx.conf"
+                        "      - ${{NGINX{}_CONF_FILE}}:/etc/nginx/nginx.conf", ver
                     ));
                     lines.push(format!(
-                        "      - ${{NGINX_CONFD_DIR}}:/etc/nginx/conf.d"
+                        "      - ${{NGINX{}_CONFD_DIR}}:/etc/nginx/conf.d", ver
                     ));
                     lines.push(format!(
                         "      - ${{NGINX_LOG_DIR}}:/var/log/nginx"
@@ -741,13 +765,13 @@ mod tests {
             "./services/php82/php-fpm.conf"
         );
         assert_eq!(map.get("PHP82_LOG_DIR").unwrap(), "./logs/php82");
-        assert_eq!(map.get("MYSQL_VERSION").unwrap(), "8.0");
-        assert_eq!(map.get("MYSQL_HOST_PORT").unwrap(), "3306");
+        assert_eq!(map.get("MYSQL80_VERSION").unwrap(), "8.0");
+        assert_eq!(map.get("MYSQL80_HOST_PORT").unwrap(), "3306");
         assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "root");
-        assert_eq!(map.get("REDIS_VERSION").unwrap(), "7.0");
-        assert_eq!(map.get("REDIS_HOST_PORT").unwrap(), "6379");
-        assert_eq!(map.get("NGINX_VERSION").unwrap(), "1.25");
-        assert_eq!(map.get("NGINX_HTTP_HOST_PORT").unwrap(), "80");
+        assert_eq!(map.get("REDIS70_VERSION").unwrap(), "7.0");
+        assert_eq!(map.get("REDIS70_HOST_PORT").unwrap(), "6379");
+        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25");
+        assert_eq!(map.get("NGINX125_HTTP_HOST_PORT").unwrap(), "80");
     }
 
     #[test]
@@ -774,7 +798,7 @@ mod tests {
         // Managed variable updated
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
         // New managed variable added
-        assert_eq!(map.get("NGINX_VERSION").unwrap(), "1.25");
+        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25");
     }
 
     #[test]
@@ -818,11 +842,11 @@ mod tests {
         let compose = ConfigGenerator::generate_compose(&config);
 
         // Should contain ${VAR} interpolation, not hardcoded values
-        assert!(compose.contains("${MYSQL_VERSION}"));
-        assert!(compose.contains("${MYSQL_HOST_PORT}"));
-        assert!(compose.contains("${REDIS_VERSION}"));
-        assert!(compose.contains("${REDIS_HOST_PORT}"));
-        assert!(compose.contains("${NGINX_HTTP_HOST_PORT}"));
+        assert!(compose.contains("${MYSQL80_VERSION}"));
+        assert!(compose.contains("${MYSQL80_HOST_PORT}"));
+        assert!(compose.contains("${REDIS70_VERSION}"));
+        assert!(compose.contains("${REDIS70_HOST_PORT}"));
+        assert!(compose.contains("${NGINX125_HTTP_HOST_PORT}"));
         assert!(compose.contains("${SOURCE_DIR}"));
         assert!(compose.contains("${PHP82_EXTENSIONS}"));
         assert!(compose.contains("${PHP82_PHP_CONF_FILE}"));

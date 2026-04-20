@@ -316,8 +316,8 @@ async function handleApply() {
     if (hasPHP && hasNginx) {
       // 获取第一个 PHP 服务的容器名称
       const firstPHP = phpServices.value[0];
-      const ver = firstPHP.version.replace(/\./g, '-');
-      phpContainerName.value = `ps-php-${ver}`;
+      const ver = firstPHP.version.replace(/\./g, '');
+      phpContainerName.value = `ps-php${ver}`;
       showNginxHint.value = true;
     }
   } catch (e) {

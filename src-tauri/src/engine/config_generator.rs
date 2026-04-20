@@ -34,12 +34,22 @@ pub struct ConfigGenerator;
 impl ConfigGenerator {
     /// Get project root directory (parent of src-tauri)
     fn get_project_root() -> std::path::PathBuf {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or(std::path::PathBuf::from("."))
+        if cfg!(debug_assertions) {
+            // 开发模式：项目根目录（src-tauri 的父目录）
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // target/debug/
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // target/
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // src-tauri/
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // 项目根目录/
+                .unwrap_or(std::path::PathBuf::from("."))
+        } else {
+            // 生产模式：可执行文件所在目录
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                .unwrap_or(std::path::PathBuf::from("."))
+        }
     }
 
     /// Validate config: check for port conflicts.

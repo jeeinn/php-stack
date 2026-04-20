@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::env_parser::EnvFile;
 
@@ -493,6 +493,40 @@ impl ConfigGenerator {
         Ok(())
     }
 
+    /// Generate Nginx default.conf with correct PHP upstream name
+    fn generate_nginx_conf(config: &EnvConfig, project_root: &Path) -> Result<(), String> {
+        // Find the first PHP service to use as upstream
+        let php_service_name = config.services.iter()
+            .find(|s| matches!(s.service_type, ServiceType::PHP))
+            .map(|s| {
+                let ver = s.version.replace('.', "-");
+                format!("ps-php-{}", ver)
+            })
+            .ok_or("未找到 PHP 服务，无法生成 Nginx 配置")?;
+
+        // Read template
+        let template_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("services/nginx/conf.d/default.conf");
+        
+        let template = std::fs::read_to_string(&template_path)
+            .map_err(|e| format!("读取 Nginx 模板失败: {}", e))?;
+
+        // Replace 'php' with actual container name
+        let content = template.replace("fastcgi_pass php:9000", 
+                                      &format!("fastcgi_pass {}:9000", php_service_name));
+
+        // Write to project root services/nginx/conf.d/
+        let output_dir = project_root.join("services/nginx/conf.d");
+        std::fs::create_dir_all(&output_dir)
+            .map_err(|e| format!("创建 Nginx 配置目录失败: {}", e))?;
+        
+        let output_path = output_dir.join("default.conf");
+        std::fs::write(&output_path, content)
+            .map_err(|e| format!("写入 Nginx 配置文件失败: {}", e))?;
+
+        Ok(())
+    }
+
     /// Apply config: write .env, docker-compose.yml, create directories.
     pub async fn apply(config: &EnvConfig, project_root: &Path) -> Result<(), String> {
         // Validate first
@@ -532,6 +566,9 @@ impl ConfigGenerator {
             std::fs::write(&npmrc_path, npmrc_content)
                 .map_err(|e| format!("写入 .npmrc 文件失败: {}", e))?;
         }
+        
+        // Generate Nginx default.conf with correct PHP upstream
+        Self::generate_nginx_conf(config, project_root)?;
 
         Ok(())
     }

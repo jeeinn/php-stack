@@ -161,32 +161,60 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
         }
     }
     
-    // 解析 Redis 服务
-    if let Some(version) = env_map.get("REDIS_VERSION") {
-        let host_port = env_map.get("REDIS_HOST_PORT")
-            .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(6379);
-        
-        services.push(crate::engine::config_generator::ServiceEntry {
-            service_type: crate::engine::config_generator::ServiceType::Redis,
-            version: version.clone(),
-            host_port,
-            extensions: None,
-        });
+    // 解析 Redis 服务（支持多版本）
+    // 查找所有 REDISxx_VERSION 格式的键
+    for (key, value) in &env_map {
+        if key.ends_with("_VERSION") && key.starts_with("REDIS") {
+            let version = value.clone();
+            
+            // 提取索引部分，如 REDIS62_VERSION -> 62
+            let index_part = &key[5..key.len() - 8]; // 去掉 "REDIS" 和 "_VERSION"
+            
+            if index_part.is_empty() {
+                continue;
+            }
+            
+            let port_key = format!("REDIS{}_HOST_PORT", index_part);
+            
+            let host_port = env_map.get(&port_key)
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(6379);
+            
+            services.push(crate::engine::config_generator::ServiceEntry {
+                service_type: crate::engine::config_generator::ServiceType::Redis,
+                version,
+                host_port,
+                extensions: None,
+            });
+        }
     }
     
-    // 解析 Nginx 服务
-    if let Some(version) = env_map.get("NGINX_VERSION") {
-        let host_port = env_map.get("NGINX_HTTP_HOST_PORT")
-            .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(80);
-        
-        services.push(crate::engine::config_generator::ServiceEntry {
-            service_type: crate::engine::config_generator::ServiceType::Nginx,
-            version: version.clone(),
-            host_port,
-            extensions: None,
-        });
+    // 解析 Nginx 服务（支持多版本）
+    // 查找所有 NGINXxx_VERSION 格式的键
+    for (key, value) in &env_map {
+        if key.ends_with("_VERSION") && key.starts_with("NGINX") {
+            let version = value.clone();
+            
+            // 提取索引部分，如 NGINX127_VERSION -> 127
+            let index_part = &key[6..key.len() - 8]; // 去掉 "NGINX" 和 "_VERSION"
+            
+            if index_part.is_empty() {
+                continue;
+            }
+            
+            let port_key = format!("NGINX{}_HTTP_HOST_PORT", index_part);
+            
+            let host_port = env_map.get(&port_key)
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(80);
+            
+            services.push(crate::engine::config_generator::ServiceEntry {
+                service_type: crate::engine::config_generator::ServiceType::Nginx,
+                version,
+                host_port,
+                extensions: None,
+            });
+        }
     }
     
     // 如果没有解析到任何服务，返回 None

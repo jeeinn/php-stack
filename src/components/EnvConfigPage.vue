@@ -5,10 +5,10 @@ import type { ServiceEntry, EnvConfig } from '../types/env-config';
 
 // Available versions (filtered based on official PHP support status)
 // Include: legacy versions (5.6, 7.4) and all actively supported versions (8.0-8.5)
-const phpVersions = ['5.6', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'];
-const mysqlVersions = ['5.7', '8.0', '8.4'];
-const redisVersions = ['6.2-alpine', '7.0-alpine', '7.2-alpine'];
-const nginxVersions = ['1.24-alpine', '1.25-alpine', '1.26-alpine', '1.27-alpine'];
+const phpVersions = ref(['5.6', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5']);
+const mysqlVersions = ref(['5.7', '8.0', '8.4']);
+const redisVersions = ref(['6.2-alpine', '7.0-alpine', '7.2-alpine']);
+const nginxVersions = ref(['1.24-alpine', '1.25-alpine', '1.26-alpine', '1.27-alpine']);
 
 const commonExtensions = [
   'pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache', 'bcmath',
@@ -54,6 +54,14 @@ onMounted(async () => {
   await loadExistingConfig();
 });
 
+// 辅助函数：确保版本在列表中，如果不存在则添加
+function ensureVersionInList(versions: string[], version: string): void {
+  if (!versions.includes(version)) {
+    versions.push(version);
+    console.log(`[EnvConfig] 动态添加版本到列表: ${version}`);
+  }
+}
+
 async function loadExistingConfig() {
   console.log('[EnvConfig] 开始加载现有配置...');
   try {
@@ -69,16 +77,24 @@ async function loadExistingConfig() {
         console.log('[EnvConfig] 解析服务:', s);
         if (s.service_type === 'PHP') {
           phpSvcs.push({ ...s, extensions: s.extensions ? [...s.extensions] : [] });
+          // 确保 PHP 版本在列表中
+          ensureVersionInList(phpVersions.value, s.version);
         } else if (s.service_type === 'MySQL') {
           mysqlSvcs.push({ ...s });
+          // 确保 MySQL 版本在列表中
+          ensureVersionInList(mysqlVersions.value, s.version);
         } else if (s.service_type === 'Redis') {
           redisEnabled.value = true;
           redisVersion.value = s.version;
           redisPort.value = s.host_port;
+          // 确保 Redis 版本在列表中
+          ensureVersionInList(redisVersions.value, s.version);
         } else if (s.service_type === 'Nginx') {
           nginxEnabled.value = true;
           nginxVersion.value = s.version;
           nginxPort.value = s.host_port;
+          // 确保 Nginx 版本在列表中
+          ensureVersionInList(nginxVersions.value, s.version);
         }
       });
       

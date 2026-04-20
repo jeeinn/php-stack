@@ -114,22 +114,51 @@ impl ConfigGenerator {
                     );
                 }
                 ServiceType::MySQL => {
+                    // Generate service directory name: mysql{major}{minor}
+                    // e.g., MySQL 5.7 -> mysql57, MySQL 8.0 -> mysql80
+                    let version_parts: Vec<&str> = service.version.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("mysql{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "mysql80".to_string() // Default to mysql80 for unknown versions
+                    };
+                    
                     env.set("MYSQL_VERSION", &service.version);
                     env.set("MYSQL_HOST_PORT", &service.host_port.to_string());
                     env.set("MYSQL_ROOT_PASSWORD", "root");
-                    env.set("MYSQL_CONF_FILE", "./services/mysql/mysql.cnf");
-                    env.set("MYSQL_LOG_DIR", "./logs/mysql");
+                    env.set("MYSQL_CONF_FILE", &format!("./services/{}/mysql.cnf", service_dir_name));
+                    env.set("MYSQL_LOG_DIR", &format!("./logs/{}", service_dir_name));
                 }
                 ServiceType::Redis => {
+                    // Generate service directory name: redis{major}{minor}
+                    // e.g., Redis 6.2-alpine -> redis62, Redis 7.0-alpine -> redis70
+                    let version_base = service.version.split('-').next().unwrap_or(&service.version);
+                    let version_parts: Vec<&str> = version_base.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("redis{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "redis72".to_string() // Default to redis72 for unknown versions
+                    };
+                    
                     env.set("REDIS_VERSION", &service.version);
                     env.set("REDIS_HOST_PORT", &service.host_port.to_string());
-                    env.set("REDIS_CONF_FILE", "./services/redis/redis.conf");
+                    env.set("REDIS_CONF_FILE", &format!("./services/{}/redis.conf", service_dir_name));
                 }
                 ServiceType::Nginx => {
+                    // Generate service directory name: nginx{major}{minor}
+                    // e.g., Nginx 1.24-alpine -> nginx124, Nginx 1.27-alpine -> nginx127
+                    let version_base = service.version.split('-').next().unwrap_or(&service.version);
+                    let version_parts: Vec<&str> = version_base.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("nginx{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "nginx127".to_string() // Default to nginx127 for unknown versions
+                    };
+                    
                     env.set("NGINX_VERSION", &service.version);
                     env.set("NGINX_HTTP_HOST_PORT", &service.host_port.to_string());
-                    env.set("NGINX_CONF_FILE", "./services/nginx/nginx.conf");
-                    env.set("NGINX_CONFD_DIR", "./services/nginx/conf.d");
+                    env.set("NGINX_CONF_FILE", &format!("./services/{}/nginx.conf", service_dir_name));
+                    env.set("NGINX_CONFD_DIR", &format!("./services/{}/conf.d", service_dir_name));
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
                 }
             }
@@ -153,7 +182,6 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "");
-                    let ver_dashed = service.version.replace('.', "-");
                     lines.push(format!("  php{}:", ver));
                     lines.push(format!("    build:"));
                     lines.push(format!("      context: ./services/php{}", ver));
@@ -165,7 +193,7 @@ impl ConfigGenerator {
                     lines.push(format!("        COMPOSER_MIRROR: \"${{COMPOSER_MIRROR:-https://packagist.org}}\""));
                     lines.push(format!("        NPM_REGISTRY: \"${{NPM_MIRROR:-https://registry.npmjs.org}}\""));
                     lines.push(format!("        GITHUB_PROXY: \"${{GITHUB_PROXY:-}}\""));
-                    lines.push(format!("    container_name: ps-php-{}", ver_dashed));
+                    lines.push(format!("    container_name: ps-php{}", ver));
                     lines.push(format!("    expose:"));
                     lines.push(format!("      - 9000"));
                     lines.push(format!("    volumes:"));
@@ -188,6 +216,13 @@ impl ConfigGenerator {
                     lines.push(String::new());
                 }
                 ServiceType::MySQL => {
+                    let version_parts: Vec<&str> = service.version.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("mysql{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "mysql80".to_string()
+                    };
+                    
                     lines.push(format!("  mysql:"));
                     lines.push(format!("    image: mysql:${{MYSQL_VERSION}}"));
                     lines.push(format!("    container_name: ps-mysql"));
@@ -198,7 +233,7 @@ impl ConfigGenerator {
                         "      - ${{MYSQL_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro"
                     ));
                     lines.push(format!(
-                        "      - ${{DATA_DIR}}/mysql:/var/lib/mysql/:rw"
+                        "      - ${{DATA_DIR}}/{}:/var/lib/mysql/:rw", service_dir_name
                     ));
                     lines.push(format!(
                         "      - ${{MYSQL_LOG_DIR}}:/var/log/mysql/:rw"
@@ -427,59 +462,93 @@ impl ConfigGenerator {
                         .map_err(|e| format!("创建 logs/php{}/ 目录失败: {}", ver, e))?;
                 }
                 ServiceType::MySQL => {
-                    let service_dir = root.join("services/mysql");
+                    // Generate service directory name: mysql{major}{minor}
+                    let version_parts: Vec<&str> = service.version.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("mysql{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "mysql80".to_string()
+                    };
+                    
+                    let service_dir = root.join(format!("services/{}", service_dir_name));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/mysql/ 目录失败: {}", e))?;
+                        .map_err(|e| format!("创建 services/{}/ 目录失败: {}", service_dir_name, e))?;
 
                     // Copy mysql.cnf from template
+                    // For now, use mysql80 as base template for all versions
+                    // In future, can add version-specific templates
+                    let template_name = if service.version.starts_with("5.") {
+                        "mysql57/mysql.cnf"
+                    } else {
+                        "mysql80/mysql.cnf"
+                    };
                     Self::copy_template_file(
-                        "mysql/mysql.cnf",
+                        template_name,
                         &service_dir.join("mysql.cnf"),
                     )?;
 
                     // Create data and log directories
-                    std::fs::create_dir_all(root.join("data/mysql"))
-                        .map_err(|e| format!("创建 data/mysql/ 目录失败: {}", e))?;
-                    std::fs::create_dir_all(root.join("logs/mysql"))
-                        .map_err(|e| format!("创建 logs/mysql/ 目录失败: {}", e))?;
+                    std::fs::create_dir_all(root.join(format!("data/{}", service_dir_name)))
+                        .map_err(|e| format!("创建 data/{}/ 目录失败: {}", service_dir_name, e))?;
+                    std::fs::create_dir_all(root.join(format!("logs/{}", service_dir_name)))
+                        .map_err(|e| format!("创建 logs/{}/ 目录失败: {}", service_dir_name, e))?;
                 }
                 ServiceType::Redis => {
-                    let service_dir = root.join("services/redis");
+                    // Generate service directory name: redis{major}{minor}
+                    let version_base = service.version.split('-').next().unwrap_or(&service.version);
+                    let version_parts: Vec<&str> = version_base.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("redis{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "redis72".to_string()
+                    };
+                    
+                    let service_dir = root.join(format!("services/{}", service_dir_name));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/redis/ 目录失败: {}", e))?;
+                        .map_err(|e| format!("创建 services/{}/ 目录失败: {}", service_dir_name, e))?;
 
                     // Copy redis.conf from template
+                    // Use redis72 as base template for all versions
                     Self::copy_template_file(
-                        "redis/redis.conf",
+                        "redis72/redis.conf",
                         &service_dir.join("redis.conf"),
                     )?;
 
                     // Create data directory
-                    std::fs::create_dir_all(root.join("data/redis"))
-                        .map_err(|e| format!("创建 data/redis/ 目录失败: {}", e))?;
+                    std::fs::create_dir_all(root.join(format!("data/{}", service_dir_name)))
+                        .map_err(|e| format!("创建 data/{}/ 目录失败: {}", service_dir_name, e))?;
                 }
                 ServiceType::Nginx => {
-                    let service_dir = root.join("services/nginx");
+                    // Generate service directory name: nginx{major}{minor}
+                    let version_base = service.version.split('-').next().unwrap_or(&service.version);
+                    let version_parts: Vec<&str> = version_base.split('.').collect();
+                    let service_dir_name = if version_parts.len() >= 2 {
+                        format!("nginx{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "nginx127".to_string()
+                    };
+                    
+                    let service_dir = root.join(format!("services/{}", service_dir_name));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/nginx/ 目录失败: {}", e))?;
-                    std::fs::create_dir_all(root.join("services/nginx/conf.d"))
-                        .map_err(|e| format!("创建 services/nginx/conf.d/ 目录失败: {}", e))?;
+                        .map_err(|e| format!("创建 services/{}/ 目录失败: {}", service_dir_name, e))?;
+                    std::fs::create_dir_all(root.join(format!("services/{}/conf.d", service_dir_name)))
+                        .map_err(|e| format!("创建 services/{}/conf.d/ 目录失败: {}", service_dir_name, e))?;
 
                     // Copy Dockerfile from template
                     Self::copy_template_file(
-                        "nginx/Dockerfile",
+                        "nginx127/Dockerfile",
                         &service_dir.join("Dockerfile"),
                     )?;
 
                     // Copy nginx.conf from template
                     Self::copy_template_file(
-                        "nginx/nginx.conf",
+                        "nginx127/nginx.conf",
                         &service_dir.join("nginx.conf"),
                     )?;
 
                     // Copy default.conf from template
                     Self::copy_template_file(
-                        "nginx/conf.d/default.conf",
+                        "nginx127/conf.d/default.conf",
                         &service_dir.join("conf.d/default.conf"),
                     )?;
 
@@ -790,8 +859,8 @@ mod tests {
         let compose = ConfigGenerator::generate_compose(&config);
 
         // Should have 2 PHP service definitions
-        assert!(compose.contains("container_name: ps-php-7-4"));
-        assert!(compose.contains("container_name: ps-php-8-2"));
+        assert!(compose.contains("container_name: ps-php74"));
+        assert!(compose.contains("container_name: ps-php82"));
 
         // Each should have its own service block
         assert!(compose.contains("  php74:"));

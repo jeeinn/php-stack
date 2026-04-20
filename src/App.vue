@@ -103,6 +103,34 @@ const stopService = async (name: String) => {
   }
 };
 
+const openServiceConfig = async (name: String) => {
+  try {
+    addLog(`正在打开服务配置: ${name}...`);
+    // 从容器名称提取服务目录名称
+    const containerName = String(name);
+    let serviceName = '';
+    
+    if (containerName.startsWith('ps-php')) {
+      // PHP 容器：ps-php56 -> php56, ps-php85 -> php85
+      serviceName = containerName.replace('ps-', '');
+    } else if (containerName.startsWith('ps-mysql')) {
+      serviceName = 'mysql';
+    } else if (containerName.startsWith('ps-redis')) {
+      serviceName = 'redis';
+    } else if (containerName.startsWith('ps-nginx')) {
+      serviceName = 'nginx';
+    } else {
+      // 其他情况，尝试去掉 ps- 前缀
+      serviceName = containerName.replace(/^ps-/, '');
+    }
+    
+    await invoke('open_service_config', { serviceName });
+    addLog(`已打开服务配置目录: ${serviceName}`);
+  } catch (e) {
+    addLog(`打开配置失败: ${e}`);
+  }
+};
+
 onMounted(() => {
   refreshContainers();
   // 每 5 秒自动静默刷新一次
@@ -273,7 +301,10 @@ onMounted(() => {
               >
                 停止
               </button>
-              <button class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-sm transition border border-slate-700">
+              <button 
+                @click="openServiceConfig(String(c.name))"
+                class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-sm transition border border-slate-700"
+              >
                 配置
               </button>
             </div>

@@ -484,3 +484,43 @@ pub async fn execute_restore(
         ))
     }
 }
+
+/// 打开指定服务的配置文件目录
+#[tauri::command]
+pub fn open_service_config(service_name: String) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    let service_dir = project_root.join("services").join(&service_name);
+    
+    if !service_dir.exists() {
+        return Err(format!("服务配置目录不存在: {}", service_dir.display()));
+    }
+    
+    // 在 Windows 上使用 explorer 打开目录
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(service_dir)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {}", e))?;
+    }
+    
+    // 在 macOS 上使用 open 命令
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(service_dir)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {}", e))?;
+    }
+    
+    // 在 Linux 上使用 xdg-open 命令
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(service_dir)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {}", e))?;
+    }
+    
+    Ok(())
+}

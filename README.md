@@ -8,10 +8,20 @@
 
 ## ✨ 核心特性
 
-### V2.0 新增功能（已完成）
-- **🆕 可视化环境配置** - 3 步完成开发环境搭建，GUI 选择服务版本、端口、扩展，自动生成 `.env` 和 `docker-compose.yml`
-- **🆕 统一镜像源管理** - 5 个预设方案（阿里云、清华等），一键切换 Docker/APT/Composer/NPM 镜像源
-- **🆕 环境备份与恢复** - ZIP 格式备份包，包含 SHA256 完整性校验、数据库导出、配置文件还原
+### 🆕 V2.1 最新改进（通用版本化目录系统）
+- **🎯 智能版本化目录管理** - 所有服务采用统一的 `{name}{major}{minor}` 命名规范
+  - PHP: `php56`, `php85` （已有）
+  - MySQL: `mysql57`, `mysql80` （新增，支持多版本共存）
+  - Redis: `redis62`, `redis72` （新增，未来可扩展）
+  - Nginx: `nginx124`, `nginx127` （新增，未来可扩展）
+- **🔧 配置按钮功能完善** - 环境管理页面可直接打开对应服务的配置目录
+- **📦 模板复用机制** - 相似版本共享配置模板，减少冗余
+- **🚀 面向未来的设计** - 添加新版本只需创建对应目录，无需修改代码逻辑
+
+### V2.0 已完成功能
+- **可视化环境配置** - 3 步完成开发环境搭建，GUI 选择服务版本、端口、扩展，自动生成 `.env` 和 `docker-compose.yml`
+- **统一镜像源管理** - 5 个预设方案（阿里云、清华等），一键切换 Docker/APT/Composer/NPM 镜像源
+- **环境备份与恢复** - ZIP 格式备份包，包含 SHA256 完整性校验、数据库导出、配置文件还原
 - **向导式搭建体验** - 支持自定义 PHP 扩展安装，开箱即用！详见 [快速启动指南](./QUICKSTART-V2.md)
 
 ### 原有特性
@@ -53,6 +63,79 @@ npm run build
 ```
 
 ## 🗺️ 后续版本规划 (Roadmap)
+
+### ✅ V2.1 最新改进（通用版本化目录系统）
+
+#### 🎯 核心改进：智能版本化目录管理
+
+**设计理念**：参考 dnmp 项目最佳实践，实现高度统一、可扩展的版本化目录命名方案。
+
+**命名规范**：`{service_name}{major_version}{minor_version}`
+- **PHP**: `php56`, `php74`, `php80`, `php81`, `php82`, `php83`, `php84`, `php85`
+- **MySQL**: `mysql57` (5.7), `mysql80` (8.0), `mysql84` (8.4) - 支持多版本共存
+- **Redis**: `redis62` (6.2), `redis70` (7.0), `redis72` (7.2) - 未来可扩展
+- **Nginx**: `nginx124` (1.24), `nginx125` (1.25), `nginx127` (1.27) - 未来可扩展
+
+**亮点特性**：
+1. ✨ **高度一致性** - 所有服务采用统一的命名格式，易于理解和记忆
+2. 🚀 **零代码扩展** - 添加新版本只需创建对应目录，无需修改任何代码逻辑
+3. 📦 **智能模板复用** - 相似版本共享配置模板（如 Redis 6.x/7.x 共用 redis72 模板）
+4. 🎯 **精确版本隔离** - 每个版本的配置、数据、日志完全独立，互不干扰
+5. 🔧 **配置按钮直达** - 环境管理页面点击“配置”按钮直接打开对应服务目录
+
+**面向未来的设计**：
+```bash
+# 未来添加 MySQL 8.4，只需：
+mkdir services/mysql84
+cp services/mysql80/mysql.cnf services/mysql84/mysql.cnf
+# 完成！无需修改任何代码
+
+# 未来添加 Redis 8.0，只需：
+mkdir services/redis80
+cp services/redis72/redis.conf services/redis80/redis.conf
+# 完成！配置生成器自动识别
+```
+
+#### 🔧 技术实现亮点
+
+**1. 智能版本解析算法**
+```rust
+// MySQL: "5.7" -> "mysql57", "8.0" -> "mysql80"
+let version_parts: Vec<&str> = service.version.split('.').collect();
+let service_dir_name = format!("mysql{}{}", version_parts[0], version_parts[1]);
+
+// Redis: "7.2-alpine" -> "redis72" (自动去除 -alpine 后缀)
+let version_base = service.version.split('-').next().unwrap_or(&service.version);
+let version_parts: Vec<&str> = version_base.split('.').collect();
+let service_dir_name = format!("redis{}{}", version_parts[0], version_parts[1]);
+
+// Nginx: "1.27-alpine" -> "nginx127"
+let version_base = service.version.split('-').next().unwrap_or(&service.version);
+let version_parts: Vec<&str> = version_base.split('.').collect();
+let service_dir_name = format!("nginx{}{}", version_parts[0], version_parts[1]);
+```
+
+**2. 配置路径自动生成**
+- `.env` 文件：`MYSQL_CONF_FILE=./services/mysql57/mysql.cnf`
+- `docker-compose.yml`：`${DATA_DIR}/mysql57:/var/lib/mysql/:rw`
+- 日志目录：`MYSQL_LOG_DIR=./logs/mysql57`
+
+**3. 模板复用机制**
+- MySQL 5.x → 使用 `mysql57/mysql.cnf`（`sql_mode=""`）
+- MySQL 8.x → 使用 `mysql80/mysql.cnf`（严格模式）
+- Redis 6.x/7.x → 共用 `redis72/redis.conf`
+- Nginx 1.24-1.27 → 共用 `nginx127/` 模板
+
+#### 💡 与 dnmp 项目的对比优势
+
+| 特性 | dnmp | PHP-Stack V2.1 |
+|------|------|----------------|
+| 命名规范 | 部分版本化（mysql, mysql5） | 完全统一（mysql57, mysql80） |
+| 扩展性 | 需手动维护映射关系 | 自动解析，零代码扩展 |
+| 一致性 | PHP 使用版本号，其他不统一 | 所有服务统一格式 |
+| 模板复用 | 每个版本独立模板 | 智能复用，减少冗余 |
+| 配置直达 | ❌ 不支持 | ✅ 一键打开配置目录 |
+| 学习成本 | 需要了解不同规则 | 单一规则，易于掌握 |
 
 ### ✅ V2.0 已完成（生产发布版）
 - **环境可视化配置** - 完整实现需求 1.1-1.9

@@ -23,6 +23,7 @@ pub fn run() {
       commands::start_container,
       commands::stop_container,
       commands::restart_container,
+      commands::open_service_config,
       // 可视化配置生成
       commands::load_existing_config,
       commands::validate_env_config,

@@ -19,13 +19,8 @@ const commonExtensions = [
 // State
 const phpServices = ref<ServiceEntry[]>([]);
 const mysqlServices = ref<ServiceEntry[]>([]);
-const redisEnabled = ref(false);
-const redisVersion = ref('7.2-alpine');
-const redisPort = ref(6379);
-
-const nginxEnabled = ref(false);
-const nginxVersion = ref('1.27-alpine');
-const nginxPort = ref(80);
+const redisServices = ref<ServiceEntry[]>([]);
+const nginxServices = ref<ServiceEntry[]>([]);
 
 const sourceDir = ref('./www');
 const timezone = ref('Asia/Shanghai');
@@ -72,6 +67,8 @@ async function loadExistingConfig() {
       // Parse services
       const phpSvcs: ServiceEntry[] = [];
       const mysqlSvcs: ServiceEntry[] = [];
+      const redisSvcs: ServiceEntry[] = [];
+      const nginxSvcs: ServiceEntry[] = [];
       
       config.services.forEach(s => {
         console.log('[EnvConfig] 解析服务:', s);
@@ -84,15 +81,11 @@ async function loadExistingConfig() {
           // 确保 MySQL 版本在列表中
           ensureVersionInList(mysqlVersions.value, s.version);
         } else if (s.service_type === 'Redis') {
-          redisEnabled.value = true;
-          redisVersion.value = s.version;
-          redisPort.value = s.host_port;
+          redisSvcs.push({ ...s });
           // 确保 Redis 版本在列表中
           ensureVersionInList(redisVersions.value, s.version);
         } else if (s.service_type === 'Nginx') {
-          nginxEnabled.value = true;
-          nginxVersion.value = s.version;
-          nginxPort.value = s.host_port;
+          nginxSvcs.push({ ...s });
           // 确保 Nginx 版本在列表中
           ensureVersionInList(nginxVersions.value, s.version);
         }
@@ -100,6 +93,8 @@ async function loadExistingConfig() {
       
       console.log('[EnvConfig] PHP 服务:', phpSvcs);
       console.log('[EnvConfig] MySQL 服务:', mysqlSvcs);
+      console.log('[EnvConfig] Redis 服务:', redisSvcs);
+      console.log('[EnvConfig] Nginx 服务:', nginxSvcs);
       
       phpServices.value = phpSvcs.length > 0 ? phpSvcs : [{
         service_type: 'PHP',
@@ -113,6 +108,9 @@ async function loadExistingConfig() {
         version: '8.0',
         host_port: 3306,
       }];
+      
+      redisServices.value = redisSvcs.length > 0 ? redisSvcs : [];
+      nginxServices.value = nginxSvcs.length > 0 ? nginxSvcs : [];
       
       sourceDir.value = config.source_dir;
       timezone.value = config.timezone;
@@ -159,8 +157,12 @@ const allPorts = computed(() => {
   mysqlServices.value.forEach((s, i) => {
     ports.push({ service: `MySQL ${s.version} (#${i + 1})`, port: s.host_port });
   });
-  if (redisEnabled.value) ports.push({ service: 'Redis', port: redisPort.value });
-  if (nginxEnabled.value) ports.push({ service: 'Nginx', port: nginxPort.value });
+  redisServices.value.forEach((s, i) => {
+    ports.push({ service: `Redis ${s.version} (#${i + 1})`, port: s.host_port });
+  });
+  nginxServices.value.forEach((s, i) => {
+    ports.push({ service: `Nginx ${s.version} (#${i + 1})`, port: s.host_port });
+  });
   return ports;
 });
 
@@ -186,12 +188,12 @@ function buildConfig(): EnvConfig {
   mysqlServices.value.forEach(s => {
     services.push({ ...s });
   });
-  if (redisEnabled.value) {
-    services.push({ service_type: 'Redis', version: redisVersion.value, host_port: redisPort.value });
-  }
-  if (nginxEnabled.value) {
-    services.push({ service_type: 'Nginx', version: nginxVersion.value, host_port: nginxPort.value });
-  }
+  redisServices.value.forEach(s => {
+    services.push({ ...s });
+  });
+  nginxServices.value.forEach(s => {
+    services.push({ ...s });
+  });
   return { services, source_dir: sourceDir.value, timezone: timezone.value };
 }
 
@@ -228,6 +230,38 @@ function addMysqlVersion() {
 function removeMysqlVersion(index: number) {
   if (mysqlServices.value.length <= 1) return;
   mysqlServices.value.splice(index, 1);
+}
+
+// Add Redis version
+function addRedisVersion() {
+  const usedVersions = redisServices.value.map(s => s.version);
+  const available = redisVersions.value.filter(v => !usedVersions.includes(v));
+  if (available.length === 0) return;
+  redisServices.value.push({
+    service_type: 'Redis',
+    version: available[0],
+    host_port: 6379 + redisServices.value.length,
+  });
+}
+
+function removeRedisVersion(index: number) {
+  redisServices.value.splice(index, 1);
+}
+
+// Add Nginx version
+function addNginxVersion() {
+  const usedVersions = nginxServices.value.map(s => s.version);
+  const available = nginxVersions.value.filter(v => !usedVersions.includes(v));
+  if (available.length === 0) return;
+  nginxServices.value.push({
+    service_type: 'Nginx',
+    version: available[0],
+    host_port: 80 + nginxServices.value.length,
+  });
+}
+
+function removeNginxVersion(index: number) {
+  nginxServices.value.splice(index, 1);
 }
 
 function toggleExtension(phpIndex: number, ext: string) {
@@ -327,7 +361,7 @@ async function handleApply() {
     
     // 检查是否同时启用了 PHP 和 Nginx
     const hasPHP = phpServices.value.length > 0;
-    const hasNginx = nginxEnabled.value;
+    const hasNginx = nginxServices.value.length > 0;
     
     if (hasPHP && hasNginx) {
       // 获取第一个 PHP 服务的容器名称
@@ -539,45 +573,57 @@ async function handleStart() {
 
       <!-- Redis -->
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center gap-3 mb-4">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" v-model="redisEnabled" class="accent-blue-500" />
-            <h2 class="text-lg font-bold">🔴 Redis</h2>
-          </label>
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold">🔴 Redis 服务</h2>
+          <button @click="addRedisVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
+            + 添加版本
+          </button>
         </div>
-        <div v-if="redisEnabled" class="flex gap-4">
-          <div class="flex-1">
-            <label class="block text-xs text-slate-400 mb-1">版本</label>
-            <select v-model="redisVersion" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-              <option v-for="v in redisVersions" :key="v" :value="v">Redis {{ v }}</option>
-            </select>
+        <div v-for="(redis, idx) in redisServices" :key="idx" class="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+          <div class="flex items-center gap-4">
+            <div class="flex-1">
+              <label class="block text-xs text-slate-400 mb-1">Redis 版本</label>
+              <select v-model="redis.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <option v-for="v in redisVersions" :key="v" :value="v">Redis {{ v }}</option>
+              </select>
+            </div>
+            <div class="w-32">
+              <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
+              <input v-model.number="redis.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button @click="removeRedisVersion(idx)" class="mt-5 text-rose-400 hover:text-rose-300 text-sm">删除</button>
           </div>
-          <div class="w-32">
-            <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
-            <input v-model.number="redisPort" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
+        </div>
+        <div v-if="redisServices.length === 0" class="text-center py-8 text-slate-500 text-sm">
+          点击上方“+ 添加版本”按钮添加 Redis 服务
         </div>
       </section>
 
       <!-- Nginx -->
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center gap-3 mb-4">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" v-model="nginxEnabled" class="accent-blue-500" />
-            <h2 class="text-lg font-bold">🚀 Nginx</h2>
-          </label>
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold">🚀 Nginx 服务</h2>
+          <button @click="addNginxVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
+            + 添加版本
+          </button>
         </div>
-        <div v-if="nginxEnabled" class="flex gap-4">
-          <div class="flex-1">
-            <label class="block text-xs text-slate-400 mb-1">版本</label>
-            <select v-model="nginxVersion" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-              <option v-for="v in nginxVersions" :key="v" :value="v">Nginx {{ v }}</option>
-            </select>
+        <div v-for="(nginx, idx) in nginxServices" :key="idx" class="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+          <div class="flex items-center gap-4">
+            <div class="flex-1">
+              <label class="block text-xs text-slate-400 mb-1">Nginx 版本</label>
+              <select v-model="nginx.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <option v-for="v in nginxVersions" :key="v" :value="v">Nginx {{ v }}</option>
+              </select>
+            </div>
+            <div class="w-32">
+              <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
+              <input v-model.number="nginx.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button @click="removeNginxVersion(idx)" class="mt-5 text-rose-400 hover:text-rose-300 text-sm">删除</button>
           </div>
-          <div class="w-32">
-            <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
-            <input v-model.number="nginxPort" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
+        </div>
+        <div v-if="nginxServices.length === 0" class="text-center py-8 text-slate-500 text-sm">
+          点击上方“+ 添加版本”按钮添加 Nginx 服务
         </div>
       </section>
 

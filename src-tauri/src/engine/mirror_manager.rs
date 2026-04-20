@@ -26,6 +26,7 @@ pub struct MirrorStatus {
     pub apt: String,
     pub composer: String,
     pub npm: String,
+    pub github: String,
 }
 
 pub struct MirrorManager;
@@ -108,7 +109,7 @@ impl MirrorManager {
 
     /// 独立更新单个镜像源类别
     ///
-    /// category: "docker", "apt", "composer", "npm"
+    /// category: "docker", "apt", "composer", "npm", "github"
     /// 只更新指定类别的键，其他类别保持不变。
     pub fn update_single(
         category: &str,
@@ -116,10 +117,11 @@ impl MirrorManager {
         env_path: &Path,
     ) -> Result<(), String> {
         let key = match category {
-            "docker" => "DOCKER_REGISTRY_MIRROR",
+            "docker_registry" => "DOCKER_REGISTRY_MIRROR",
             "apt" => "APT_MIRROR",
             "composer" => "COMPOSER_MIRROR",
             "npm" => "NPM_MIRROR",
+            "github" => "GITHUB_PROXY",
             _ => return Err(format!("未知的镜像源类别: {}", category)),
         };
 
@@ -193,6 +195,7 @@ impl MirrorManager {
                 .unwrap_or("default")
                 .to_string(),
             npm: env_file.get("NPM_MIRROR").unwrap_or("default").to_string(),
+            github: env_file.get("GITHUB_PROXY").unwrap_or("").to_string(),
         })
     }
 

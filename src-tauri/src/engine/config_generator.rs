@@ -160,6 +160,11 @@ impl ConfigGenerator {
                     lines.push(format!("      args:"));
                     lines.push(format!("        PHP_EXTENSIONS: \"${{PHP{}_EXTENSIONS}}\"", ver));
                     lines.push(format!("        TZ: \"${{TZ}}\""));
+                    // 镜像源配置
+                    lines.push(format!("        DEBIAN_MIRROR_DOMAIN: \"${{APT_MIRROR:-deb.debian.org}}\""));
+                    lines.push(format!("        COMPOSER_MIRROR: \"${{COMPOSER_MIRROR:-https://packagist.org}}\""));
+                    lines.push(format!("        NPM_REGISTRY: \"${{NPM_MIRROR:-https://registry.npmjs.org}}\""));
+                    lines.push(format!("        GITHUB_PROXY: \"${{GITHUB_PROXY:-}}\""));
                     lines.push(format!("    container_name: ps-php-{}", ver_dashed));
                     lines.push(format!("    expose:"));
                     lines.push(format!("      - 9000"));
@@ -518,6 +523,15 @@ impl ConfigGenerator {
 
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
+        
+        // Generate .npmrc file if NPM mirror is configured
+        let npm_mirror = env_file.get("NPM_MIRROR").unwrap_or("");
+        if !npm_mirror.is_empty() && npm_mirror != "https://registry.npmjs.org" {
+            let npmrc_content = format!("registry={}\n", npm_mirror);
+            let npmrc_path = project_root.join(".npmrc");
+            std::fs::write(&npmrc_path, npmrc_content)
+                .map_err(|e| format!("写入 .npmrc 文件失败: {}", e))?;
+        }
 
         Ok(())
     }

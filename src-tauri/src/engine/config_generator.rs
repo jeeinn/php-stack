@@ -181,7 +181,7 @@ impl ConfigGenerator {
     /// Reference dnmp pattern: each service uses ${VAR} for image, ports, volumes.
     pub fn generate_compose(config: &EnvConfig) -> String {
         let mut lines: Vec<String> = Vec::new();
-        lines.push("version: \"3\"".to_string());
+        // Note: 'version' attribute is obsolete in modern Docker Compose, omit it
         lines.push("services:".to_string());
 
         for service in &config.services {

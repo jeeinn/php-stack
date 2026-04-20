@@ -41,16 +41,22 @@ impl UserOverrideManager {
         // 使用 project_root 作为配置文件存放位置（与 .env 同级）
         let overrides_path = project_root.join(".user_version_overrides.json");
         
+        eprintln!("[DEBUG] 尝试加载用户覆盖配置: {:?}", overrides_path);
+        
         if !overrides_path.exists() {
+            eprintln!("[DEBUG] 配置文件不存在");
             return HashMap::new();
         }
 
         match std::fs::read_to_string(&overrides_path) {
             Ok(content) => {
+                eprintln!("[DEBUG] 文件内容: {}", content);
                 match serde_json::from_str::<HashMap<String, HashMap<String, UserVersionOverride>>>(&content) {
                     Ok(raw) => {
+                        eprintln!("[DEBUG] 解析成功，服务数量: {}", raw.len());
                         let mut result = HashMap::new();
                         for (service_key, versions) in raw {
+                            eprintln!("[DEBUG]   服务: {}, 版本数量: {}", service_key, versions.len());
                             let service_type = match service_key.as_str() {
                                 "php" => ServiceType::Php,
                                 "mysql" => ServiceType::Mysql,
@@ -60,6 +66,7 @@ impl UserOverrideManager {
                             };
                             result.insert(service_type, versions);
                         }
+                        eprintln!("[DEBUG] 加载完成，共 {} 个服务类型", result.len());
                         result
                     }
                     Err(e) => {
@@ -81,26 +88,40 @@ impl UserOverrideManager {
         service_type: &ServiceType,
         version: &str,
     ) -> Option<ImageInfo> {
+        eprintln!("[DEBUG] get_merged_image_info: service={:?}, version={}", service_type, version);
+        
         // 1. 检查用户是否有覆盖配置
         if let Some(user_override) = self
             .user_overrides
             .get(service_type)
             .and_then(|versions| versions.get(version))
         {
+            eprintln!("[DEBUG]   找到用户覆盖: tag={}", user_override.tag);
             // 2. 获取默认配置作为基础
             if let Some(default_info) = self.default_manifest.get_image_info(service_type, version) {
+                eprintln!("[DEBUG]   找到默认配置: tag={}", default_info.tag);
                 // 3. 返回合并后的配置（用户覆盖优先）
-                return Some(ImageInfo {
+                let merged = ImageInfo {
                     image: default_info.image.clone(),
                     tag: user_override.tag.clone(), // 使用用户的标签
                     eol: default_info.eol,
                     description: user_override.description.clone().or_else(|| default_info.description.clone()),
-                });
+                };
+                eprintln!("[DEBUG]   返回合并配置: tag={}", merged.tag);
+                return Some(merged);
             }
+        } else {
+            eprintln!("[DEBUG]   未找到用户覆盖");
         }
 
         // 4. 没有用户覆盖，返回默认配置
-        self.default_manifest.get_image_info(service_type, version).cloned()
+        let result = self.default_manifest.get_image_info(service_type, version).cloned();
+        if let Some(ref info) = result {
+            eprintln!("[DEBUG]   返回默认配置: tag={}", info.tag);
+        } else {
+            eprintln!("[DEBUG]   未找到任何配置");
+        }
+        result
     }
 
     /// 保存用户覆盖配置到文件

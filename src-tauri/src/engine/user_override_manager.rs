@@ -92,7 +92,6 @@ impl UserOverrideManager {
                 return Some(ImageInfo {
                     image: default_info.image.clone(),
                     tag: user_override.tag.clone(), // 使用用户的标签
-                    base_image: default_info.base_image.clone(),
                     eol: default_info.eol,
                     description: user_override.description.clone().or_else(|| default_info.description.clone()),
                 });

@@ -8,9 +8,6 @@ pub struct ImageInfo {
     pub image: String,
     /// Docker 镜像标签（如 "8.0", "8.4-lts"）
     pub tag: String,
-    /// 基础镜像类型（仅 PHP 需要）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub base_image: Option<String>,
     /// 是否已停止维护 (End of Life)
     #[serde(default)]
     pub eol: bool,

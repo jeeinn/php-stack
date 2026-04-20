@@ -1,0 +1,8 @@
+{
+  "redis": {
+    "7.0": {
+      "tag": "7.0-alpine-1",
+      "description": "Redis 7.0 (稳定版)"
+    }
+  }
+}

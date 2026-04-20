@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::env_parser::EnvFile;
+use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ServiceType {
@@ -114,24 +115,29 @@ impl ConfigGenerator {
                     );
                 }
                 ServiceType::MySQL => {
-                    // Generate service directory name: mysql{major}{minor}
-                    // e.g., MySQL 5.7 -> mysql57, MySQL 8.0 -> mysql80
+                    let manifest = VersionManifest::new();
                     let version_parts: Vec<&str> = service.version.split('.').collect();
                     let ver = if version_parts.len() >= 2 {
                         format!("{}{}", version_parts[0], version_parts[1])
                     } else {
                         "80".to_string()
                     };
-                    let service_dir_name = format!("mysql{}", ver);
                     
-                    env.set(&format!("MYSQL{}_VERSION", ver), &service.version);
+                    // Get the correct image tag from version manifest
+                    let image_tag = manifest
+                        .get_image_info(&VmServiceType::Mysql, &service.version)
+                        .map(|info| info.tag.clone())
+                        .unwrap_or(service.version.clone()); // Fallback to user input
+                    
+                    env.set(&format!("MYSQL{}_VERSION", ver), &image_tag);
                     env.set(&format!("MYSQL{}_HOST_PORT", ver), &service.host_port.to_string());
                     env.set("MYSQL_ROOT_PASSWORD", "root");
-                    env.set(&format!("MYSQL{}_CONF_FILE", ver), &format!("./services/{}/mysql.cnf", service_dir_name));
-                    env.set(&format!("MYSQL{}_DATA_DIR", ver), &format!("./data/{}", service_dir_name));
-                    env.set(&format!("MYSQL{}_LOG_DIR", ver), &format!("./logs/{}", service_dir_name));
+                    env.set(&format!("MYSQL{}_CONF_FILE", ver), &format!("./services/mysql{}/mysql.cnf", ver));
+                    env.set(&format!("MYSQL{}_DATA_DIR", ver), &format!("./data/mysql{}", ver));
+                    env.set(&format!("MYSQL{}_LOG_DIR", ver), &format!("./logs/mysql{}", ver));
                 }
                 ServiceType::Redis => {
+                    let manifest = VersionManifest::new();
                     // Generate service directory name: redis{major}{minor}
                     // e.g., Redis 6.2-alpine -> redis62, Redis 7.0-alpine -> redis70
                     let version_base = service.version.split('-').next().unwrap_or(&service.version);
@@ -141,14 +147,20 @@ impl ConfigGenerator {
                     } else {
                         "72".to_string()
                     };
-                    let service_dir_name = format!("redis{}", ver);
                     
-                    env.set(&format!("REDIS{}_VERSION", ver), &service.version);
+                    // Get the correct image tag from version manifest
+                    let image_tag = manifest
+                        .get_image_info(&VmServiceType::Redis, &service.version)
+                        .map(|info| info.tag.clone())
+                        .unwrap_or(service.version.clone());
+                    
+                    env.set(&format!("REDIS{}_VERSION", ver), &image_tag);
                     env.set(&format!("REDIS{}_HOST_PORT", ver), &service.host_port.to_string());
-                    env.set(&format!("REDIS{}_CONF_FILE", ver), &format!("./services/{}/redis.conf", service_dir_name));
-                    env.set(&format!("REDIS{}_DATA_DIR", ver), &format!("./data/{}", service_dir_name));
+                    env.set(&format!("REDIS{}_CONF_FILE", ver), &format!("./services/redis{}/redis.conf", ver));
+                    env.set(&format!("REDIS{}_DATA_DIR", ver), &format!("./data/redis{}", ver));
                 }
                 ServiceType::Nginx => {
+                    let manifest = VersionManifest::new();
                     // Generate service directory name: nginx{major}{minor}
                     // e.g., Nginx 1.24-alpine -> nginx124, Nginx 1.27-alpine -> nginx127
                     let version_base = service.version.split('-').next().unwrap_or(&service.version);
@@ -158,13 +170,18 @@ impl ConfigGenerator {
                     } else {
                         "127".to_string()
                     };
-                    let service_dir_name = format!("nginx{}", ver);
                     
-                    env.set(&format!("NGINX{}_VERSION", ver), &service.version);
+                    // Get the correct image tag from version manifest
+                    let image_tag = manifest
+                        .get_image_info(&VmServiceType::Nginx, &service.version)
+                        .map(|info| info.tag.clone())
+                        .unwrap_or(service.version.clone());
+                    
+                    env.set(&format!("NGINX{}_VERSION", ver), &image_tag);
                     env.set(&format!("NGINX{}_HTTP_HOST_PORT", ver), &service.host_port.to_string());
-                    env.set(&format!("NGINX{}_BUILD_CONTEXT", ver), &format!("./services/{}", service_dir_name));
-                    env.set(&format!("NGINX{}_CONF_FILE", ver), &format!("./services/{}/nginx.conf", service_dir_name));
-                    env.set(&format!("NGINX{}_CONFD_DIR", ver), &format!("./services/{}/conf.d", service_dir_name));
+                    env.set(&format!("NGINX{}_BUILD_CONTEXT", ver), &format!("./services/nginx{}", ver));
+                    env.set(&format!("NGINX{}_CONF_FILE", ver), &format!("./services/nginx{}/nginx.conf", ver));
+                    env.set(&format!("NGINX{}_CONFD_DIR", ver), &format!("./services/nginx{}/conf.d", ver));
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
                 }
             }
@@ -765,12 +782,15 @@ mod tests {
             "./services/php82/php-fpm.conf"
         );
         assert_eq!(map.get("PHP82_LOG_DIR").unwrap(), "./logs/php82");
+        // MySQL 8.0 uses tag "8.0" from version_manifest.json
         assert_eq!(map.get("MYSQL80_VERSION").unwrap(), "8.0");
         assert_eq!(map.get("MYSQL80_HOST_PORT").unwrap(), "3306");
         assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "root");
-        assert_eq!(map.get("REDIS70_VERSION").unwrap(), "7.0");
+        // Redis 7.0 uses tag "7.0-alpine" from version_manifest.json
+        assert_eq!(map.get("REDIS70_VERSION").unwrap(), "7.0-alpine");
         assert_eq!(map.get("REDIS70_HOST_PORT").unwrap(), "6379");
-        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25");
+        // Nginx 1.25 uses tag "1.25-alpine" from version_manifest.json
+        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25-alpine");
         assert_eq!(map.get("NGINX125_HTTP_HOST_PORT").unwrap(), "80");
     }
 
@@ -797,8 +817,8 @@ mod tests {
         assert_eq!(map.get("CUSTOM_VAR").unwrap(), "hello");
         // Managed variable updated
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
-        // New managed variable added
-        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25");
+        // New managed variable added (uses tag from version_manifest.json)
+        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25-alpine");
     }
 
     #[test]

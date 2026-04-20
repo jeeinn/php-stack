@@ -6,3 +6,4 @@ pub mod mirror_manager;     // V2.0: 统一镜像源管理器
 pub mod backup_engine;      // V2.0: 增强备份引擎
 pub mod restore_engine;     // V2.0: 恢复引擎
 pub mod version_manifest;   // V2.1: 版本清单管理器
+pub mod user_override_manager; // V2.1: 用户版本覆盖管理器

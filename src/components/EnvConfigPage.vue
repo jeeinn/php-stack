@@ -45,6 +45,10 @@ const confirmMessage = ref('');
 const confirmTitle = ref('');
 const confirmResolve = ref<((value: boolean) => void) | null>(null);
 
+// Nginx 配置提示状态
+const showNginxHint = ref(false);
+const phpContainerName = ref('');
+
 // Load existing config on mount
 onMounted(async () => {
   await loadExistingConfig();
@@ -294,18 +298,51 @@ async function handleApply() {
   applying.value = true;
   error.value = null;
   successMsg.value = null;
+  showNginxHint.value = false;
   try {
     const config = buildConfig();
     await invoke('apply_env_config', { config });
+    
     // 显示成功消息
     successMsg.value = import.meta.env.DEV 
       ? '配置已成功应用！配置文件已生成在项目根目录。' 
       : '配置已成功应用！配置文件已生成在程序所在目录。';
     showPreviewModal.value = false;
+    
+    // 检查是否同时启用了 PHP 和 Nginx
+    const hasPHP = phpServices.value.length > 0;
+    const hasNginx = nginxEnabled.value;
+    
+    if (hasPHP && hasNginx) {
+      // 获取第一个 PHP 服务的容器名称
+      const firstPHP = phpServices.value[0];
+      const ver = firstPHP.version.replace(/\./g, '-');
+      phpContainerName.value = `ps-php-${ver}`;
+      showNginxHint.value = true;
+    }
   } catch (e) {
     error.value = e as string;
   } finally {
     applying.value = false;
+  }
+}
+
+// 复制 Nginx 配置
+async function copyNginxConfig() {
+  const config = `location ~ \.php$ {
+    fastcgi_pass ${phpContainerName.value}:9000;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+}`;
+  
+  try {
+    await navigator.clipboard.writeText(config);
+    successMsg.value = 'Nginx 配置已复制到剪贴板！';
+    setTimeout(() => { successMsg.value = null; }, 3000);
+  } catch (e) {
+    console.error('复制失败:', e);
+    error.value = '复制失败，请手动配置';
   }
 }
 
@@ -364,6 +401,56 @@ async function handleStart() {
     <div v-if="successMsg" class="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
       <pre class="whitespace-pre-wrap">{{ successMsg }}</pre>
     </div>
+    
+    <!-- Nginx 配置提示 -->
+    <div v-if="showNginxHint" class="mb-4 p-5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-base font-semibold text-blue-300 mb-2">⚙️ Nginx 配置提醒</h3>
+          <p class="text-sm text-slate-300 mb-3">
+            检测到您同时启用了 PHP 和 Nginx 服务。Nginx 需要配置正确的 PHP-FPM 上游地址。
+          </p>
+          
+          <div class="bg-slate-900 rounded-lg p-3 mb-3 border border-slate-700">
+            <p class="text-xs text-slate-400 mb-2">📌 当前 PHP 容器名称：</p>
+            <code class="text-sm text-emerald-400 font-mono">{{ phpContainerName }}</code>
+          </div>
+          
+          <div class="space-y-2 text-sm text-slate-300">
+            <p><strong class="text-blue-300">配置步骤：</strong></p>
+            <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-400">
+              <li>编辑文件：<code class="text-xs bg-slate-800 px-1 rounded">services/nginx/conf.d/default.conf</code></li>
+              <li>找到 <code class="text-xs bg-slate-800 px-1 rounded">fastcgi_pass</code> 行</li>
+              <li>修改为：<code class="text-xs bg-slate-800 px-1 rounded text-emerald-400">fastcgi_pass {{ phpContainerName }}:9000;</code></li>
+            </ol>
+          </div>
+          
+          <div class="mt-4 flex gap-2">
+            <button
+              @click="copyNginxConfig"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              复制配置代码
+            </button>
+            <button
+              @click="showNginxHint = false"
+              class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition"
+            >
+              我知道了
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <div v-if="portConflicts.length > 0" class="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm">
       <div class="font-bold mb-1">端口冲突</div>
       <div v-for="c in portConflicts" :key="c">{{ c }}</div>

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use super::env_parser::EnvFile;
 use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
+use super::user_override_manager::UserOverrideManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ServiceType {
@@ -31,6 +32,16 @@ pub struct EnvConfig {
 pub struct ConfigGenerator;
 
 impl ConfigGenerator {
+    /// Get project root directory (parent of src-tauri)
+    fn get_project_root() -> std::path::PathBuf {
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or(std::path::PathBuf::from("."))
+    }
+
     /// Validate config: check for port conflicts.
     /// Returns Err with message containing conflicting port and service names.
     pub fn validate(config: &EnvConfig) -> Result<(), String> {
@@ -116,6 +127,10 @@ impl ConfigGenerator {
                 }
                 ServiceType::MySQL => {
                     let manifest = VersionManifest::new();
+                    // Try to load user overrides (if file exists)
+                    let project_root = Self::get_project_root();
+                    let override_manager = UserOverrideManager::new(&project_root);
+                    
                     let version_parts: Vec<&str> = service.version.split('.').collect();
                     let ver = if version_parts.len() >= 2 {
                         format!("{}{}", version_parts[0], version_parts[1])
@@ -123,11 +138,16 @@ impl ConfigGenerator {
                         "80".to_string()
                     };
                     
-                    // Get the correct image tag from version manifest
-                    let image_tag = manifest
-                        .get_image_info(&VmServiceType::Mysql, &service.version)
+                    // Get the correct image tag (user override > default manifest)
+                    let image_tag = override_manager
+                        .get_merged_image_info(&VmServiceType::Mysql, &service.version)
                         .map(|info| info.tag.clone())
-                        .unwrap_or(service.version.clone()); // Fallback to user input
+                        .unwrap_or_else(|| {
+                            manifest
+                                .get_image_info(&VmServiceType::Mysql, &service.version)
+                                .map(|info| info.tag.clone())
+                                .unwrap_or(service.version.clone())
+                        });
                     
                     env.set(&format!("MYSQL{}_VERSION", ver), &image_tag);
                     env.set(&format!("MYSQL{}_HOST_PORT", ver), &service.host_port.to_string());
@@ -138,8 +158,10 @@ impl ConfigGenerator {
                 }
                 ServiceType::Redis => {
                     let manifest = VersionManifest::new();
+                    let project_root = Self::get_project_root();
+                    let override_manager = UserOverrideManager::new(&project_root);
+                    
                     // Generate service directory name: redis{major}{minor}
-                    // e.g., Redis 6.2-alpine -> redis62, Redis 7.0-alpine -> redis70
                     let version_base = service.version.split('-').next().unwrap_or(&service.version);
                     let version_parts: Vec<&str> = version_base.split('.').collect();
                     let ver = if version_parts.len() >= 2 {
@@ -148,11 +170,16 @@ impl ConfigGenerator {
                         "72".to_string()
                     };
                     
-                    // Get the correct image tag from version manifest
-                    let image_tag = manifest
-                        .get_image_info(&VmServiceType::Redis, &service.version)
+                    // Get the correct image tag (user override > default manifest)
+                    let image_tag = override_manager
+                        .get_merged_image_info(&VmServiceType::Redis, &service.version)
                         .map(|info| info.tag.clone())
-                        .unwrap_or(service.version.clone());
+                        .unwrap_or_else(|| {
+                            manifest
+                                .get_image_info(&VmServiceType::Redis, &service.version)
+                                .map(|info| info.tag.clone())
+                                .unwrap_or(service.version.clone())
+                        });
                     
                     env.set(&format!("REDIS{}_VERSION", ver), &image_tag);
                     env.set(&format!("REDIS{}_HOST_PORT", ver), &service.host_port.to_string());
@@ -161,8 +188,10 @@ impl ConfigGenerator {
                 }
                 ServiceType::Nginx => {
                     let manifest = VersionManifest::new();
+                    let project_root = Self::get_project_root();
+                    let override_manager = UserOverrideManager::new(&project_root);
+                    
                     // Generate service directory name: nginx{major}{minor}
-                    // e.g., Nginx 1.24-alpine -> nginx124, Nginx 1.27-alpine -> nginx127
                     let version_base = service.version.split('-').next().unwrap_or(&service.version);
                     let version_parts: Vec<&str> = version_base.split('.').collect();
                     let ver = if version_parts.len() >= 2 {
@@ -171,11 +200,16 @@ impl ConfigGenerator {
                         "127".to_string()
                     };
                     
-                    // Get the correct image tag from version manifest
-                    let image_tag = manifest
-                        .get_image_info(&VmServiceType::Nginx, &service.version)
+                    // Get the correct image tag (user override > default manifest)
+                    let image_tag = override_manager
+                        .get_merged_image_info(&VmServiceType::Nginx, &service.version)
                         .map(|info| info.tag.clone())
-                        .unwrap_or(service.version.clone());
+                        .unwrap_or_else(|| {
+                            manifest
+                                .get_image_info(&VmServiceType::Nginx, &service.version)
+                                .map(|info| info.tag.clone())
+                                .unwrap_or(service.version.clone())
+                        });
                     
                     env.set(&format!("NGINX{}_VERSION", ver), &image_tag);
                     env.set(&format!("NGINX{}_HTTP_HOST_PORT", ver), &service.host_port.to_string());

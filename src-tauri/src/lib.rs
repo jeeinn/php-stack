@@ -49,6 +49,10 @@ pub fn run() {
       commands::get_version_mappings,
       commands::validate_version,
       commands::get_recommended_version,
+      // 用户版本覆盖
+      commands::save_user_override,
+      commands::remove_user_override,
+      commands::reset_all_overrides,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

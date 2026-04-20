@@ -5,6 +5,7 @@ use crate::engine::backup_engine::BackupEngine;
 use crate::engine::backup_manifest::BackupOptions;
 use crate::engine::restore_engine::{RestoreEngine, RestorePreview};
 use crate::engine::version_manifest::{VersionManifest, ServiceType as VmServiceType};
+use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverride};
 
 /// 获取项目根目录（用于配置文件生成）
 fn get_project_root() -> Result<std::path::PathBuf, String> {
@@ -629,4 +630,57 @@ pub fn get_recommended_version(service_type: String) -> Result<Option<String>, S
     };
     
     Ok(manifest.get_recommended_version(&vm_service_type).map(|s| s.to_string()))
+}
+
+/// 保存用户自定义版本覆盖
+#[tauri::command]
+pub fn save_user_override(
+    service_type: String,
+    version: String,
+    tag: String,
+    description: Option<String>,
+) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    let mut manager = UserOverrideManager::new(&project_root);
+    
+    let vm_service_type = match service_type.as_str() {
+        "php" => VmServiceType::Php,
+        "mysql" => VmServiceType::Mysql,
+        "redis" => VmServiceType::Redis,
+        "nginx" => VmServiceType::Nginx,
+        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+    };
+    
+    let override_config = UserVersionOverride {
+        tag,
+        description,
+    };
+    
+    manager.save_user_override(&project_root, vm_service_type, version, override_config)
+}
+
+/// 删除用户自定义版本覆盖
+#[tauri::command]
+pub fn remove_user_override(service_type: String, version: String) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    let mut manager = UserOverrideManager::new(&project_root);
+    
+    let vm_service_type = match service_type.as_str() {
+        "php" => VmServiceType::Php,
+        "mysql" => VmServiceType::Mysql,
+        "redis" => VmServiceType::Redis,
+        "nginx" => VmServiceType::Nginx,
+        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+    };
+    
+    manager.remove_user_override(&project_root, &vm_service_type, &version)
+}
+
+/// 重置所有用户自定义版本覆盖
+#[tauri::command]
+pub fn reset_all_overrides() -> Result<(), String> {
+    let project_root = get_project_root()?;
+    let mut manager = UserOverrideManager::new(&project_root);
+    
+    manager.reset_all_overrides(&project_root)
 }

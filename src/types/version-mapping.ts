@@ -6,6 +6,7 @@ export interface VersionInfo {
   full_name: string;
   eol: boolean;
   description?: string;
+  has_user_override?: boolean; // 是否有用户自定义覆盖
 }
 
 // 版本映射数据

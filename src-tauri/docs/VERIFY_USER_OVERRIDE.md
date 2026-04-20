@@ -13,15 +13,15 @@
 
 ### 步骤 1: 确认配置文件内容
 
-**文件位置**: `src-tauri/.user_version_overrides.json`
+**文件位置**: 项目根目录 `.user_version_overrides.json`（与 `.env`、`docker-compose.yml` 同级）
 
 **检查方法**:
 ```bash
 # PowerShell
-Get-Content src-tauri/.user_version_overrides.json
+Get-Content .user_version_overrides.json
 
 # 或使用文本编辑器打开
-code src-tauri/.user_version_overrides.json
+code .user_version_overrides.json
 ```
 
 **预期内容示例**:
@@ -74,7 +74,7 @@ Docker 镜像标签: 7.0-alpine-00 (自定义) ← 黄色标记
 
 **后台执行的操作**:
 ```
-1. 读取 .user_version_overrides.json
+1. 读取项目根目录的 .user_version_overrides.json
 2. 合并 version_manifest.json 的默认配置
 3. 生成 .env 文件（使用自定义标签）
 4. 生成 docker-compose.yml
@@ -326,10 +326,10 @@ docker compose up -d redis70
 
 Write-Host "=== 验证用户版本覆盖配置 ===" -ForegroundColor Cyan
 
-# 1. 检查配置文件
-if (Test-Path "src-tauri/.user_version_overrides.json") {
+# 1. 检查配置文件（项目根目录，与 .env 同级）
+if (Test-Path ".user_version_overrides.json") {
     Write-Host "✅ 配置文件存在" -ForegroundColor Green
-    Get-Content "src-tauri/.user_version_overrides.json" | ConvertFrom-Json | ConvertTo-Json
+    Get-Content ".user_version_overrides.json" | ConvertFrom-Json | ConvertTo-Json
 } else {
     Write-Host "❌ 配置文件不存在" -ForegroundColor Red
     exit 1

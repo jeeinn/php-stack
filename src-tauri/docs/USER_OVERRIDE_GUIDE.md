@@ -68,7 +68,7 @@ cat .env | grep MYSQL84_VERSION
 
 #### 步骤 1: 创建/编辑配置文件
 
-**文件路径**：`src-tauri/.user_version_overrides.json`
+**文件位置**：项目根目录 `.user_version_overrides.json`（与 `.env`、`docker-compose.yml` 同级）
 
 **文件格式**：
 ```json
@@ -113,7 +113,7 @@ cat .env | grep MYSQL84_VERSION
 
 ### 方法 3: 手动删除
 
-删除 `src-tauri/.user_version_overrides.json` 文件即可。
+删除项目根目录的 `.user_version_overrides.json` 文件即可。
 
 ---
 
@@ -258,7 +258,7 @@ docker pull mysql:your-custom-tag
 **症状**：加载版本映射时显示错误
 
 **解决**：
-1. 检查 `src-tauri/.user_version_overrides.json` 格式
+1. 检查项目根目录的 `.user_version_overrides.json` 格式
 2. 使用 JSON 验证工具检查语法
 3. 确保没有尾随逗号
 

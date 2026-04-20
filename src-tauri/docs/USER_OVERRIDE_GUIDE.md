@@ -62,34 +62,36 @@ cat .env | grep MYSQL84_VERSION
 
 ---
 
-### 方法 2: 手动编辑 JSON 文件
+### 方法 2: 手动编辑 JSON 文件（高级用户）
+
+> 💡 **提示**：推荐使用方法 1（UI 编辑），更直观且不易出错。手动编辑仅适合高级用户。
 
 #### 步骤 1: 创建/编辑配置文件
 
-文件路径：`src-tauri/.user_version_overrides.json`
+**文件路径**：`src-tauri/.user_version_overrides.json`
 
+**文件格式**：
 ```json
 {
+  "_comment": "用户自定义的版本映射配置（优先级高于 version_manifest.json）",
+  "_format": "{ service_type: { version: { tag: 'custom-tag', description: '备注' } } }",
   "mysql": {
     "8.4": {
-      "tag": "8.4-lts-aliyun",
-      "description": "使用阿里云镜像"
-    },
-    "5.7": {
-      "tag": "5.7-custom",
-      "description": "自定义构建版本"
+      "tag": "8.4-lts",
+      "description": "MySQL 8.4 LTS (使用默认配置)"
     }
   },
-  "redis": {
-    "7.2": {
-      "tag": "7.2-alpine-cn",
-      "description": "国内加速版"
-    }
-  },
-  "nginx": {},
-  "php": {}
+  "php": {},
+  "redis": {},
+  "nginx": {}
 }
 ```
+
+**字段说明**：
+- `service_type`: 服务类型（`php`, `mysql`, `redis`, `nginx`）
+- `version`: 版本号（如 `8.4`, `7.2`）
+- `tag`: Docker 镜像标签（必需）
+- `description`: 备注说明（可选）
 
 #### 步骤 2: 重新应用配置
 
@@ -112,6 +114,35 @@ cat .env | grep MYSQL84_VERSION
 ### 方法 3: 手动删除
 
 删除 `src-tauri/.user_version_overrides.json` 文件即可。
+
+---
+
+## 📝 配置文件模板
+
+如果您需要手动创建配置文件，可以参考以下完整模板：
+
+```json
+{
+  "_comment": "用户自定义的版本映射配置（优先级高于 version_manifest.json）",
+  "_format": "{ service_type: { version: { tag: 'custom-tag', description: '备注' } } }",
+  "_example": "将 MySQL 8.4 改为使用特定标签",
+  "mysql": {
+    "8.4": {
+      "tag": "8.4-lts",
+      "description": "MySQL 8.4 LTS (使用默认配置)"
+    }
+  },
+  "php": {},
+  "redis": {},
+  "nginx": {}
+}
+```
+
+**注意事项**：
+- ✅ 可以省略空的服务类型（如 `"php": {}`）
+- ✅ `description` 字段是可选的
+- ❌ 不要添加注释（JSON 不支持注释，这里的 `_comment` 仅用于说明）
+- ❌ 确保没有尾随逗号
 
 ---
 

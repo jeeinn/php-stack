@@ -200,7 +200,7 @@ function buildConfig(): EnvConfig {
 // Add PHP version
 function addPhpVersion() {
   const usedVersions = phpServices.value.map(s => s.version);
-  const available = phpVersions.filter(v => !usedVersions.includes(v));
+  const available = phpVersions.value.filter(v => !usedVersions.includes(v));
   if (available.length === 0) return;
   phpServices.value.push({
     service_type: 'PHP',
@@ -218,7 +218,7 @@ function removePhpVersion(index: number) {
 // Add MySQL version
 function addMysqlVersion() {
   const usedVersions = mysqlServices.value.map(s => s.version);
-  const available = mysqlVersions.filter(v => !usedVersions.includes(v));
+  const available = mysqlVersions.value.filter(v => !usedVersions.includes(v));
   if (available.length === 0) return;
   mysqlServices.value.push({
     service_type: 'MySQL',

@@ -163,6 +163,14 @@ impl UserOverrideManager {
 
         Ok(())
     }
+
+    /// 检查指定版本是否有用户覆盖配置
+    pub fn has_user_override(&self, service_type: &ServiceType, version: &str) -> bool {
+        self.user_overrides
+            .get(service_type)
+            .and_then(|versions| versions.get(version))
+            .is_some()
+    }
 }
 
 #[cfg(test)]

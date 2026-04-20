@@ -533,19 +533,29 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     use std::collections::HashMap;
     
     let manifest = VersionManifest::new();
+    let project_root = get_project_root()?;
+    let override_manager = UserOverrideManager::new(&project_root);
     let mut result = HashMap::new();
     
     // PHP 版本
     let mut php_versions = Vec::new();
     for version in manifest.get_available_versions(&VmServiceType::Php) {
-        if let Some(info) = manifest.get_image_info(&VmServiceType::Php, version) {
+        // 使用合并后的配置（用户覆盖优先）
+        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Php, version)
+            .or_else(|| manifest.get_image_info(&VmServiceType::Php, version).cloned());
+        
+        if let Some(info) = merged_info {
+            // 检查是否有用户覆盖
+            let has_user_override = override_manager.has_user_override(&VmServiceType::Php, version);
+            
             php_versions.push(serde_json::json!({
                 "version": version,
                 "image": info.image,
                 "tag": info.tag,
                 "full_name": info.full_name(),
                 "eol": info.eol,
-                "description": info.description
+                "description": info.description,
+                "has_user_override": has_user_override
             }));
         }
     }
@@ -554,14 +564,20 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     // MySQL 版本
     let mut mysql_versions = Vec::new();
     for version in manifest.get_available_versions(&VmServiceType::Mysql) {
-        if let Some(info) = manifest.get_image_info(&VmServiceType::Mysql, version) {
+        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Mysql, version)
+            .or_else(|| manifest.get_image_info(&VmServiceType::Mysql, version).cloned());
+        
+        if let Some(info) = merged_info {
+            let has_user_override = override_manager.has_user_override(&VmServiceType::Mysql, version);
+            
             mysql_versions.push(serde_json::json!({
                 "version": version,
                 "image": info.image,
                 "tag": info.tag,
                 "full_name": info.full_name(),
                 "eol": info.eol,
-                "description": info.description
+                "description": info.description,
+                "has_user_override": has_user_override
             }));
         }
     }
@@ -570,14 +586,20 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     // Redis 版本
     let mut redis_versions = Vec::new();
     for version in manifest.get_available_versions(&VmServiceType::Redis) {
-        if let Some(info) = manifest.get_image_info(&VmServiceType::Redis, version) {
+        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Redis, version)
+            .or_else(|| manifest.get_image_info(&VmServiceType::Redis, version).cloned());
+        
+        if let Some(info) = merged_info {
+            let has_user_override = override_manager.has_user_override(&VmServiceType::Redis, version);
+            
             redis_versions.push(serde_json::json!({
                 "version": version,
                 "image": info.image,
                 "tag": info.tag,
                 "full_name": info.full_name(),
                 "eol": info.eol,
-                "description": info.description
+                "description": info.description,
+                "has_user_override": has_user_override
             }));
         }
     }
@@ -586,14 +608,20 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     // Nginx 版本
     let mut nginx_versions = Vec::new();
     for version in manifest.get_available_versions(&VmServiceType::Nginx) {
-        if let Some(info) = manifest.get_image_info(&VmServiceType::Nginx, version) {
+        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Nginx, version)
+            .or_else(|| manifest.get_image_info(&VmServiceType::Nginx, version).cloned());
+        
+        if let Some(info) = merged_info {
+            let has_user_override = override_manager.has_user_override(&VmServiceType::Nginx, version);
+            
             nginx_versions.push(serde_json::json!({
                 "version": version,
                 "image": info.image,
                 "tag": info.tag,
                 "full_name": info.full_name(),
                 "eol": info.eol,
-                "description": info.description
+                "description": info.description,
+                "has_user_override": has_user_override
             }));
         }
     }

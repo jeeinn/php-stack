@@ -88,6 +88,12 @@
       "tag": "7.2-alpine",
       "eol": false,
       "description": "Redis 7.2 (最新版)"
+    },
+    "8.2": {
+      "image": "redis",
+      "tag": "8.2-alpine",
+      "eol": false,
+      "description": "Redis 8.2 (最新版本，2025-01 发布)"
     }
   },
   "nginx": {

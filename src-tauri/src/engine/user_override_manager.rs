@@ -38,7 +38,8 @@ impl UserOverrideManager {
     fn load_user_overrides(
         project_root: &PathBuf,
     ) -> HashMap<ServiceType, HashMap<String, UserVersionOverride>> {
-        let overrides_path = project_root.join("src-tauri/.user_version_overrides.json");
+        // 使用 project_root 作为配置文件存放位置（与 .env 同级）
+        let overrides_path = project_root.join(".user_version_overrides.json");
         
         if !overrides_path.exists() {
             return HashMap::new();
@@ -116,8 +117,8 @@ impl UserOverrideManager {
             .or_insert_with(HashMap::new)
             .insert(version, override_config);
 
-        // 序列化并保存到文件
-        let overrides_path = project_root.join("src-tauri/.user_version_overrides.json");
+        // 序列化并保存到文件（与 .env 同级目录）
+        let overrides_path = project_root.join(".user_version_overrides.json");
         let json = serde_json::to_string_pretty(&self.user_overrides)
             .map_err(|e| format!("序列化失败: {}", e))?;
 
@@ -138,8 +139,8 @@ impl UserOverrideManager {
             versions.remove(version);
         }
 
-        // 重新保存
-        let overrides_path = project_root.join("src-tauri/.user_version_overrides.json");
+        // 重新保存（与 .env 同级目录）
+        let overrides_path = project_root.join(".user_version_overrides.json");
         let json = serde_json::to_string_pretty(&self.user_overrides)
             .map_err(|e| format!("序列化失败: {}", e))?;
 
@@ -153,7 +154,8 @@ impl UserOverrideManager {
     pub fn reset_all_overrides(&mut self, project_root: &PathBuf) -> Result<(), String> {
         self.user_overrides.clear();
         
-        let overrides_path = project_root.join("src-tauri/.user_version_overrides.json");
+        // 删除配置文件（与 .env 同级目录）
+        let overrides_path = project_root.join(".user_version_overrides.json");
         if overrides_path.exists() {
             std::fs::remove_file(&overrides_path)
                 .map_err(|e| format!("删除文件失败: {}", e))?;

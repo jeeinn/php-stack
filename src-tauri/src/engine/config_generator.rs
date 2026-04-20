@@ -127,6 +127,7 @@ impl ConfigGenerator {
                     env.set("MYSQL_HOST_PORT", &service.host_port.to_string());
                     env.set("MYSQL_ROOT_PASSWORD", "root");
                     env.set("MYSQL_CONF_FILE", &format!("./services/{}/mysql.cnf", service_dir_name));
+                    env.set("MYSQL_DATA_DIR", &format!("./data/{}", service_dir_name));
                     env.set("MYSQL_LOG_DIR", &format!("./logs/{}", service_dir_name));
                 }
                 ServiceType::Redis => {
@@ -143,6 +144,7 @@ impl ConfigGenerator {
                     env.set("REDIS_VERSION", &service.version);
                     env.set("REDIS_HOST_PORT", &service.host_port.to_string());
                     env.set("REDIS_CONF_FILE", &format!("./services/{}/redis.conf", service_dir_name));
+                    env.set("REDIS_DATA_DIR", &format!("./data/{}", service_dir_name));
                 }
                 ServiceType::Nginx => {
                     // Generate service directory name: nginx{major}{minor}
@@ -157,6 +159,7 @@ impl ConfigGenerator {
                     
                     env.set("NGINX_VERSION", &service.version);
                     env.set("NGINX_HTTP_HOST_PORT", &service.host_port.to_string());
+                    env.set("NGINX_BUILD_CONTEXT", &format!("./services/{}", service_dir_name));
                     env.set("NGINX_CONF_FILE", &format!("./services/{}/nginx.conf", service_dir_name));
                     env.set("NGINX_CONFD_DIR", &format!("./services/{}/conf.d", service_dir_name));
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
@@ -216,13 +219,6 @@ impl ConfigGenerator {
                     lines.push(String::new());
                 }
                 ServiceType::MySQL => {
-                    let version_parts: Vec<&str> = service.version.split('.').collect();
-                    let service_dir_name = if version_parts.len() >= 2 {
-                        format!("mysql{}{}", version_parts[0], version_parts[1])
-                    } else {
-                        "mysql80".to_string()
-                    };
-                    
                     lines.push(format!("  mysql:"));
                     lines.push(format!("    image: mysql:${{MYSQL_VERSION}}"));
                     lines.push(format!("    container_name: ps-mysql"));
@@ -232,8 +228,9 @@ impl ConfigGenerator {
                     lines.push(format!(
                         "      - ${{MYSQL_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro"
                     ));
+                    // Use MYSQL_DATA_DIR variable from .env
                     lines.push(format!(
-                        "      - ${{DATA_DIR}}/{}:/var/lib/mysql/:rw", service_dir_name
+                        "      - ${{MYSQL_DATA_DIR}}:/var/lib/mysql/:rw"
                     ));
                     lines.push(format!(
                         "      - ${{MYSQL_LOG_DIR}}:/var/log/mysql/:rw"
@@ -258,8 +255,9 @@ impl ConfigGenerator {
                     lines.push(format!(
                         "      - ${{REDIS_CONF_FILE}}:/etc/redis.conf:ro"
                     ));
+                    // Use REDIS_DATA_DIR variable from .env
                     lines.push(format!(
-                        "      - ${{DATA_DIR}}/redis:/data/:rw"
+                        "      - ${{REDIS_DATA_DIR}}:/data/:rw"
                     ));
                     lines.push(format!("    restart: always"));
                     lines.push(format!("    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]"));
@@ -270,7 +268,7 @@ impl ConfigGenerator {
                 ServiceType::Nginx => {
                     lines.push(format!("  nginx:"));
                     lines.push(format!("    build:"));
-                    lines.push(format!("      context: ./services/nginx"));
+                    lines.push(format!("      context: ${{NGINX_BUILD_CONTEXT}}"));
                     lines.push(format!("    container_name: ps-nginx"));
                     lines.push(format!("    ports:"));
                     lines.push(format!("      - \"${{NGINX_HTTP_HOST_PORT}}:80\""));

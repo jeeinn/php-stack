@@ -42,14 +42,19 @@ impl UserOverrideManager {
         let overrides_path = project_root.join(".user_version_overrides.json");
         
         if !overrides_path.exists() {
+            eprintln!("ℹ️  [UserOverride] 未找到用户覆盖配置文件，使用默认配置");
             return HashMap::new();
         }
+
+        eprintln!("📝 [UserOverride] 加载用户覆盖配置: {:?}", overrides_path);
 
         match std::fs::read_to_string(&overrides_path) {
             Ok(content) => {
                 match serde_json::from_str::<HashMap<String, HashMap<String, UserVersionOverride>>>(&content) {
                     Ok(raw) => {
                         let mut result = HashMap::new();
+                        let mut override_count = 0;
+                        
                         for (service_key, versions) in raw {
                             let service_type = match service_key.as_str() {
                                 "php" => ServiceType::Php,
@@ -58,18 +63,22 @@ impl UserOverrideManager {
                                 "nginx" => ServiceType::Nginx,
                                 _ => continue,
                             };
+                            override_count += versions.len();
+                            eprintln!("   ✅ {}: {} 个版本覆盖", service_key, versions.len());
                             result.insert(service_type, versions);
                         }
+                        
+                        eprintln!("✅ [UserOverride] 加载成功，共 {} 个服务类型，{} 个版本覆盖", result.len(), override_count);
                         result
                     }
                     Err(e) => {
-                        eprintln!("警告: 无法解析用户覆盖配置文件: {}", e);
+                        eprintln!("⚠️  [UserOverride] 解析配置文件失败: {}", e);
                         HashMap::new()
                     }
                 }
             }
             Err(e) => {
-                eprintln!("警告: 无法读取用户覆盖配置文件: {}", e);
+                eprintln!("❌ [UserOverride] 读取配置文件失败: {}", e);
                 HashMap::new()
             }
         }
@@ -87,6 +96,11 @@ impl UserOverrideManager {
             .get(service_type)
             .and_then(|versions| versions.get(version))
         {
+            eprintln!("🔧 [UserOverride] {} {} 使用自定义标签: {}", 
+                format!("{:?}", service_type).to_lowercase(), 
+                version, 
+                user_override.tag);
+            
             // 2. 获取默认配置作为基础
             if let Some(default_info) = self.default_manifest.get_image_info(service_type, version) {
                 // 3. 返回合并后的配置（用户覆盖优先）

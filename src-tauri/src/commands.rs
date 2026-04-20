@@ -257,20 +257,32 @@ pub async fn apply_env_config(config: EnvConfig, app_handle: tauri::AppHandle) -
     
     // 辅助函数：发送日志到前端并打印到终端
     let emit_log = |msg: &str| {
-        eprintln!("[APPLY_CONFIG] {}", msg); // 终端输出
+        eprintln!("{}", msg); // 终端输出（已包含emoji）
         let _ = app_handle.emit("env-log", msg); // 前端UI显示
     };
     
     emit_log("📝 开始应用配置...");
     
     let project_root = get_project_root()?;
-    emit_log(&format!("📁 目标目录: {:?}", project_root));
+    emit_log(&format!("📁 项目根目录: {:?}", project_root));
     
-    emit_log("🔧 生成配置文件和目录结构...");
+    // 检查用户覆盖配置
+    let overrides_path = project_root.join(".user_version_overrides.json");
+    if overrides_path.exists() {
+        emit_log("✅ 检测到用户版本覆盖配置");
+    } else {
+        emit_log("ℹ️  未找到用户覆盖配置，使用默认配置");
+    }
+    
+    emit_log("🔧 验证配置...");
+    emit_log("📄 生成 .env 文件...");
+    emit_log("🐳 生成 docker-compose.yml...");
+    emit_log("📂 创建服务目录结构...");
     
     match ConfigGenerator::apply(&config, &project_root).await {
         Ok(()) => {
             emit_log("✅ 配置应用成功！");
+            emit_log("💡 提示：请重启容器使新配置生效");
             Ok(())
         }
         Err(e) => {

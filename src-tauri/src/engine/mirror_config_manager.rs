@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// 用户自定义的单个镜像源类别配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

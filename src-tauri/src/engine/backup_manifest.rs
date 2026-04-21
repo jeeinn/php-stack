@@ -4,10 +4,8 @@ use std::collections::HashMap;
 /// 备份选项
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BackupOptions {
-    pub include_database: bool,
     pub include_projects: bool,
     pub project_patterns: Vec<String>,
-    pub include_vhosts: bool,
     pub include_logs: bool,
 }
 
@@ -80,10 +78,8 @@ impl BackupManifest {
             os_info: std::env::consts::OS.to_string(),
             services: Vec::new(),
             options: BackupOptions {
-                include_database: false,
                 include_projects: false,
                 project_patterns: Vec::new(),
-                include_vhosts: false,
                 include_logs: false,
             },
             files: HashMap::new(),
@@ -132,10 +128,8 @@ mod tests {
                 },
             ],
             options: BackupOptions {
-                include_database: true,
                 include_projects: true,
                 project_patterns: vec!["*.php".to_string(), "*.html".to_string()],
-                include_vhosts: true,
                 include_logs: false,
             },
             files,
@@ -160,10 +154,8 @@ mod tests {
             "os_info": "linux",
             "services": [],
             "options": {
-                "include_database": false,
                 "include_projects": false,
                 "project_patterns": [],
-                "include_vhosts": false,
                 "include_logs": false
             },
             "files": {},
@@ -187,10 +179,8 @@ mod tests {
             "os_info": "linux",
             "services": [],
             "options": {
-                "include_database": false,
                 "include_projects": false,
                 "project_patterns": [],
-                "include_vhosts": false,
                 "include_logs": false
             },
             "files": {},
@@ -214,10 +204,8 @@ mod tests {
             "app_version": "0.1.0",
             "os_info": "linux",
             "options": {
-                "include_database": false,
                 "include_projects": false,
                 "project_patterns": [],
-                "include_vhosts": false,
                 "include_logs": false
             },
             "files": {},
@@ -240,10 +228,8 @@ mod tests {
         assert_eq!(manifest.app_version, env!("CARGO_PKG_VERSION"));
         assert_eq!(manifest.os_info, std::env::consts::OS);
         assert!(manifest.services.is_empty());
-        assert!(!manifest.options.include_database);
         assert!(!manifest.options.include_projects);
         assert!(manifest.options.project_patterns.is_empty());
-        assert!(!manifest.options.include_vhosts);
         assert!(!manifest.options.include_logs);
         assert!(manifest.files.is_empty());
         assert!(manifest.errors.is_empty());

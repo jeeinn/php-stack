@@ -34,6 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
 reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
+pathdiff = "0.2"
 
 [dev-dependencies]
 proptest = "1"

@@ -1,20 +1,75 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+import { save, open } from '@tauri-apps/plugin-dialog';
+import { homeDir } from '@tauri-apps/api/path';
 import { listen } from '@tauri-apps/api/event';
 import type { BackupOptions, BackupProgress } from '../types/env-config';
-import { showToast } from '../composables/useToast';
+import { showToast, addLog } from '../composables/useToast';
 
 const options = ref<BackupOptions>({
-  include_database: false,
   include_projects: false,
   project_patterns: [],
-  include_vhosts: false,
   include_logs: false,
 });
 
-const projectPatternsText = ref('.env\nsrc/config/*.php');
+const projectPatternsText = ref('');
+
+async function selectProjectFolder() {
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    defaultPath: './', // 默认打开当前目录
+  });
+  if (selected) {
+    try {
+      const relativePath = await invoke<string>('convert_to_relative_path', { 
+        absolutePath: selected,
+        isDirectory: true
+      });
+      appendPattern(relativePath);
+    } catch (e) {
+      handlePathError(e as string);
+    }
+  }
+}
+
+async function selectProjectFile() {
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    defaultPath: './', // 默认打开当前目录
+  });
+  if (selected) {
+    try {
+      const relativePath = await invoke<string>('convert_to_relative_path', { 
+        absolutePath: selected,
+        isDirectory: false
+      });
+      appendPattern(relativePath);
+    } catch (e) {
+      handlePathError(e as string);
+    }
+  }
+}
+
+function handlePathError(errorMsg: string) {
+  console.error('[Backup] Path conversion failed:', errorMsg);
+  addLog(`路径转换失败: ${errorMsg}`);
+  showToast(errorMsg, 'error');
+}
+
+function appendPattern(pattern: string) {
+  const current = projectPatternsText.value.trim();
+  if (current) {
+    // 避免重复添加
+    if (!current.split('\n').includes(pattern)) {
+      projectPatternsText.value = `${current}\n${pattern}`;
+    }
+  } else {
+    projectPatternsText.value = pattern;
+  }
+}
 const backing = ref(false);
 const progress = ref<BackupProgress | null>(null);
 
@@ -33,10 +88,20 @@ onUnmounted(() => {
 });
 
 async function handleBackup() {
+  // Generate filename with format: YYYYMMDD-HHIISS
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timestamp = `${year}${month}${day}-${hours}${minutes}${seconds}`;
+  
   // Select save path
   const savePath = await save({
     filters: [{ name: 'PHP-Stack Backup', extensions: ['zip'] }],
-    defaultPath: `php-stack-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+    defaultPath: `php-stack-backup-${timestamp}.zip`,
   });
 
   if (!savePath) return;
@@ -82,12 +147,6 @@ async function handleBackup() {
             <span>核心配置文件（.env、docker-compose.yml、services/ 配置）</span>
           </label>
 
-          <!-- Database -->
-          <label class="flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
-            <input type="checkbox" v-model="options.include_database" class="accent-blue-500" />
-            <span>包含数据库数据（MySQL dump）</span>
-          </label>
-
           <!-- Projects -->
           <div>
             <label class="flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
@@ -96,26 +155,42 @@ async function handleBackup() {
             </label>
             <transition name="fade">
               <div v-if="options.include_projects" class="mt-3 ml-7">
-                <label class="block text-xs text-slate-400 mb-1">文件匹配模式（每行一个 glob 模式）</label>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-xs text-slate-400">文件匹配模式（每行一个 glob 模式）</label>
+                  <div class="flex gap-2">
+                    <button 
+                      @click="selectProjectFolder"
+                      class="text-xs px-2 py-1 bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600 hover:text-white transition"
+                    >
+                      选择文件夹
+                    </button>
+                    <button 
+                      @click="selectProjectFile"
+                      class="text-xs px-2 py-1 bg-emerald-600/20 text-emerald-400 rounded hover:bg-emerald-600 hover:text-white transition"
+                    >
+                      选择文件
+                    </button>
+                  </div>
+                </div>
                 <textarea
                   v-model="projectPatternsText"
-                  placeholder="每行一个路径模式，如：&#10;.env&#10;src/config/*.php"
+                  placeholder="例如：&#10;www/project-a/**&#10;.env"
                   class="w-full h-24 bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs font-mono text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
                 ></textarea>
+                <p class="text-[10px] text-slate-500 mt-1">
+                  💡 提示：为确保跨平台恢复成功，请仅备份项目目录内的文件。
+                </p>
               </div>
             </transition>
           </div>
 
-          <!-- Vhosts -->
-          <label class="flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
-            <input type="checkbox" v-model="options.include_vhosts" class="accent-blue-500" />
-            <span>包含 Nginx 虚拟主机配置</span>
-          </label>
-
           <!-- Logs -->
           <label class="flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
             <input type="checkbox" v-model="options.include_logs" class="accent-blue-500" />
-            <span>包含日志文件（最近 7 天）</span>
+            <div class="flex flex-col">
+              <span>包含日志文件（logs 目录）</span>
+              <span class="text-xs text-slate-500">注意：日志文件可能占用较大备份空间</span>
+            </div>
           </label>
         </div>
       </section>

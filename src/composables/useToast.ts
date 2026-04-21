@@ -10,7 +10,20 @@ interface ToastItem {
 }
 
 const toasts = ref<ToastItem[]>([]);
+const logs = ref<string[]>([]);
 let nextId = 0;
+
+// 添加日志（用于实时日志面板）
+export function addLog(message: string) {
+  const time = new Date().toLocaleTimeString();
+  logs.value.unshift(`[${time}] ${message}`);
+  if (logs.value.length > 50) logs.value.pop();
+}
+
+// 获取当前所有日志
+export function getLogs() {
+  return logs;
+}
 
 // 显示 Toast
 export function showToast(message: string, type: ToastType = 'info', duration = 3000) {

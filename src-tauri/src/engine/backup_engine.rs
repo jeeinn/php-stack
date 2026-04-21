@@ -6,7 +6,6 @@ use sha2::{Sha256, Digest};
 use glob::glob;
 
 use super::backup_manifest::{BackupManifest, BackupOptions};
-use crate::docker::manager::DockerManager;
 
 /// 备份进度事件
 #[derive(Debug, Clone, serde::Serialize)]
@@ -62,53 +61,29 @@ impl BackupEngine {
             Self::add_dir_to_zip(&mut zip, &services_dir, "services", &mut manifest)?;
         }
 
-        // Step 4: Optional — MySQL dump (50%)
-        if options.include_database {
-            Self::emit_progress(app_handle, "导出数据库...", 40);
-            match DockerManager::new() {
-                Ok(manager) => {
-                    match manager.list_ps_containers().await {
-                        Ok(containers) => {
-                            for c in containers.iter().filter(|c| c.name.contains("mysql")) {
-                                // MVP placeholder: actual mysqldump via Docker exec
-                                // can be implemented later with bollard exec API.
-                                let placeholder = format!(
-                                    "-- PHP-Stack Backup\n-- Container: {}\n-- Note: Full mysqldump requires Docker exec implementation\n",
-                                    c.name
-                                );
-                                let zip_path = format!("database/{}.sql", c.name);
-                                Self::add_file_to_zip(
-                                    &mut zip,
-                                    &zip_path,
-                                    placeholder.as_bytes(),
-                                    &mut manifest,
-                                )?;
-                            }
-                        }
-                        Err(e) => {
-                            manifest.errors.push(format!("获取容器列表失败: {}", e));
-                        }
-                    }
-                }
-                Err(e) => {
-                    manifest.errors.push(format!("Docker 连接失败: {}", e));
-                }
-            }
-        }
-
-        // Step 5: Optional — Project files (70%)
+        // Step 4: Optional — Project files (50%)
         if options.include_projects && !options.project_patterns.is_empty() {
             Self::emit_progress(app_handle, "打包项目文件...", 60);
             for pattern in &options.project_patterns {
-                match glob(pattern) {
+                // 将相对路径模式转换为绝对路径模式
+                let abs_pattern = if std::path::Path::new(pattern).is_absolute() {
+                    pattern.clone()
+                } else {
+                    project_root.join(pattern).to_string_lossy().replace('\\', "/")
+                };
+                
+                match glob(&abs_pattern) {
                     Ok(entries) => {
                         for entry in entries {
                             match entry {
                                 Ok(path) if path.is_file() => {
                                     match fs::read(&path) {
                                         Ok(content) => {
-                                            let zip_path =
-                                                format!("projects/{}", path.display());
+                                            // 计算相对于项目根目录的路径
+                                            let relative_path = pathdiff::diff_paths(&path, project_root)
+                                                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                                                .unwrap_or_else(|| path.display().to_string());
+                                            let zip_path = format!("projects/{}", relative_path);
                                             Self::add_file_to_zip(
                                                 &mut zip,
                                                 &zip_path,
@@ -141,16 +116,7 @@ impl BackupEngine {
             }
         }
 
-        // Step 6: Optional — Nginx vhost configs (80%)
-        if options.include_vhosts {
-            Self::emit_progress(app_handle, "打包虚拟主机配置...", 75);
-            let vhost_dir = project_root.join("services/nginx/conf.d");
-            if vhost_dir.exists() {
-                Self::add_dir_to_zip(&mut zip, &vhost_dir, "vhosts", &mut manifest)?;
-            }
-        }
-
-        // Step 7: Optional — Recent logs (90%)
+        // Step 5: Optional — Recent logs (70%)
         if options.include_logs {
             Self::emit_progress(app_handle, "打包日志文件...", 85);
             let logs_dir = project_root.join("logs");

@@ -1,7 +1,7 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: V2.1  
-> **最后更新**: 2026-04-20  
+> **版本**: V2.2  
+> **最后更新**: 2026-04-21  
 > **维护者**: PHP-Stack Team
 
 ---
@@ -94,6 +94,50 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 ---
 
 ## 3. 核心工作流程
+
+### 3.0 工作目录初始化流程 (Workspace Initialization)
+
+**设计理念**：解耦软件本体与业务数据，实现跨平台无缝迁移。
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant APP as php-stack.exe
+    participant FS as 文件系统
+    participant CFG as workspace.json
+
+    U->>APP: 启动软件
+    APP->>FS: 检查 exe 同级是否存在 workspace.json
+    alt 文件存在
+        APP->>CFG: 读取工作目录路径 (如 D:\demo)
+        APP->>FS: 验证该目录下是否有 .env/docker-compose.yml
+        alt 验证通过
+            APP->>U: 进入主界面
+        else 验证失败
+            APP->>U: 提示“工作目录配置无效，请重新指定”
+        end
+    else 文件不存在
+        APP->>U: 弹出“初始化向导”
+        U->>APP: 选择或创建新目录作为工作区
+        APP->>CFG: 写入 workspace.json { "workspace_path": "D:\demo" }
+        APP->>FS: 在该目录下创建基础结构 (.env, www/, services/...)
+        APP->>U: 进入主界面
+    end
+```
+
+**配置文件格式 (`workspace.json`)**:
+```json
+{
+  "workspace_path": "D:\\demo",
+  "last_updated": "2026-04-21T10:00:00Z"
+}
+```
+
+**备份与恢复逻辑**:
+*   **备份**: 仅打包 `workspace.json` 中指定的目录内容。任何位于该目录之外的文件（如用户手动选择的系统级配置文件）均不予备份，并在 UI 层给予明确提示。
+*   **恢复**: 在新环境（如 macOS）中，用户先指定一个新的工作目录路径，软件将 ZIP 包内的所有内容解压至该路径，并自动更新本地的 `workspace.json`。
+
+---
 
 ### 3.1 环境配置与启动流程（主要流程）
 

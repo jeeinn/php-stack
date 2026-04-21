@@ -4,10 +4,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
-import BackupPage from './components/BackupPage.vue';
-import RestorePage from './components/RestorePage.vue';
+import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
+import { getLogs, addLog } from './composables/useToast';
 
 interface Container {
   id: String;
@@ -20,17 +20,11 @@ interface Container {
 
 const containers = ref<Container[]>([]);
 const loading = ref(false);
-const logs = ref<string[]>([]);
+const logs = getLogs(); // 使用 composable 中的全局日志
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(true); // 控制侧边栏展开/收缩（默认收缩）
-
-const addLog = (msg: string) => {
-  const time = new Date().toLocaleTimeString();
-  logs.value.unshift(`[${time}] ${msg}`);
-  if (logs.value.length > 50) logs.value.pop();
-};
 
 // 判断容器是否运行中（兼容多种格式）
 const isRunning = (state: string): boolean => {
@@ -179,7 +173,7 @@ onMounted(() => {
           class="sidebar-item"
           :title="sidebarCollapsed ? '环境配置' : ''"
         >
-          <span class="text-lg">⚙️</span>
+          <span class="text-lg">🍳</span>
           <span v-if="!sidebarCollapsed" class="ml-2">环境配置</span>
         </div>
         <div 
@@ -192,22 +186,13 @@ onMounted(() => {
           <span v-if="!sidebarCollapsed" class="ml-2">设置项</span>
         </div>
         <div 
-          @click="activeTab = 'backup-new'"
-          :class="{ 'active': activeTab === 'backup-new' }" 
+          @click="activeTab = 'migration'"
+          :class="{ 'active': activeTab === 'migration' }" 
           class="sidebar-item"
-          :title="sidebarCollapsed ? '备份' : ''"
+          :title="sidebarCollapsed ? '环境迁移' : ''"
         >
-          <span class="text-lg">💾</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">备份</span>
-        </div>
-        <div 
-          @click="activeTab = 'restore-new'"
-          :class="{ 'active': activeTab === 'restore-new' }" 
-          class="sidebar-item"
-          :title="sidebarCollapsed ? '恢复' : ''"
-        >
-          <span class="text-lg">📥</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">恢复</span>
+          <span class="text-lg">📦</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">环境迁移</span>
         </div>
       </div>
       
@@ -333,14 +318,9 @@ onMounted(() => {
         <SettingsPage />
       </div>
 
-      <!-- New: 备份 (BackupPage) -->
-      <div v-if="activeTab === 'backup-new'" class="flex-1 flex flex-col overflow-hidden">
-        <BackupPage />
-      </div>
-
-      <!-- New: 恢复 (RestorePage) -->
-      <div v-if="activeTab === 'restore-new'" class="flex-1 flex flex-col overflow-hidden">
-        <RestorePage />
+      <!-- New: 环境迁移 (MigrationPage) -->
+      <div v-if="activeTab === 'migration'" class="flex-1 flex flex-col overflow-hidden">
+        <MigrationPage />
       </div>
 
       <!-- Log Panel (Global) -->

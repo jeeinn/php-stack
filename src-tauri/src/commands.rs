@@ -624,6 +624,52 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 选择项目文件夹并转换为相对路径
+#[tauri::command]
+pub fn select_project_folder() -> Result<Option<String>, String> {
+    // 实际的文件选择逻辑应该在前端通过 @tauri-apps/plugin-dialog 实现
+    // 这里仅作为占位符，或者我们可以通过 CLI 方式打开文件选择器
+    
+    // 为了简化，我们暂时不在此处实现复杂的跨平台文件夹选择逻辑
+    // 而是建议前端直接使用 dialog.open({ directory: true })
+    // 然后前端将选中的绝对路径发送给后端，后端计算相对路径
+    
+    Ok(None)
+}
+
+/// 将绝对路径转换为相对于项目根目录的路径
+#[tauri::command]
+pub fn convert_to_relative_path(absolute_path: String, is_directory: bool) -> Result<String, String> {
+    let project_root = get_project_root()?;
+    let abs_path = std::path::PathBuf::from(&absolute_path);
+    
+    // 使用 pathdiff 计算相对路径，它会自动处理跨平台差异（如 Windows 盘符）
+    match pathdiff::diff_paths(&abs_path, &project_root) {
+        Some(relative) if relative.as_os_str().is_empty() || relative == std::path::PathBuf::from(".") => {
+            Err("不能选择项目根目录本身，请选择其子文件或子文件夹".to_string())
+        }
+        Some(relative) => {
+            // 检查是否包含 ".." (即不在项目目录下)
+            let rel_str = relative.to_string_lossy();
+            if rel_str.starts_with("..") || rel_str.contains("/..") || rel_str.contains("\\..") {
+                return Err(format!(
+                    "所选路径不在项目根目录下。\n为了确保证跨平台恢复成功，建议您将配置文件移动到项目目录（如 www/ 或 configs/）下再进行备份。\n\n当前项目根目录: {}",
+                    project_root.display()
+                ));
+            }
+            
+            // 统一转换为正斜杠
+            let normalized = rel_str.replace('\\', "/");
+            if is_directory {
+                Ok(format!("{}/**", normalized))
+            } else {
+                Ok(normalized)
+            }
+        }
+        None => Err("无法计算相对路径，请确保文件位于项目目录内".to_string()),
+    }
+}
+
 /// 获取所有可用的版本映射配置
 #[tauri::command]
 pub fn get_version_mappings() -> Result<serde_json::Value, String> {

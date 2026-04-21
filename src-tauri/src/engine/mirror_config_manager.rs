@@ -156,7 +156,7 @@ impl MirrorConfigManager {
             
             // 确定当前选中的选项
             let has_user_override = user_config.has_user_override(&category_id);
-            let (selected_id, current_value, mut final_options) = if has_user_override {
+            let (selected_id, current_value, final_options) = if has_user_override {
                 // 用户有自定义配置
                 if let Some(user_cat) = user_config.get_category(&category_id) {
                     // 查找匹配的选项 ID

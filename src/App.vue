@@ -3,10 +3,9 @@ import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import EnvConfigPage from './components/EnvConfigPage.vue';
-import MirrorPanel from './components/MirrorPanel.vue';
+import SettingsPage from './components/SettingsPage.vue';
 import BackupPage from './components/BackupPage.vue';
 import RestorePage from './components/RestorePage.vue';
-import SoftwareSettings from './components/SoftwareSettings.vue';
 
 interface Container {
   id: String;
@@ -185,10 +184,10 @@ onMounted(() => {
           @click="activeTab = 'mirrors-unified'"
           :class="{ 'active': activeTab === 'mirrors-unified' }" 
           class="sidebar-item"
-          :title="sidebarCollapsed ? '镜像源' : ''"
+          :title="sidebarCollapsed ? '设置项' : ''"
         >
-          <span class="text-lg">🌐</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">镜像源</span>
+          <span class="text-lg">⚙️</span>
+          <span v-if="!sidebarCollapsed" class="ml-2">设置项</span>
         </div>
         <div 
           @click="activeTab = 'backup-new'"
@@ -207,15 +206,6 @@ onMounted(() => {
         >
           <span class="text-lg">📥</span>
           <span v-if="!sidebarCollapsed" class="ml-2">恢复</span>
-        </div>
-        <div 
-          @click="activeTab = 'software-settings'"
-          :class="{ 'active': activeTab === 'software-settings' }" 
-          class="sidebar-item"
-          :title="sidebarCollapsed ? '软件设置' : ''"
-        >
-          <span class="text-lg">🔧</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">软件设置</span>
         </div>
       </div>
       
@@ -336,9 +326,9 @@ onMounted(() => {
         <EnvConfigPage />
       </div>
 
-      <!-- New: 统一镜像源管理 (MirrorPanel) -->
+      <!-- New: 设置项 (SettingsPage) -->
       <div v-if="activeTab === 'mirrors-unified'" class="flex-1 flex flex-col overflow-hidden">
-        <MirrorPanel />
+        <SettingsPage />
       </div>
 
       <!-- New: 备份 (BackupPage) -->
@@ -349,11 +339,6 @@ onMounted(() => {
       <!-- New: 恢复 (RestorePage) -->
       <div v-if="activeTab === 'restore-new'" class="flex-1 flex flex-col overflow-hidden">
         <RestorePage />
-      </div>
-
-      <!-- New: 软件设置 (SoftwareSettings) -->
-      <div v-if="activeTab === 'software-settings'" class="flex-1 flex flex-col overflow-hidden">
-        <SoftwareSettings />
       </div>
 
       <!-- Log Panel (Global) -->

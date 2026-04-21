@@ -1,7 +1,7 @@
 use crate::docker::manager::{DockerManager, PsContainer};
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
 use crate::engine::mirror_manager::{MirrorManager as UnifiedMirrorManager, MirrorPreset};
-use crate::engine::mirror_config_manager::{MirrorConfigManager, MergedMirrorInfo};
+use crate::engine::mirror_config_manager::{MirrorConfigManager, MergedMirrorCategory};
 use crate::engine::backup_engine::BackupEngine;
 use crate::engine::backup_manifest::BackupOptions;
 use crate::engine::restore_engine::{RestoreEngine, RestorePreview};
@@ -466,23 +466,19 @@ pub fn get_current_mirror_preset() -> Result<String, String> {
 
 /// 获取合并后的镜像源列表（默认配置 + 用户自定义）
 #[tauri::command]
-pub fn get_merged_mirror_list() -> Result<Vec<MergedMirrorInfo>, String> {
+pub fn get_merged_mirror_list() -> Result<Vec<MergedMirrorCategory>, String> {
     let project_root = get_project_root()?;
     MirrorConfigManager::get_merged_mirror_list(&project_root)
 }
 
-/// 获取合并后的预设列表（包含选中状态）
+/// 保存用户选择的镜像源选项
 #[tauri::command]
-pub fn get_merged_presets() -> Result<serde_json::Value, String> {
+pub fn save_selected_mirror_option(
+    category_id: String,
+    option_id: String,
+) -> Result<(), String> {
     let project_root = get_project_root()?;
-    MirrorConfigManager::get_merged_presets(&project_root)
-}
-
-/// 保存用户选择的预设
-#[tauri::command]
-pub fn save_selected_preset(preset_id: String) -> Result<(), String> {
-    let project_root = get_project_root()?;
-    MirrorConfigManager::save_selected_preset(&project_root, &preset_id)
+    MirrorConfigManager::save_selected_option(&project_root, &category_id, &option_id)
 }
 
 /// 保存用户自定义的单个类别配置

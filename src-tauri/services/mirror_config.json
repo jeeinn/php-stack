@@ -1,86 +1,126 @@
 {
-  "presets": [
+  "docker_registry": [
     {
       "id": "aliyun",
-      "name": "阿里云全套",
-      "docker_registry": "https://registry.cn-hangzhou.aliyuncs.com",
-      "apt": "https://mirrors.aliyun.com/debian",
-      "composer": "https://mirrors.aliyun.com/composer/",
-      "npm": "https://registry.npmmirror.com",
-      "github_proxy": "",
-      "description": "阿里云镜像源，国内访问速度快"
+      "name": "阿里云",
+      "value": "https://registry.cn-hangzhou.aliyuncs.com",
+      "description": "阿里云 Docker 镜像仓库，国内访问速度快"
     },
     {
       "id": "tsinghua",
-      "name": "清华大学全套",
-      "docker_registry": "https://docker.mirrors.tuna.tsinghua.edu.cn",
-      "apt": "https://mirrors.tuna.tsinghua.edu.cn/debian",
-      "composer": "https://packagist.org",
-      "npm": "https://registry.npmmirror.com",
-      "github_proxy": "",
+      "name": "清华大学",
+      "value": "https://docker.mirrors.tuna.tsinghua.edu.cn",
       "description": "清华大学开源软件镜像站"
     },
     {
       "id": "tencent",
-      "name": "腾讯云全套",
-      "docker_registry": "https://mirror.ccs.tencentyun.com",
-      "apt": "https://mirrors.cloud.tencent.com/debian",
-      "composer": "https://mirrors.cloud.tencent.com/composer/",
-      "npm": "https://registry.npmmirror.com",
-      "github_proxy": "",
-      "description": "腾讯云镜像源"
+      "name": "腾讯云",
+      "value": "https://mirror.ccs.tencentyun.com",
+      "description": "腾讯云 Docker 镜像仓库"
     },
     {
       "id": "ustc",
-      "name": "中科大全套",
-      "docker_registry": "https://docker.mirrors.ustc.edu.cn",
-      "apt": "https://mirrors.ustc.edu.cn/debian",
-      "composer": "https://packagist.org",
-      "npm": "https://registry.npmmirror.com",
-      "github_proxy": "",
+      "name": "中科大",
+      "value": "https://docker.mirrors.ustc.edu.cn",
       "description": "中国科学技术大学镜像源"
     },
     {
       "id": "default",
       "name": "官方默认",
-      "docker_registry": "",
-      "apt": "https://deb.debian.org/debian",
-      "composer": "https://packagist.org",
-      "npm": "https://registry.npmjs.org",
-      "github_proxy": "",
-      "description": "使用官方默认源（无加速）"
+      "value": "",
+      "description": "使用 Docker Hub 官方源（无加速）"
     }
   ],
-  "categories": [
+  "apt": [
     {
-      "id": "docker_registry",
-      "name": "Docker Registry",
-      "description": "Docker 镜像仓库地址",
-      "default_value": ""
+      "id": "aliyun",
+      "name": "阿里云",
+      "value": "https://mirrors.aliyun.com/debian",
+      "description": "阿里云 APT 镜像"
     },
     {
-      "id": "apt",
-      "name": "APT 镜像",
-      "description": "Debian/Ubuntu APT 包管理器镜像",
-      "default_value": "https://deb.debian.org/debian"
+      "id": "tsinghua",
+      "name": "清华大学",
+      "value": "https://mirrors.tuna.tsinghua.edu.cn/debian",
+      "description": "清华大学 APT 镜像"
     },
     {
-      "id": "composer",
-      "name": "Composer 镜像",
-      "description": "PHP Composer 包管理器镜像",
-      "default_value": "https://packagist.org"
+      "id": "tencent",
+      "name": "腾讯云",
+      "value": "https://mirrors.cloud.tencent.com/debian",
+      "description": "腾讯云 APT 镜像"
     },
     {
-      "id": "npm",
-      "name": "NPM 镜像",
-      "description": "Node.js NPM 包管理器镜像",
-      "default_value": "https://registry.npmjs.org"
+      "id": "ustc",
+      "name": "中科大",
+      "value": "https://mirrors.ustc.edu.cn/debian",
+      "description": "中科大 APT 镜像"
     },
     {
-      "id": "github_proxy",
-      "name": "GitHub 代理",
-      "description": "GitHub 访问代理（可选）",
-      "default_value": ""
+      "id": "default",
+      "name": "官方默认",
+      "value": "https://deb.debian.org/debian",
+      "description": "Debian 官方源"
+    }
+  ],
+  "composer": [
+    {
+      "id": "aliyun",
+      "name": "阿里云",
+      "value": "https://mirrors.aliyun.com/composer/",
+      "description": "阿里云 Composer 镜像"
+    },
+    {
+      "id": "tencent",
+      "name": "腾讯云",
+      "value": "https://mirrors.cloud.tencent.com/composer/",
+      "description": "腾讯云 Composer 镜像"
+    },
+    {
+      "id": "default",
+      "name": "官方默认",
+      "value": "https://packagist.org",
+      "description": "Packagist 官方源"
+    }
+  ],
+  "npm": [
+    {
+      "id": "npmmirror",
+      "name": "淘宝镜像",
+      "value": "https://registry.npmmirror.com",
+      "description": "淘宝 NPM 镜像（原 cnpmjs.org）"
+    },
+    {
+      "id": "tencent",
+      "name": "腾讯云",
+      "value": "https://mirrors.cloud.tencent.com/npm/",
+      "description": "腾讯云 NPM 镜像"
+    },
+    {
+      "id": "default",
+      "name": "官方默认",
+      "value": "https://registry.npmjs.org",
+      "description": "NPM 官方源"
+    }
+  ],
+  "github_proxy": [
+    {
+      "id": "ghproxy",
+      "name": "GHProxy",
+      "value": "https://gh.con.sh",
+      "description": "GitHub 代理加速"
+    },
+    {
+      "id": "fastgit",
+      "name": "FastGit",
+      "value": "https://hub.fastgit.xyz",
+      "description": "FastGit 加速服务"
+    },
+    {
+      "id": "default",
+      "name": "不使用代理",
+      "value": "",
+      "description": "直接访问 GitHub（无加速）"
     }
   ]
 }

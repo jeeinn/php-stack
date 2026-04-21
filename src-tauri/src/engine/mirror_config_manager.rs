@@ -27,10 +27,6 @@ fn default_enabled() -> bool {
 /// 用户镜像源配置文件结构
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserMirrorConfig {
-    /// 用户选择的预设方案 ID（如果有的话）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub selected_preset: Option<String>,
-    
     /// 用户自定义的各个类别配置
     #[serde(default)]
     pub categories: HashMap<String, UserMirrorCategory>,
@@ -88,19 +84,26 @@ impl UserMirrorConfig {
     /// 清空所有自定义配置
     pub fn clear_all(&mut self) {
         self.categories.clear();
-        self.selected_preset = None;
     }
 }
 
-/// 合并后的镜像源信息（默认配置 + 用户自定义）
+/// 单个镜像源选项
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MergedMirrorInfo {
-    pub category_id: String,
+pub struct MirrorSourceOption {
+    pub id: String,
     pub name: String,
+    pub value: String,
     pub description: String,
-    pub default_value: String,
-    pub current_value: String,
-    pub has_user_override: bool,
+}
+
+/// 合并后的镜像源类别信息（默认配置 + 用户自定义）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergedMirrorCategory {
+    pub category_id: String,
+    pub options: Vec<MirrorSourceOption>,
+    pub selected_id: String,        // 当前选中的选项 ID
+    pub current_value: String,      // 当前值
+    pub has_user_override: bool,    // 是否有用户自定义
 }
 
 pub struct MirrorConfigManager;
@@ -113,53 +116,69 @@ impl MirrorConfigManager {
             .map_err(|e| format!("解析 mirror_config.json 失败: {}", e))
     }
     
+    /// 获取所有类别 ID 列表
+    pub fn get_category_ids() -> Vec<String> {
+        vec![
+            "docker_registry".to_string(),
+            "apt".to_string(),
+            "composer".to_string(),
+            "npm".to_string(),
+            "github_proxy".to_string(),
+        ]
+    }
+    
     /// 获取合并后的镜像源列表（默认配置 + 用户自定义）
-    pub fn get_merged_mirror_list(project_root: &Path) -> Result<Vec<MergedMirrorInfo>, String> {
+    pub fn get_merged_mirror_list(project_root: &Path) -> Result<Vec<MergedMirrorCategory>, String> {
         let default_config = Self::load_default_config()?;
         let user_config = UserMirrorConfig::load(project_root)?;
         
-        let categories = default_config["categories"]
-            .as_array()
-            .ok_or("mirror_config.json 中缺少 categories")?;
-        
+        let category_ids = Self::get_category_ids();
         let mut merged_list = Vec::new();
         
-        for category in categories {
-            let category_id = category["id"]
-                .as_str()
-                .ok_or("category 缺少 id 字段")?
-                .to_string();
+        for category_id in category_ids {
+            // 从默认配置中获取该类别的选项列表
+            let options_value = &default_config[&category_id];
+            let options_array = options_value
+                .as_array()
+                .ok_or(format!("mirror_config.json 中缺少类别: {}", category_id))?;
             
-            let name = category["name"]
-                .as_str()
-                .unwrap_or(&category_id)
-                .to_string();
+            // 解析选项列表
+            let options: Vec<MirrorSourceOption> = options_array
+                .iter()
+                .filter_map(|opt| {
+                    serde_json::from_value(opt.clone()).ok()
+                })
+                .collect();
             
-            let description = category["description"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
+            if options.is_empty() {
+                continue;
+            }
             
-            let default_value = category["default_value"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
-            
+            // 确定当前选中的选项
             let has_user_override = user_config.has_user_override(&category_id);
-            
-            let current_value = if has_user_override {
-                user_config.get_category(&category_id)
-                    .map(|c| c.source.clone())
-                    .unwrap_or(default_value.clone())
+            let (selected_id, current_value) = if has_user_override {
+                // 用户有自定义配置
+                if let Some(user_cat) = user_config.get_category(&category_id) {
+                    // 查找匹配的选项 ID
+                    let matched_id = options.iter()
+                        .find(|opt| opt.value == user_cat.source)
+                        .map(|opt| opt.id.clone())
+                        .unwrap_or_else(|| "custom".to_string());
+                    
+                    (matched_id, user_cat.source.clone())
+                } else {
+                    // 回退到第一个选项
+                    (options[0].id.clone(), options[0].value.clone())
+                }
             } else {
-                default_value.clone()
+                // 使用默认配置的第一个选项
+                (options[0].id.clone(), options[0].value.clone())
             };
             
-            merged_list.push(MergedMirrorInfo {
+            merged_list.push(MergedMirrorCategory {
                 category_id,
-                name,
-                description,
-                default_value,
+                options,
+                selected_id,
                 current_value,
                 has_user_override,
             });
@@ -168,36 +187,26 @@ impl MirrorConfigManager {
         Ok(merged_list)
     }
     
-    /// 获取合并后的预设列表
-    pub fn get_merged_presets(project_root: &Path) -> Result<serde_json::Value, String> {
+    /// 保存用户选择的镜像源选项
+    pub fn save_selected_option(
+        project_root: &Path,
+        category_id: &str,
+        option_id: &str,
+    ) -> Result<(), String> {
         let default_config = Self::load_default_config()?;
-        let user_config = UserMirrorConfig::load(project_root)?;
+        let options_value = &default_config[category_id];
+        let options_array = options_value
+            .as_array()
+            .ok_or(format!("类别 {} 不存在", category_id))?;
         
-        let presets = default_config["presets"].clone();
+        // 查找对应的选项值
+        let selected_value = options_array.iter()
+            .find(|opt| opt.get("id").and_then(|v| v.as_str()) == Some(option_id))
+            .and_then(|opt| opt.get("value").and_then(|v| v.as_str()))
+            .ok_or(format!("选项 {} 不存在于类别 {} 中", option_id, category_id))?;
         
-        // 添加用户当前选中的预设信息
-        let mut result = presets.clone();
-        if let Some(presets_array) = result.as_array_mut() {
-            for preset in presets_array.iter_mut() {
-                if let Some(preset_obj) = preset.as_object_mut() {
-                    let preset_id = preset_obj.get("id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    
-                    let is_selected = user_config.selected_preset.as_deref() == Some(preset_id);
-                    preset_obj.insert("is_selected".to_string(), serde_json::json!(is_selected));
-                }
-            }
-        }
-        
-        Ok(result)
-    }
-    
-    /// 保存用户选择的预设
-    pub fn save_selected_preset(project_root: &Path, preset_id: &str) -> Result<(), String> {
-        let mut user_config = UserMirrorConfig::load(project_root)?;
-        user_config.selected_preset = Some(preset_id.to_string());
-        user_config.save(project_root)
+        // 保存为用户自定义配置
+        Self::save_user_category(project_root, category_id, selected_value, None)
     }
     
     /// 保存用户自定义的单个类别配置
@@ -237,6 +246,7 @@ impl MirrorConfigManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tempfile::TempDir;
     
     fn create_test_project() -> (TempDir, PathBuf) {
@@ -251,8 +261,11 @@ mod tests {
         assert!(config.is_ok());
         
         let config = config.unwrap();
-        assert!(config.get("presets").is_some());
-        assert!(config.get("categories").is_some());
+        assert!(config.get("docker_registry").is_some());
+        assert!(config.get("apt").is_some());
+        assert!(config.get("composer").is_some());
+        assert!(config.get("npm").is_some());
+        assert!(config.get("github_proxy").is_some());
     }
     
     #[test]
@@ -260,7 +273,6 @@ mod tests {
         let (_dir, path) = create_test_project();
         
         let mut user_config = UserMirrorConfig::default();
-        user_config.selected_preset = Some("aliyun".to_string());
         
         let category = UserMirrorCategory {
             source: "https://custom.mirror.com".to_string(),
@@ -272,8 +284,11 @@ mod tests {
         user_config.save(&path).expect("保存配置失败");
         
         let loaded = UserMirrorConfig::load(&path).expect("加载配置失败");
-        assert_eq!(loaded.selected_preset, Some("aliyun".to_string()));
         assert!(loaded.has_user_override("npm"));
+        assert_eq!(
+            loaded.get_category("npm").unwrap().source,
+            "https://custom.mirror.com"
+        );
     }
     
     #[test]

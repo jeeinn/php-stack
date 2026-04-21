@@ -3,12 +3,11 @@ import { ref, computed, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { ServiceEntry, EnvConfig } from '../types/env-config';
 
-// Available versions (filtered based on official PHP support status)
-// Include: legacy versions (5.6, 7.4) and all actively supported versions (8.0-8.5)
-const phpVersions = ref(['5.6', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5']);
-const mysqlVersions = ref(['5.7', '8.0', '8.4']);
-const redisVersions = ref(['6.2-alpine', '7.0-alpine', '7.2-alpine']);
-const nginxVersions = ref(['1.24-alpine', '1.25-alpine', '1.26-alpine', '1.27-alpine']);
+// Available versions (将从后端动态加载)
+const phpVersions = ref<string[]>([]);
+const mysqlVersions = ref<string[]>([]);
+const redisVersions = ref<string[]>([]);
+const nginxVersions = ref<string[]>([]);
 
 const commonExtensions = [
   'pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache', 'bcmath',
@@ -46,8 +45,43 @@ const phpContainerName = ref('');
 
 // Load existing config on mount
 onMounted(async () => {
+  await loadVersionMappings();
   await loadExistingConfig();
 });
+
+// 从后端加载版本映射
+async function loadVersionMappings() {
+  console.log('[EnvConfig] 开始加载版本映射...');
+  try {
+    const mappings = await invoke<any>('get_version_mappings');
+    console.log('[EnvConfig] 版本映射:', mappings);
+    
+    // 提取版本号列表
+    if (mappings.php) {
+      phpVersions.value = mappings.php.map((v: any) => v.version);
+      console.log('[EnvConfig] PHP 版本:', phpVersions.value);
+    }
+    if (mappings.mysql) {
+      mysqlVersions.value = mappings.mysql.map((v: any) => v.version);
+      console.log('[EnvConfig] MySQL 版本:', mysqlVersions.value);
+    }
+    if (mappings.redis) {
+      redisVersions.value = mappings.redis.map((v: any) => v.tag); // Redis 使用 tag
+      console.log('[EnvConfig] Redis 版本:', redisVersions.value);
+    }
+    if (mappings.nginx) {
+      nginxVersions.value = mappings.nginx.map((v: any) => v.tag); // Nginx 使用 tag
+      console.log('[EnvConfig] Nginx 版本:', nginxVersions.value);
+    }
+  } catch (e) {
+    console.error('[EnvConfig] 加载版本映射失败:', e);
+    // 使用默认值作为后备
+    phpVersions.value = ['5.6', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'];
+    mysqlVersions.value = ['5.7', '8.0', '8.4'];
+    redisVersions.value = ['6.2-alpine', '7.0-alpine', '7.2-alpine'];
+    nginxVersions.value = ['1.24-alpine', '1.25-alpine', '1.26-alpine', '1.27-alpine'];
+  }
+}
 
 // 辅助函数：确保版本在列表中，如果不存在则添加
 function ensureVersionInList(versions: string[], version: string): void {

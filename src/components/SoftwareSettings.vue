@@ -174,9 +174,9 @@ onMounted(() => {
     </div>
 
     <!-- Content -->
-    <div v-else-if="versionMappings" class="flex-1 flex flex-col">
+    <div v-else-if="versionMappings" class="flex-1 flex flex-col min-h-0">
       <!-- Service Tabs -->
-      <div class="flex gap-2 mb-6 border-b border-slate-700 pb-2">
+      <div class="flex gap-2 mb-4 border-b border-slate-700 pb-2 flex-shrink-0">
         <button
           v-for="(label, service) in serviceLabels"
           :key="service"
@@ -193,17 +193,17 @@ onMounted(() => {
       </div>
 
       <!-- Version Table -->
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto min-h-0">
         <table class="w-full text-left border-collapse">
-          <thead>
+          <thead class="sticky top-0 bg-slate-900 z-10">
             <tr class="border-b border-slate-700">
-              <th class="pb-3 px-2 text-slate-400 font-medium">应用名称</th>
-              <th class="pb-3 px-2 text-slate-400 font-medium">版本号</th>
-              <th class="pb-3 px-2 text-slate-400 font-medium">Docker 镜像标签</th>
-              <th class="pb-3 px-2 text-slate-400 font-medium">完整镜像名</th>
-              <th class="pb-3 px-2 text-slate-400 font-medium">状态</th>
-              <th class="pb-3 px-2 text-slate-400 font-medium">备注</th>
-              <th class="pb-3 px-2 text-slate-400 font-medium">操作</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">应用名称</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">版本号</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">Docker 镜像标签</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">完整镜像名</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">状态</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">备注</th>
+              <th class="pb-3 px-2 text-slate-400 font-medium whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>

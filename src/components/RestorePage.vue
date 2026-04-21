@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import type { RestorePreview, RestoreProgress, PortConflict } from '../types/env-config';
+import { showToast } from '../composables/useToast';
 
 const zipPath = ref('');
 const preview = ref<RestorePreview | null>(null);
@@ -11,8 +12,6 @@ const verified = ref<boolean | null>(null);
 const restoring = ref(false);
 const loading = ref(false);
 const progress = ref<RestoreProgress | null>(null);
-const error = ref<string | null>(null);
-const successMsg = ref<string | null>(null);
 
 // Port overrides for conflicts
 const portOverrides = ref<Record<string, number>>({});
@@ -40,8 +39,6 @@ async function selectFile() {
     zipPath.value = selected as string;
     preview.value = null;
     verified.value = null;
-    error.value = null;
-    successMsg.value = null;
     portOverrides.value = {};
   }
 }
@@ -49,7 +46,6 @@ async function selectFile() {
 async function handlePreview() {
   if (!zipPath.value) return;
   loading.value = true;
-  error.value = null;
   try {
     preview.value = await invoke<RestorePreview>('preview_restore', { zipPath: zipPath.value });
     // Initialize port overrides from conflicts
@@ -59,7 +55,7 @@ async function handlePreview() {
       }
     }
   } catch (e) {
-    error.value = e as string;
+    showToast(e as string, 'error');
   } finally {
     loading.value = false;
   }
@@ -68,11 +64,10 @@ async function handlePreview() {
 async function handleVerify() {
   if (!zipPath.value) return;
   loading.value = true;
-  error.value = null;
   try {
     verified.value = await invoke<boolean>('verify_backup', { zipPath: zipPath.value });
   } catch (e) {
-    error.value = e as string;
+    showToast(e as string, 'error');
     verified.value = false;
   } finally {
     loading.value = false;
@@ -82,8 +77,6 @@ async function handleVerify() {
 async function handleRestore() {
   if (!zipPath.value) return;
   restoring.value = true;
-  error.value = null;
-  successMsg.value = null;
   progress.value = { step: '准备中...', percentage: 0 };
 
   try {
@@ -91,10 +84,10 @@ async function handleRestore() {
       zipPath: zipPath.value,
       portOverrides: portOverrides.value,
     });
-    successMsg.value = '环境恢复成功！';
+    showToast('环境恢复成功！', 'success');
     progress.value = { step: '完成', percentage: 100 };
   } catch (e) {
-    error.value = e as string;
+    showToast(e as string, 'error');
   } finally {
     restoring.value = false;
   }
@@ -121,14 +114,6 @@ function formatTimestamp(ts: string): string {
       <h1 class="text-3xl font-bold">环境恢复</h1>
       <p class="text-slate-400 text-sm mt-1">从备份包恢复完整开发环境</p>
     </header>
-
-    <!-- Messages -->
-    <div v-if="error" class="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
-      <pre class="whitespace-pre-wrap">{{ error }}</pre>
-    </div>
-    <div v-if="successMsg" class="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm">
-      {{ successMsg }}
-    </div>
 
     <div class="flex-1 overflow-y-auto pr-2 space-y-6">
       <!-- File Selection -->

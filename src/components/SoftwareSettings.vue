@@ -2,11 +2,11 @@
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { VersionMappings, VersionInfo, ServiceType } from '../types/version-mapping';
+import { showToast } from '../composables/useToast';
+import { showConfirm } from '../composables/useConfirmDialog';
 
 const versionMappings = ref<VersionMappings | null>(null);
 const loading = ref(false);
-const error = ref<string | null>(null);
-const successMsg = ref<string | null>(null);
 const selectedService = ref<ServiceType>('mysql');
 
 // 编辑对话框状态
@@ -26,14 +26,13 @@ const serviceLabels: Record<ServiceType, string> = {
 // 加载版本映射数据
 async function loadVersionMappings() {
   loading.value = true;
-  error.value = null;
   
   try {
     const data = await invoke<VersionMappings>('get_version_mappings');
     // 标记有用户覆盖的版本
     versionMappings.value = data;
   } catch (e) {
-    error.value = `加载版本映射失败: ${e}`;
+    showToast(`加载版本映射失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -49,10 +48,9 @@ function getCurrentVersions(): VersionInfo[] {
 async function copyImageName(fullName: string) {
   try {
     await navigator.clipboard.writeText(fullName);
-    successMsg.value = '已复制到剪贴板！';
-    setTimeout(() => { successMsg.value = null; }, 2000);
+    showToast('已复制到剪贴板！', 'success');
   } catch (e) {
-    error.value = '复制失败';
+    showToast('复制失败', 'error');
   }
 }
 
@@ -69,7 +67,6 @@ async function saveOverride() {
   if (!editingVersion.value) return;
   
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('save_user_override', {
@@ -79,14 +76,14 @@ async function saveOverride() {
       description: editDescription.value || undefined
     });
     
-    successMsg.value = '保存成功！重新应用配置后生效。';
+    showToast('保存成功！重新应用配置后生效。', 'success');
     showEditDialog.value = false;
     editingVersion.value = null;
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    error.value = `保存失败: ${e}`;
+    showToast(`保存失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -94,10 +91,16 @@ async function saveOverride() {
 
 // 删除用户覆盖
 async function removeOverride(version: VersionInfo) {
-  if (!confirm(`确定要删除 ${version.version} 的自定义配置吗？`)) return;
+  const confirmed = await showConfirm({
+    title: '删除确认',
+    message: `确定要删除 ${version.version} 的自定义配置吗？`,
+    confirmText: '删除',
+    type: 'danger'
+  });
+  
+  if (!confirmed) return;
   
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('remove_user_override', {
@@ -105,12 +108,12 @@ async function removeOverride(version: VersionInfo) {
       version: version.version
     });
     
-    successMsg.value = '已恢复为默认配置';
+    showToast('已恢复为默认配置', 'success');
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    error.value = `删除失败: ${e}`;
+    showToast(`删除失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -118,20 +121,26 @@ async function removeOverride(version: VersionInfo) {
 
 // 重置所有覆盖
 async function resetAllOverrides() {
-  if (!confirm('确定要重置所有自定义配置吗？此操作不可撤销。')) return;
+  const confirmed = await showConfirm({
+    title: '重置所有自定义',
+    message: '确定要重置所有自定义配置吗？此操作不可撤销。',
+    confirmText: '重置',
+    type: 'danger'
+  });
+  
+  if (!confirmed) return;
   
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('reset_all_overrides');
     
-    successMsg.value = '已重置所有自定义配置';
+    showToast('已重置所有自定义配置', 'success');
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    error.value = `重置失败: ${e}`;
+    showToast(`重置失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -156,14 +165,6 @@ onMounted(() => {
         🔄 重置所有自定义
       </button>
     </header>
-
-    <!-- Error / Success Alert -->
-    <div v-if="error" class="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
-      {{ error }}
-    </div>
-    <div v-if="successMsg" class="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
-      {{ successMsg }}
-    </div>
 
     <!-- Loading State -->
     <div v-if="loading" class="flex-1 flex items-center justify-center">

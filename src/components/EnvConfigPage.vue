@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { ServiceEntry, EnvConfig, VersionInfo } from '../types/env-config';
+import { showToast } from '../composables/useToast';
+import { showConfirm } from '../composables/useConfirmDialog';
 
 // Available versions (将从后端动态加载)
 const phpVersions = ref<VersionInfo[]>([]);
@@ -27,21 +29,13 @@ const timezone = ref('Asia/Shanghai');
 const loading = ref(false);
 const applying = ref(false);
 const starting = ref(false);
-const error = ref<string | null>(null);
-const successMsg = ref<string | null>(null);
 const previewEnv = ref('');
 const previewCompose = ref('');
 const showPreviewModal = ref(false);
 
-// 确认对话框状态
-const showConfirmDialog = ref(false);
-const confirmMessage = ref('');
-const confirmTitle = ref('');
-const confirmResolve = ref<((value: boolean) => void) | null>(null);
-
 // Nginx 配置提示状态
 const showNginxHint = ref(false);
-const phpContainerName = ref('');
+const phpContainerNames = ref<string[]>([]);
 
 // Load existing config on mount
 onMounted(async () => {
@@ -175,6 +169,11 @@ function formatErrorMessage(error: any): string {
   
   // 默认错误
   return `❌ 操作失败\n\n${errorMsg}`;
+}
+
+// 显示错误消息
+function showError(message: string) {
+  showToast(message, 'error', 5000); // 错误消息显示时间更长
 }
 
 async function loadExistingConfig() {
@@ -398,12 +397,10 @@ function toggleExtension(phpIndex: number, ext: string) {
 // Preview
 async function handlePreview() {
   if (portConflicts.value.length > 0) {
-    error.value = portConflicts.value.join('\n');
+    showError(portConflicts.value.join('\n'));
     return;
   }
   loading.value = true;
-  error.value = null;
-  successMsg.value = null;
   try {
     const config = buildConfig();
     const [envContent, composeContent] = await Promise.all([
@@ -414,35 +411,16 @@ async function handlePreview() {
     previewCompose.value = composeContent;
     showPreviewModal.value = true;
   } catch (e) {
-    error.value = formatErrorMessage(e);
+    showError(formatErrorMessage(e));
   } finally {
     loading.value = false;
-  }
-}
-
-// 显示确认对话框（Promise 封装）
-function showConfirmDialogFn(title: string, message: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    confirmTitle.value = title;
-    confirmMessage.value = message;
-    confirmResolve.value = resolve;
-    showConfirmDialog.value = true;
-  });
-}
-
-// 处理确认对话框按钮
-function handleConfirmDialog(result: boolean) {
-  showConfirmDialog.value = false;
-  if (confirmResolve.value) {
-    confirmResolve.value(result);
-    confirmResolve.value = null;
   }
 }
 
 // Apply
 async function handleApply() {
   if (portConflicts.value.length > 0) {
-    error.value = portConflicts.value.join('\n');
+    showError(portConflicts.value.join('\n'));
     return;
   }
   
@@ -452,10 +430,12 @@ async function handleApply() {
     if (existingFiles.length > 0) {
       // 有文件存在，显示确认对话框
       const fileList = existingFiles.map(f => `• ${f}`).join('\n');
-      const confirmed = await showConfirmDialogFn(
-        '配置文件已存在',
-        `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`
-      );
+      const confirmed = await showConfirm({
+        title: '配置文件已存在',
+        message: `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`,
+        confirmText: '覆盖',
+        type: 'warning'
+      });
       if (!confirmed) {
         return; // 用户取消
       }
@@ -466,17 +446,19 @@ async function handleApply() {
   }
   
   applying.value = true;
-  error.value = null;
-  successMsg.value = null;
   showNginxHint.value = false;
   try {
     const config = buildConfig();
     await invoke('apply_env_config', { config });
     
     // 显示成功消息
-    successMsg.value = import.meta.env.DEV 
-      ? '配置已成功应用！配置文件已生成在项目根目录。' 
-      : '配置已成功应用！配置文件已生成在程序所在目录。';
+    showToast(
+      import.meta.env.DEV 
+        ? '配置已成功应用！配置文件已生成在项目根目录。' 
+        : '配置已成功应用！配置文件已生成在程序所在目录。',
+      'success',
+      4000
+    );
     showPreviewModal.value = false;
     
     // 检查是否同时启用了 PHP 和 Nginx
@@ -484,48 +466,39 @@ async function handleApply() {
     const hasNginx = nginxServices.value.length > 0;
     
     if (hasPHP && hasNginx) {
-      // 获取第一个 PHP 服务的容器名称
-      const firstPHP = phpServices.value[0];
-      const ver = firstPHP.version.replace(/\./g, '');
-      phpContainerName.value = `ps-php${ver}`;
+      // 获取所有 PHP 服务的容器地址（容器名:端口）
+      phpContainerNames.value = phpServices.value.map(service => {
+        const ver = service.version.replace(/\./g, '');
+        return `ps-php${ver}:9000`;
+      });
       showNginxHint.value = true;
     }
   } catch (e) {
-    error.value = formatErrorMessage(e);
+    showError(formatErrorMessage(e));
   } finally {
     applying.value = false;
   }
 }
 
-// 复制 Nginx 配置
-async function copyNginxConfig() {
-  const config = `location ~ \.php$ {
-    fastcgi_pass ${phpContainerName.value}:9000;
-    fastcgi_index index.php;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-    include fastcgi_params;
-}`;
-  
+// 打开 Nginx 配置目录
+async function openNginxConfigDir() {
   try {
-    await navigator.clipboard.writeText(config);
-    successMsg.value = 'Nginx 配置已复制到剪贴板！';
-    setTimeout(() => { successMsg.value = null; }, 3000);
+    await invoke('open_service_config', { serviceName: 'nginx127' });
+    showToast('已打开 Nginx 配置目录', 'success');
   } catch (e) {
-    console.error('复制失败:', e);
-    error.value = '复制失败，请手动配置';
+    console.error('打开目录失败:', e);
+    showToast('打开目录失败，请手动打开 services/nginx127/conf.d/', 'error');
   }
 }
 
 // Start environment
 async function handleStart() {
   starting.value = true;
-  error.value = null;
-  successMsg.value = null;
   try {
     const result = await invoke<string>('start_environment');
-    successMsg.value = '环境启动成功！\n' + result;
+    showToast('环境启动成功！\n' + result, 'success', 5000);
   } catch (e) {
-    error.value = formatErrorMessage(e);
+    showError(formatErrorMessage(e));
   } finally {
     starting.value = false;
   }
@@ -563,14 +536,6 @@ async function handleStart() {
         </button>
       </div>
     </header>
-
-    <!-- Error / Success Alert -->
-    <div v-if="error" class="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
-      <pre class="whitespace-pre-wrap">{{ error }}</pre>
-    </div>
-    <div v-if="successMsg" class="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
-      <pre class="whitespace-pre-wrap">{{ successMsg }}</pre>
-    </div>
     
     <!-- Nginx 配置提示 -->
     <div v-if="showNginxHint" class="mb-4 p-5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
@@ -587,28 +552,33 @@ async function handleStart() {
           </p>
           
           <div class="bg-slate-900 rounded-lg p-3 mb-3 border border-slate-700">
-            <p class="text-xs text-slate-400 mb-2">📌 当前 PHP 容器名称：</p>
-            <code class="text-sm text-emerald-400 font-mono">{{ phpContainerName }}</code>
+            <p class="text-xs text-slate-400 mb-2">📌 PHP 容器地址列表（用于 Nginx 配置）：</p>
+            <div class="space-y-1">
+              <div v-for="(name, index) in phpContainerNames" :key="index" class="flex items-center gap-2">
+                <span class="text-xs text-slate-500 font-mono">{{ index + 1 }}.</span>
+                <code class="text-sm text-emerald-400 font-mono">{{ name }}</code>
+              </div>
+            </div>
           </div>
           
           <div class="space-y-2 text-sm text-slate-300">
             <p><strong class="text-blue-300">配置步骤：</strong></p>
             <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-400">
-              <li>编辑文件：<code class="text-xs bg-slate-800 px-1 rounded">services/nginx/conf.d/default.conf</code></li>
+              <li>编辑文件：<code class="text-xs bg-slate-800 px-1 rounded">services/nginx127/conf.d/default.conf</code></li>
               <li>找到 <code class="text-xs bg-slate-800 px-1 rounded">fastcgi_pass</code> 行</li>
-              <li>修改为：<code class="text-xs bg-slate-800 px-1 rounded text-emerald-400">fastcgi_pass {{ phpContainerName }}:9000;</code></li>
+              <li>修改为：<code class="text-xs bg-slate-800 px-1 rounded text-emerald-400">fastcgi_pass [容器地址];</code>（选择上面的某个容器地址，如 <code class="text-emerald-400">ps-php85:9000</code>）</li>
             </ol>
           </div>
           
           <div class="mt-4 flex gap-2">
             <button
-              @click="copyNginxConfig"
+              @click="openNginxConfigDir"
               class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition flex items-center gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
               </svg>
-              复制配置代码
+              打开配置目录
             </button>
             <button
               @click="showNginxHint = false"
@@ -819,42 +789,6 @@ async function handleStart() {
           </button>
           <button @click="handleApply" :disabled="applying" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50">
             {{ applying ? '应用中...' : '应用配置' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 确认对话框 -->
-    <div v-if="showConfirmDialog" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
-        <!-- 标题栏 -->
-        <div class="p-6 border-b border-slate-800">
-          <div class="flex items-start gap-3">
-            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div class="flex-1">
-              <h3 class="text-lg font-semibold text-slate-100">{{ confirmTitle }}</h3>
-              <p class="mt-2 text-sm text-slate-400 whitespace-pre-line">{{ confirmMessage }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 按钮栏 -->
-        <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
-          <button 
-            @click="handleConfirmDialog(false)" 
-            class="px-5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition text-slate-300"
-          >
-            取消
-          </button>
-          <button 
-            @click="handleConfirmDialog(true)" 
-            class="px-5 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition text-white"
-          >
-            覆盖
           </button>
         </div>
       </div>

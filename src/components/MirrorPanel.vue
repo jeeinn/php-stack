@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { MergedMirrorCategory, MirrorSourceOption } from '../types/env-config';
+import { showToast } from '../composables/useToast';
+import { showConfirm } from '../composables/useConfirmDialog';
 
 const categories = ref<MergedMirrorCategory[]>([]);
 const loading = ref(false);
-const error = ref<string | null>(null);
-const successMsg = ref<string | null>(null);
+const applying = ref(false); // 专门用于"应用配置"按钮的 loading
 const selectedCategory = ref('docker_registry');
+const testingOptions = ref<Set<string>>(new Set()); // 跟踪正在测试的选项
 
 // 类别标签映射
 const categoryLabels: Record<string, string> = {
@@ -28,13 +30,12 @@ const isCustomEdit = ref(false);
 // 加载镜像源列表
 async function loadMirrorList() {
   loading.value = true;
-  error.value = null;
   
   try {
     const data = await invoke<MergedMirrorCategory[]>('get_merged_mirror_list');
     categories.value = data;
   } catch (e) {
-    error.value = `加载镜像源列表失败: ${e}`;
+    showToast(`加载镜像源列表失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -50,26 +51,32 @@ function getCurrentOptions(): MirrorSourceOption[] {
 async function testConnection(option: MirrorSourceOption) {
   if (!option.value) return;
   
-  loading.value = true;
+  const optionKey = `${selectedCategory.value}-${option.id}`;
+  testingOptions.value.add(optionKey);
+  
   try {
     const result = await invoke<boolean>('test_mirror', { url: option.value });
     if (result) {
-      successMsg.value = `✅ ${option.name} 连接成功！`;
+      showToast(`✅ ${option.name} 连接成功！`, 'success');
     } else {
-      error.value = `❌ ${option.name} 连接失败，请检查网络或镜像源地址`;
+      showToast(`❌ ${option.name} 连接失败，请检查网络或镜像源地址`, 'error');
     }
-    setTimeout(() => { successMsg.value = null; error.value = null; }, 3000);
   } catch (e) {
-    error.value = `测试失败: ${e}`;
+    showToast(`测试失败: ${e}`, 'error');
   } finally {
-    loading.value = false;
+    testingOptions.value.delete(optionKey);
   }
+}
+
+// 检查选项是否正在测试
+function isTesting(option: MirrorSourceOption): boolean {
+  const optionKey = `${selectedCategory.value}-${option.id}`;
+  return testingOptions.value.has(optionKey);
 }
 
 // 选择镜像源
 async function selectMirror(option: MirrorSourceOption) {
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('save_selected_mirror_option', {
@@ -77,13 +84,12 @@ async function selectMirror(option: MirrorSourceOption) {
       optionId: option.id
     });
     
-    successMsg.value = `已选择 ${option.name}`;
-    setTimeout(() => { successMsg.value = null; }, 2000);
+    showToast(`已选择 ${option.name}`, 'success');
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    error.value = `保存失败: ${e}`;
+    showToast(`保存失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -110,12 +116,11 @@ function openEditDialog(option: MirrorSourceOption) {
 // 保存自定义镜像源
 async function saveCustomMirror() {
   if (!editValue.value.trim()) {
-    error.value = '请输入镜像源地址';
+    showToast('请输入镜像源地址', 'warning');
     return;
   }
   
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('save_user_mirror_category', {
@@ -124,13 +129,13 @@ async function saveCustomMirror() {
       description: editDescription.value || undefined
     });
     
-    successMsg.value = '自定义镜像源已保存！';
+    showToast('自定义镜像源已保存！', 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    error.value = `保存失败: ${e}`;
+    showToast(`保存失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -138,23 +143,29 @@ async function saveCustomMirror() {
 
 // 删除自定义镜像源
 async function removeCustomMirror() {
-  if (!confirm(`确定要删除自定义镜像源吗？`)) return;
+  const confirmed = await showConfirm({
+    title: '删除确认',
+    message: '确定要删除自定义镜像源吗？',
+    confirmText: '删除',
+    type: 'danger'
+  });
+  
+  if (!confirmed) return;
   
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('remove_user_mirror_category', {
       categoryId: selectedCategory.value
     });
     
-    successMsg.value = '已恢复为默认配置';
+    showToast('已恢复为默认配置', 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    error.value = `删除失败: ${e}`;
+    showToast(`删除失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -162,20 +173,26 @@ async function removeCustomMirror() {
 
 // 重置所有自定义
 async function resetAllOverrides() {
-  if (!confirm('确定要重置所有自定义镜像源配置吗？此操作不可撤销。')) return;
+  const confirmed = await showConfirm({
+    title: '重置所有自定义',
+    message: '确定要重置所有自定义镜像源配置吗？此操作不可撤销。',
+    confirmText: '重置',
+    type: 'danger'
+  });
+  
+  if (!confirmed) return;
   
   loading.value = true;
-  error.value = null;
   
   try {
     await invoke('reset_all_mirror_overrides');
     
-    successMsg.value = '已重置所有自定义配置';
+    showToast('已重置所有自定义配置', 'success');
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    error.value = `重置失败: ${e}`;
+    showToast(`重置失败: ${e}`, 'error');
   } finally {
     loading.value = false;
   }
@@ -183,8 +200,7 @@ async function resetAllOverrides() {
 
 // 应用配置（更新 .env）
 async function applyConfig() {
-  loading.value = true;
-  error.value = null;
+  applying.value = true;
   
   try {
     for (const category of categories.value) {
@@ -194,12 +210,11 @@ async function applyConfig() {
       });
     }
     
-    successMsg.value = '镜像源配置已应用到 .env 文件！';
-    setTimeout(() => { successMsg.value = null; }, 3000);
+    showToast('镜像源配置已应用到 .env 文件！', 'success');
   } catch (e) {
-    error.value = `应用配置失败: ${e}`;
+    showToast(`应用配置失败: ${e}`, 'error');
   } finally {
-    loading.value = false;
+    applying.value = false;
   }
 }
 
@@ -207,10 +222,9 @@ async function applyConfig() {
 async function copyUrl(url: string) {
   try {
     await navigator.clipboard.writeText(url);
-    successMsg.value = '已复制到剪贴板！';
-    setTimeout(() => { successMsg.value = null; }, 2000);
+    showToast('已复制到剪贴板！', 'success');
   } catch (e) {
-    error.value = '复制失败';
+    showToast('复制失败', 'error');
   }
 }
 
@@ -235,21 +249,13 @@ onMounted(() => {
         </button>
         <button
           @click="applyConfig"
-          :disabled="loading"
+          :disabled="applying"
           class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50 text-sm"
         >
-          {{ loading ? '应用中...' : '应用配置' }}
+          {{ applying ? '应用中...' : '应用配置' }}
         </button>
       </div>
     </header>
-
-    <!-- Error / Success Alert -->
-    <div v-if="error" class="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
-      {{ error }}
-    </div>
-    <div v-if="successMsg" class="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm">
-      {{ successMsg }}
-    </div>
 
     <!-- Loading State -->
     <div v-if="loading && categories.length === 0" class="flex-1 flex items-center justify-center">
@@ -366,10 +372,12 @@ onMounted(() => {
                     <button
                       v-if="option.value"
                       @click="testConnection(option)"
-                      class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition whitespace-nowrap"
+                      :disabled="isTesting(option)"
+                      class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                       title="测试连接"
                     >
-                      测试
+                      <span v-if="isTesting(option)" class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-white"></span>
+                      {{ isTesting(option) ? '测试中...' : '测试' }}
                     </button>
                     <button
                       @click="copyUrl(option.value)"

@@ -6,6 +6,8 @@ import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
 import BackupPage from './components/BackupPage.vue';
 import RestorePage from './components/RestorePage.vue';
+import Toast from './components/Toast.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 
 interface Container {
   id: String;
@@ -369,6 +371,12 @@ onMounted(() => {
         </transition>
       </div>
     </div>
+
+    <!-- Global Toast -->
+    <Toast />
+    
+    <!-- Global Confirm Dialog -->
+    <ConfirmDialog />
   </div>
 </template>
 

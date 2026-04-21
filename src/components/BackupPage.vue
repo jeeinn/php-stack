@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import type { BackupOptions, BackupProgress } from '../types/env-config';
+import { showToast } from '../composables/useToast';
 
 const options = ref<BackupOptions>({
   include_database: false,
@@ -16,8 +17,6 @@ const options = ref<BackupOptions>({
 const projectPatternsText = ref('.env\nsrc/config/*.php');
 const backing = ref(false);
 const progress = ref<BackupProgress | null>(null);
-const error = ref<string | null>(null);
-const successMsg = ref<string | null>(null);
 
 // Listen for backup progress events
 let unlisten: (() => void) | null = null;
@@ -34,9 +33,6 @@ onUnmounted(() => {
 });
 
 async function handleBackup() {
-  error.value = null;
-  successMsg.value = null;
-
   // Select save path
   const savePath = await save({
     filters: [{ name: 'PHP-Stack Backup', extensions: ['zip'] }],
@@ -58,10 +54,10 @@ async function handleBackup() {
     };
 
     await invoke('create_backup', { savePath, options: backupOptions });
-    successMsg.value = `备份已成功创建：${savePath}`;
+    showToast(`备份已成功创建：${savePath}`, 'success');
     progress.value = { step: '完成', percentage: 100 };
   } catch (e) {
-    error.value = e as string;
+    showToast(e as string, 'error');
   } finally {
     backing.value = false;
   }
@@ -74,14 +70,6 @@ async function handleBackup() {
       <h1 class="text-3xl font-bold">环境备份</h1>
       <p class="text-slate-400 text-sm mt-1">一键导出当前开发环境的完整备份</p>
     </header>
-
-    <!-- Messages -->
-    <div v-if="error" class="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
-      {{ error }}
-    </div>
-    <div v-if="successMsg" class="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm">
-      {{ successMsg }}
-    </div>
 
     <div class="flex-1 overflow-y-auto pr-2 space-y-6">
       <!-- Backup Options -->

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import type { ServiceEntry, EnvConfig } from '../types/env-config';
+import type { ServiceEntry, EnvConfig, VersionInfo } from '../types/env-config';
 
 // Available versions (将从后端动态加载)
-const phpVersions = ref<string[]>([]);
-const mysqlVersions = ref<string[]>([]);
-const redisVersions = ref<string[]>([]);
-const nginxVersions = ref<string[]>([]);
+const phpVersions = ref<VersionInfo[]>([]);
+const mysqlVersions = ref<VersionInfo[]>([]);
+const redisVersions = ref<VersionInfo[]>([]);
+const nginxVersions = ref<VersionInfo[]>([]);
 
 const commonExtensions = [
   'pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache', 'bcmath',
@@ -56,39 +56,89 @@ async function loadVersionMappings() {
     const mappings = await invoke<any>('get_version_mappings');
     console.log('[EnvConfig] 版本映射:', mappings);
     
-    // 提取版本号列表
+    // 提取版本信息列表（包含 version、tag、full_name 等完整信息）
     if (mappings.php) {
-      phpVersions.value = mappings.php.map((v: any) => v.version);
+      phpVersions.value = mappings.php;
       console.log('[EnvConfig] PHP 版本:', phpVersions.value);
     }
     if (mappings.mysql) {
-      mysqlVersions.value = mappings.mysql.map((v: any) => v.version);
+      mysqlVersions.value = mappings.mysql;
       console.log('[EnvConfig] MySQL 版本:', mysqlVersions.value);
     }
     if (mappings.redis) {
-      redisVersions.value = mappings.redis.map((v: any) => v.tag); // Redis 使用 tag
+      redisVersions.value = mappings.redis;
       console.log('[EnvConfig] Redis 版本:', redisVersions.value);
     }
     if (mappings.nginx) {
-      nginxVersions.value = mappings.nginx.map((v: any) => v.tag); // Nginx 使用 tag
+      nginxVersions.value = mappings.nginx;
       console.log('[EnvConfig] Nginx 版本:', nginxVersions.value);
     }
   } catch (e) {
     console.error('[EnvConfig] 加载版本映射失败:', e);
     // 使用默认值作为后备
-    phpVersions.value = ['5.6', '7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'];
-    mysqlVersions.value = ['5.7', '8.0', '8.4'];
-    redisVersions.value = ['6.2-alpine', '7.0-alpine', '7.2-alpine'];
-    nginxVersions.value = ['1.24-alpine', '1.25-alpine', '1.26-alpine', '1.27-alpine'];
+    phpVersions.value = [
+      { version: '5.6', tag: '5.6-fpm', full_name: 'php:5.6-fpm', eol: true },
+      { version: '7.4', tag: '7.4-fpm', full_name: 'php:7.4-fpm', eol: true },
+      { version: '8.0', tag: '8.0-fpm', full_name: 'php:8.0-fpm', eol: true },
+      { version: '8.1', tag: '8.1-fpm', full_name: 'php:8.1-fpm', eol: false },
+      { version: '8.2', tag: '8.2-fpm', full_name: 'php:8.2-fpm', eol: false },
+      { version: '8.3', tag: '8.3-fpm', full_name: 'php:8.3-fpm', eol: false },
+      { version: '8.4', tag: '8.4-fpm', full_name: 'php:8.4-fpm', eol: false },
+    ];
+    mysqlVersions.value = [
+      { version: '5.7', tag: '5.7', full_name: 'mysql:5.7', eol: true },
+      { version: '8.0', tag: '8.0', full_name: 'mysql:8.0', eol: false },
+      { version: '8.4', tag: '8.4', full_name: 'mysql:8.4', eol: false },
+    ];
+    redisVersions.value = [
+      { version: '6.2', tag: '6.2-alpine', full_name: 'redis:6.2-alpine', eol: true },
+      { version: '7.0', tag: '7.0-alpine', full_name: 'redis:7.0-alpine', eol: false },
+      { version: '7.2', tag: '7.2-alpine', full_name: 'redis:7.2-alpine', eol: false },
+      { version: '8.2', tag: '8.2-alpine', full_name: 'redis:8.2-alpine', eol: false },
+    ];
+    nginxVersions.value = [
+      { version: '1.24', tag: '1.24-alpine', full_name: 'nginx:1.24-alpine', eol: true },
+      { version: '1.25', tag: '1.25-alpine', full_name: 'nginx:1.25-alpine', eol: false },
+      { version: '1.27', tag: '1.27-alpine', full_name: 'nginx:1.27-alpine', eol: false },
+    ];
   }
 }
 
 // 辅助函数：确保版本在列表中，如果不存在则添加
-function ensureVersionInList(versions: string[], version: string): void {
-  if (!versions.includes(version)) {
-    versions.push(version);
-    console.log(`[EnvConfig] 动态添加版本到列表: ${version}`);
+function ensureVersionInList(versions: VersionInfo[], version: string): void {
+  if (!versions.find(v => v.version === version)) {
+    // 从其他列表中查找或创建默认项
+    const existing = [...phpVersions.value, ...mysqlVersions.value, ...redisVersions.value, ...nginxVersions.value]
+      .find(v => v.version === version);
+    if (existing) {
+      versions.push(existing);
+      console.log(`[EnvConfig] 动态添加版本到列表: ${version}`);
+    }
   }
+}
+
+// 辅助函数：获取 Redis 镜像标签
+function getRedisImageTag(version: string): string {
+  const info = redisVersions.value.find(v => v.version === version);
+  return info ? info.full_name : `redis:${version}`;
+}
+
+// 辅助函数：获取 Nginx 镜像标签
+function getNginxImageTag(version: string): string {
+  const info = nginxVersions.value.find(v => v.version === version);
+  return info ? info.full_name : `nginx:${version}`;
+}
+
+// 辅助函数：获取 PHP 镜像标签
+function getPhpImageTag(version: string): string {
+  const info = phpVersions.value.find(v => v.version === version);
+  return info ? info.full_name : `php:${version}-fpm`;
+}
+
+// 辅助函数：获取 MySQL 镜像标签
+function getMysqlImageTag(version: string): string {
+  const info = mysqlVersions.value.find(v => v.version === version);
+  return info ? info.full_name : `mysql:${version}`;
 }
 
 // 错误信息格式化
@@ -270,11 +320,11 @@ function buildConfig(): EnvConfig {
 // Add PHP version
 function addPhpVersion() {
   const usedVersions = phpServices.value.map(s => s.version);
-  const available = phpVersions.value.filter(v => !usedVersions.includes(v));
+  const available = phpVersions.value.filter(v => !usedVersions.includes(v.version));
   if (available.length === 0) return;
   phpServices.value.push({
     service_type: 'PHP',
-    version: available[0],
+    version: available[0].version,
     host_port: 9000 + phpServices.value.length,
     extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'curl'],
   });
@@ -288,11 +338,11 @@ function removePhpVersion(index: number) {
 // Add MySQL version
 function addMysqlVersion() {
   const usedVersions = mysqlServices.value.map(s => s.version);
-  const available = mysqlVersions.value.filter(v => !usedVersions.includes(v));
+  const available = mysqlVersions.value.filter(v => !usedVersions.includes(v.version));
   if (available.length === 0) return;
   mysqlServices.value.push({
     service_type: 'MySQL',
-    version: available[0],
+    version: available[0].version,
     host_port: 3306 + mysqlServices.value.length,
   });
 }
@@ -305,11 +355,11 @@ function removeMysqlVersion(index: number) {
 // Add Redis version
 function addRedisVersion() {
   const usedVersions = redisServices.value.map(s => s.version);
-  const available = redisVersions.value.filter(v => !usedVersions.includes(v));
+  const available = redisVersions.value.filter(v => !usedVersions.includes(v.version));
   if (available.length === 0) return;
   redisServices.value.push({
     service_type: 'Redis',
-    version: available[0],
+    version: available[0].version,
     host_port: 6379 + redisServices.value.length,
   });
 }
@@ -321,11 +371,11 @@ function removeRedisVersion(index: number) {
 // Add Nginx version
 function addNginxVersion() {
   const usedVersions = nginxServices.value.map(s => s.version);
-  const available = nginxVersions.value.filter(v => !usedVersions.includes(v));
+  const available = nginxVersions.value.filter(v => !usedVersions.includes(v.version));
   if (available.length === 0) return;
   nginxServices.value.push({
     service_type: 'Nginx',
-    version: available[0],
+    version: available[0].version,
     host_port: 80 + nginxServices.value.length,
   });
 }
@@ -588,9 +638,15 @@ async function handleStart() {
         <div v-for="(php, idx) in phpServices" :key="idx" class="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <div class="flex items-center gap-4 mb-3">
             <div class="flex-1">
-              <label class="block text-xs text-slate-400 mb-1">PHP 版本</label>
+              <label class="block text-xs text-slate-400 mb-1">
+                PHP 版本
+                <span class="text-slate-500 ml-1">(将使用镜像: {{ getPhpImageTag(php.version) }})</span>
+              </label>
               <select v-model="php.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in phpVersions" :key="v" :value="v">PHP {{ v }}</option>
+                <option v-for="v in phpVersions" :key="v.version" :value="v.version">
+                  PHP {{ v.version }} → {{ v.tag }}
+                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
+                </option>
               </select>
             </div>
             <div class="w-32">
@@ -627,9 +683,15 @@ async function handleStart() {
         <div v-for="(mysql, idx) in mysqlServices" :key="idx" class="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <div class="flex items-center gap-4">
             <div class="flex-1">
-              <label class="block text-xs text-slate-400 mb-1">MySQL 版本</label>
+              <label class="block text-xs text-slate-400 mb-1">
+                MySQL 版本
+                <span class="text-slate-500 ml-1">(将使用镜像: {{ getMysqlImageTag(mysql.version) }})</span>
+              </label>
               <select v-model="mysql.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in mysqlVersions" :key="v" :value="v">MySQL {{ v }}</option>
+                <option v-for="v in mysqlVersions" :key="v.version" :value="v.version">
+                  MySQL {{ v.version }} → {{ v.tag }}
+                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
+                </option>
               </select>
             </div>
             <div class="w-32">
@@ -652,9 +714,15 @@ async function handleStart() {
         <div v-for="(redis, idx) in redisServices" :key="idx" class="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <div class="flex items-center gap-4">
             <div class="flex-1">
-              <label class="block text-xs text-slate-400 mb-1">Redis 版本</label>
+              <label class="block text-xs text-slate-400 mb-1">
+                Redis 版本
+                <span class="text-slate-500 ml-1">(将使用镜像: {{ getRedisImageTag(redis.version) }})</span>
+              </label>
               <select v-model="redis.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in redisVersions" :key="v" :value="v">Redis {{ v }}</option>
+                <option v-for="v in redisVersions" :key="v.version" :value="v.version">
+                  Redis {{ v.version }} → {{ v.tag }}
+                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
+                </option>
               </select>
             </div>
             <div class="w-32">
@@ -680,9 +748,15 @@ async function handleStart() {
         <div v-for="(nginx, idx) in nginxServices" :key="idx" class="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <div class="flex items-center gap-4">
             <div class="flex-1">
-              <label class="block text-xs text-slate-400 mb-1">Nginx 版本</label>
+              <label class="block text-xs text-slate-400 mb-1">
+                Nginx 版本
+                <span class="text-slate-500 ml-1">(将使用镜像: {{ getNginxImageTag(nginx.version) }})</span>
+              </label>
               <select v-model="nginx.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in nginxVersions" :key="v" :value="v">Nginx {{ v }}</option>
+                <option v-for="v in nginxVersions" :key="v.version" :value="v.version">
+                  Nginx {{ v.version }} → {{ v.tag }}
+                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
+                </option>
               </select>
             </div>
             <div class="w-32">

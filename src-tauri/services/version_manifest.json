@@ -1,34 +1,16 @@
 {
   "php": {
-    "5.6": {
+    "8.5": {
       "image": "php",
-      "tag": "5.6-fpm",
-      "eol": true,
-      "description": "PHP 5.6 (已停止维护)"
-    },
-    "7.4": {
-      "image": "php",
-      "tag": "7.4-fpm",
-      "eol": true,
-      "description": "PHP 7.4 (已停止维护)"
-    },
-    "8.0": {
-      "image": "php",
-      "tag": "8.0-fpm",
-      "eol": true,
-      "description": "PHP 8.0 (已停止维护)"
-    },
-    "8.1": {
-      "image": "php",
-      "tag": "8.1-fpm",
+      "tag": "8.5-fpm",
       "eol": false,
-      "description": "PHP 8.1 (安全支持至 2025-12)"
+      "description": "PHP 8.5 (最新开发版)"
     },
-    "8.2": {
+    "8.4": {
       "image": "php",
-      "tag": "8.2-fpm",
+      "tag": "8.4-fpm",
       "eol": false,
-      "description": "PHP 8.2 (活跃支持)"
+      "description": "PHP 8.4 (最新版本)"
     },
     "8.3": {
       "image": "php",
@@ -36,19 +18,43 @@
       "eol": false,
       "description": "PHP 8.3 (活跃支持)"
     },
-    "8.4": {
+    "8.2": {
       "image": "php",
-      "tag": "8.4-fpm",
+      "tag": "8.2-fpm",
       "eol": false,
-      "description": "PHP 8.4 (最新版本)"
+      "description": "PHP 8.2 (活跃支持)"
+    },
+    "8.1": {
+      "image": "php",
+      "tag": "8.1-fpm",
+      "eol": false,
+      "description": "PHP 8.1 (安全支持至 2025-12)"
+    },
+    "8.0": {
+      "image": "php",
+      "tag": "8.0-fpm",
+      "eol": true,
+      "description": "PHP 8.0 (已停止维护)"
+    },
+    "7.4": {
+      "image": "php",
+      "tag": "7.4-fpm",
+      "eol": true,
+      "description": "PHP 7.4 (已停止维护)"
+    },
+    "5.6": {
+      "image": "php",
+      "tag": "5.6-fpm",
+      "eol": true,
+      "description": "PHP 5.6 (已停止维护)"
     }
   },
   "mysql": {
-    "5.7": {
+    "8.4": {
       "image": "mysql",
-      "tag": "5.7",
-      "eol": true,
-      "description": "MySQL 5.7 (已停止维护)"
+      "tag": "8.4",
+      "eol": false,
+      "description": "MySQL 8.4 LTS (最新长期支持版)"
     },
     "8.0": {
       "image": "mysql",
@@ -56,25 +62,19 @@
       "eol": false,
       "description": "MySQL 8.0 (长期支持)"
     },
-    "8.4": {
+    "5.7": {
       "image": "mysql",
-      "tag": "8.4",
-      "eol": false,
-      "description": "MySQL 8.4 LTS (最新长期支持版)"
+      "tag": "5.7",
+      "eol": true,
+      "description": "MySQL 5.7 (已停止维护)"
     }
   },
   "redis": {
-    "6.2": {
+    "8.2": {
       "image": "redis",
-      "tag": "6.2-alpine",
-      "eol": true,
-      "description": "Redis 6.2 (旧版本)"
-    },
-    "7.0": {
-      "image": "redis",
-      "tag": "7.0-alpine",
+      "tag": "8.2-alpine",
       "eol": false,
-      "description": "Redis 7.0 (稳定版)"
+      "description": "Redis 8.2 (最新版本，2025-01 发布)"
     },
     "7.2": {
       "image": "redis",
@@ -82,19 +82,25 @@
       "eol": false,
       "description": "Redis 7.2 (最新版)"
     },
-    "8.2": {
+    "7.0": {
       "image": "redis",
-      "tag": "8.2-alpine",
+      "tag": "7.0-alpine",
       "eol": false,
-      "description": "Redis 8.2 (最新版本，2025-01 发布)"
+      "description": "Redis 7.0 (稳定版)"
+    },
+    "6.2": {
+      "image": "redis",
+      "tag": "6.2-alpine",
+      "eol": true,
+      "description": "Redis 6.2 (旧版本)"
     }
   },
   "nginx": {
-    "1.24": {
+    "1.27": {
       "image": "nginx",
-      "tag": "1.24-alpine",
-      "eol": true,
-      "description": "Nginx 1.24 (旧稳定版)"
+      "tag": "1.27-alpine",
+      "eol": false,
+      "description": "Nginx 1.27 (最新版)"
     },
     "1.25": {
       "image": "nginx",
@@ -102,11 +108,11 @@
       "eol": false,
       "description": "Nginx 1.25 (稳定版)"
     },
-    "1.27": {
+    "1.24": {
       "image": "nginx",
-      "tag": "1.27-alpine",
-      "eol": false,
-      "description": "Nginx 1.27 (最新版)"
+      "tag": "1.24-alpine",
+      "eol": true,
+      "description": "Nginx 1.24 (旧稳定版)"
     }
   }
 }

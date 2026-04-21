@@ -165,7 +165,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     // 查找所有 REDISxx_VERSION 格式的键
     for (key, value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("REDIS") {
-            let version = value.clone();
+            let full_tag = value.clone();
             
             // 提取索引部分，如 REDIS62_VERSION -> 62
             let index_part = &key[5..key.len() - 8]; // 去掉 "REDIS" 和 "_VERSION"
@@ -173,6 +173,9 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             if index_part.is_empty() {
                 continue;
             }
+            
+            // 将完整标签转换为纯版本号（如 "6.2-alpine" -> "6.2"）
+            let version = full_tag.split('-').next().unwrap_or(&full_tag).to_string();
             
             let port_key = format!("REDIS{}_HOST_PORT", index_part);
             
@@ -193,7 +196,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     // 查找所有 NGINXxx_VERSION 格式的键
     for (key, value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("NGINX") {
-            let version = value.clone();
+            let full_tag = value.clone();
             
             // 提取索引部分，如 NGINX127_VERSION -> 127
             let index_part = &key[6..key.len() - 8]; // 去掉 "NGINX" 和 "_VERSION"
@@ -201,6 +204,9 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             if index_part.is_empty() {
                 continue;
             }
+            
+            // 将完整标签转换为纯版本号（如 "1.27-alpine" -> "1.27"）
+            let version = full_tag.split('-').next().unwrap_or(&full_tag).to_string();
             
             let port_key = format!("NGINX{}_HTTP_HOST_PORT", index_part);
             
@@ -577,9 +583,16 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     let override_manager = UserOverrideManager::new(&project_root);
     let mut result = HashMap::new();
     
-    // PHP 版本
+    // PHP 版本（按版本号降序）
     let mut php_versions = Vec::new();
-    for version in manifest.get_available_versions(&VmServiceType::Php) {
+    let mut php_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Php);
+    php_version_list.sort_by(|a, b| {
+        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
+        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
+        ver_b.cmp(&ver_a) // 降序
+    });
+    
+    for version in php_version_list {
         // 使用合并后的配置（用户覆盖优先）
         let merged_info = override_manager.get_merged_image_info(&VmServiceType::Php, version)
             .or_else(|| manifest.get_image_info(&VmServiceType::Php, version).cloned());
@@ -601,9 +614,16 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     }
     result.insert("php".to_string(), serde_json::Value::Array(php_versions));
     
-    // MySQL 版本
+    // MySQL 版本（按版本号降序）
     let mut mysql_versions = Vec::new();
-    for version in manifest.get_available_versions(&VmServiceType::Mysql) {
+    let mut mysql_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Mysql);
+    mysql_version_list.sort_by(|a, b| {
+        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
+        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
+        ver_b.cmp(&ver_a) // 降序
+    });
+    
+    for version in mysql_version_list {
         let merged_info = override_manager.get_merged_image_info(&VmServiceType::Mysql, version)
             .or_else(|| manifest.get_image_info(&VmServiceType::Mysql, version).cloned());
         
@@ -623,9 +643,16 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     }
     result.insert("mysql".to_string(), serde_json::Value::Array(mysql_versions));
     
-    // Redis 版本
+    // Redis 版本（按版本号降序）
     let mut redis_versions = Vec::new();
-    for version in manifest.get_available_versions(&VmServiceType::Redis) {
+    let mut redis_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Redis);
+    redis_version_list.sort_by(|a, b| {
+        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
+        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
+        ver_b.cmp(&ver_a) // 降序
+    });
+    
+    for version in redis_version_list {
         let merged_info = override_manager.get_merged_image_info(&VmServiceType::Redis, version)
             .or_else(|| manifest.get_image_info(&VmServiceType::Redis, version).cloned());
         
@@ -645,9 +672,16 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     }
     result.insert("redis".to_string(), serde_json::Value::Array(redis_versions));
     
-    // Nginx 版本
+    // Nginx 版本（按版本号降序）
     let mut nginx_versions = Vec::new();
-    for version in manifest.get_available_versions(&VmServiceType::Nginx) {
+    let mut nginx_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Nginx);
+    nginx_version_list.sort_by(|a, b| {
+        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
+        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
+        ver_b.cmp(&ver_a) // 降序
+    });
+    
+    for version in nginx_version_list {
         let merged_info = override_manager.get_merged_image_info(&VmServiceType::Nginx, version)
             .or_else(|| manifest.get_image_info(&VmServiceType::Nginx, version).cloned());
         

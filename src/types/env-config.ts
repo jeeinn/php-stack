@@ -8,6 +8,15 @@ export interface ServiceEntry {
   extensions?: string[];
 }
 
+export interface VersionInfo {
+  version: string;        // 版本号（如 "7.2", "1.27"）
+  tag: string;            // 完整标签（如 "7.2-alpine", "1.27-alpine"）
+  full_name: string;      // 完整镜像名（如 "redis:7.2-alpine"）
+  eol: boolean;           // 是否已停止维护
+  description?: string;   // 版本描述
+  has_user_override?: boolean; // 是否有用户自定义覆盖
+}
+
 export interface EnvConfig {
   services: ServiceEntry[];
   source_dir: string;

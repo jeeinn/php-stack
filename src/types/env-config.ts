@@ -23,6 +23,21 @@ export interface EnvConfig {
   timezone: string;
 }
 
+export interface MirrorSourceOption {
+  id: string;
+  name: string;
+  value: string;
+  description: string;
+}
+
+export interface MergedMirrorCategory {
+  category_id: string;
+  options: MirrorSourceOption[];
+  selected_id: string;
+  current_value: string;
+  has_user_override: boolean;
+}
+
 export interface MirrorPreset {
   name: string;
   docker_registry: string;

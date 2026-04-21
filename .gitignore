@@ -31,6 +31,7 @@ logs/
 
 # User custom version overrides (machine-specific, same level as .env)
 .user_version_overrides.json
+.user_mirror_config.json
 
 # Ignore runtime services directory (but keep src-tauri/services templates)
 services/

@@ -115,11 +115,14 @@ const openServiceConfig = async (name: String) => {
       // PHP 容器：ps-php56 -> php56, ps-php85 -> php85
       serviceName = containerName.replace('ps-', '');
     } else if (containerName.startsWith('ps-mysql')) {
-      serviceName = 'mysql';
+      // MySQL 容器：ps-mysql57 -> mysql57, ps-mysql84 -> mysql84
+      serviceName = containerName.replace('ps-', '');
     } else if (containerName.startsWith('ps-redis')) {
-      serviceName = 'redis';
+      // Redis 容器：ps-redis62 -> redis62, ps-redis72 -> redis72
+      serviceName = containerName.replace('ps-', '');
     } else if (containerName.startsWith('ps-nginx')) {
-      serviceName = 'nginx';
+      // Nginx 容器：ps-nginx127 -> nginx127
+      serviceName = containerName.replace('ps-', '');
     } else {
       // 其他情况，尝试去掉 ps- 前缀
       serviceName = containerName.replace(/^ps-/, '');

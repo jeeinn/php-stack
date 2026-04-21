@@ -8,8 +8,19 @@ use crate::engine::restore_engine::{RestoreEngine, RestorePreview};
 use crate::engine::version_manifest::{VersionManifest, ServiceType as VmServiceType};
 use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverride};
 
-/// 获取项目根目录（用于配置文件生成）
+use crate::engine::workspace_manager::WorkspaceManager;
+
+/// 获取项目根目录（优先读取 workspace.json）
 fn get_project_root() -> Result<std::path::PathBuf, String> {
+    // 1. 尝试从 workspace.json 读取配置
+    if let Some(workspace) = WorkspaceManager::load_workspace()? {
+        let path = std::path::PathBuf::from(&workspace.workspace_path);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    // 2. 如果未配置或路径无效，返回 exe 同级目录作为默认值
     if cfg!(debug_assertions) {
         // 开发模式：使用项目根目录（src-tauri 的父目录）
         Ok(std::env::current_exe()
@@ -622,6 +633,22 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
     }
     
     Ok(())
+}
+
+/// 获取当前工作目录信息
+#[tauri::command]
+pub fn get_workspace_info() -> Result<Option<crate::engine::workspace_manager::WorkspaceConfig>, String> {
+    WorkspaceManager::load_workspace()
+}
+
+/// 设置工作目录路径
+#[tauri::command]
+pub fn set_workspace_path(path: String) -> Result<(), String> {
+    // 验证路径是否存在
+    if !std::path::PathBuf::from(&path).exists() {
+        return Err("指定的工作目录路径不存在".to_string());
+    }
+    WorkspaceManager::save_workspace(&path)
 }
 
 /// 选择项目文件夹并转换为相对路径

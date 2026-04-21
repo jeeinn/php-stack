@@ -25,6 +25,7 @@ const nginxServices = ref<ServiceEntry[]>([]);
 
 const sourceDir = ref('./www');
 const timezone = ref('Asia/Shanghai');
+const workspacePath = ref<string>('加载中...');
 
 const loading = ref(false);
 const applying = ref(false);
@@ -39,9 +40,23 @@ const phpContainerNames = ref<string[]>([]);
 
 // Load existing config on mount
 onMounted(async () => {
+  await loadWorkspaceInfo();
   await loadVersionMappings();
   await loadExistingConfig();
 });
+
+async function loadWorkspaceInfo() {
+  try {
+    const info = await invoke<any>('get_workspace_info');
+    if (info) {
+      workspacePath.value = info.workspace_path;
+    } else {
+      workspacePath.value = '未配置';
+    }
+  } catch (e) {
+    workspacePath.value = '获取失败';
+  }
+}
 
 // 从后端加载版本映射
 async function loadVersionMappings() {
@@ -761,12 +776,20 @@ async function handleStart() {
       <!-- General Settings -->
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h2 class="text-lg font-bold mb-4">⚙️ 通用设置</h2>
-        <div class="flex gap-4">
-          <div class="flex-1">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">工作目录</label>
+            <input 
+              :value="workspacePath" 
+              readonly
+              class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 cursor-not-allowed"
+            />
+          </div>
+          <div>
             <label class="block text-xs text-slate-400 mb-1">项目源码目录</label>
             <input v-model="sourceDir" type="text" placeholder="./www" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div class="w-48">
+          <div>
             <label class="block text-xs text-slate-400 mb-1">时区</label>
             <select v-model="timezone" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
               <option value="Asia/Shanghai">Asia/Shanghai</option>

@@ -7,6 +7,7 @@ import SettingsPage from './components/SettingsPage.vue';
 import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
+import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import { getLogs, addLog } from './composables/useToast';
 
 interface Container {
@@ -357,6 +358,9 @@ onMounted(() => {
     
     <!-- Global Confirm Dialog -->
     <ConfirmDialog />
+    
+    <!-- Workspace Initialization Dialog -->
+    <WorkspaceInitDialog />
   </div>
 </template>
 

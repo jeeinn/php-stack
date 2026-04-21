@@ -172,7 +172,7 @@ sequenceDiagram
     FE->>CMD: invoke('start_environment')
     CMD->>DC: docker compose up -d
     DC->>DC: 读取 .env 和 docker-compose.yml
-    DC->>DC: 拉取镜像 (mysql:8.4-lts)
+    DC->>DC: 拉取镜像 (mysql:8.4)
     DC->>DC: 启动容器
     DC-->>CMD: 返回结果
     CMD-->>FE: 返回日志
@@ -245,7 +245,7 @@ let image_tag = manifest
     .map(|info| info.tag.clone())
     .unwrap_or(service.version.clone());
 
-env.set("MYSQL84_VERSION", &image_tag); // "8.4-lts"
+env.set("MYSQL84_VERSION", &image_tag); // "8.4"
 ```
 
 ### 4.2 版本清单管理器 (VersionManifest)
@@ -264,7 +264,7 @@ env.set("MYSQL84_VERSION", &image_tag); // "8.4-lts"
   "mysql": {
     "8.4": {
       "image": "mysql",
-      "tag": "8.4-lts",
+      "tag": "8.4",
       "eol": false,
       "description": "MySQL 8.4 LTS (最新长期支持版)"
     }
@@ -369,15 +369,15 @@ VersionManifest::new() (嵌入到二进制)
     ↓
 get_image_info("mysql", "8.4")
     ↓
-ImageInfo { image: "mysql", tag: "8.4-lts", eol: false }
+ImageInfo { image: "mysql", tag: "8.4", eol: false }
     ↓
-full_name() → "mysql:8.4-lts"
+full_name() → "mysql:8.4"
     ↓
-写入 .env: MYSQL84_VERSION=8.4-lts
+写入 .env: MYSQL84_VERSION=8.4
     ↓
 docker-compose.yml: image: mysql:${MYSQL84_VERSION}
     ↓
-Docker Compose 解析 → 拉取 mysql:8.4-lts
+Docker Compose 解析 → 拉取 mysql:8.4
 ```
 
 ---
@@ -387,7 +387,7 @@ Docker Compose 解析 → 拉取 mysql:8.4-lts
 ### 6.1 为什么使用版本清单系统？
 
 **问题**:
-- 用户选择版本号 `8.4`，但 Docker Hub 上的标签可能是 `8.4-lts`
+- 用户选择版本号 `8.4`，但 Docker Hub 上的标签可能是 `8.4`
 - 不同服务的标签格式不一致（PHP: `8.4-fpm`, Redis: `7.2-alpine`）
 - 新版本发布时需要多处修改代码
 
@@ -469,7 +469,7 @@ cd src-tauri && cargo build
 {
   "mysql": {
     "8.4": {
-      "tag": "8.4-lts-aliyun",
+      "tag": "8.4-aliyun",
       "description": "使用阿里云镜像"
     }
   }

@@ -53,6 +53,9 @@ pub fn run() {
       commands::preview_restore,
       commands::verify_backup,
       commands::execute_restore,
+      // 工作目录管理
+      commands::get_workspace_info,
+      commands::set_workspace_path,
       // 版本管理
       commands::get_version_mappings,
       commands::validate_version,

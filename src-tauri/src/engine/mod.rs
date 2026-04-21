@@ -8,3 +8,4 @@ pub mod restore_engine;     // V2.0: 恢复引擎
 pub mod version_manifest;   // V2.1: 版本清单管理器
 pub mod user_override_manager; // V2.1: 用户版本覆盖管理器
 pub mod mirror_config_manager; // V2.2: 用户镜像源配置管理器
+pub mod workspace_manager;     // V2.2: 工作目录管理器

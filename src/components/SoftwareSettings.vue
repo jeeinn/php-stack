@@ -242,14 +242,14 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="复制镜像名"
                     >
-                      📋
+                      复制
                     </button>
                     <button
                       @click="openEditDialog(version)"
                       class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="编辑"
                     >
-                      ✏️
+                      编辑
                     </button>
                     <button
                       v-if="version.has_user_override"
@@ -257,7 +257,7 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="删除自定义"
                     >
-                      🗑️
+                      删除
                     </button>
                   </div>
                 </td>

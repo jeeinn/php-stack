@@ -285,7 +285,7 @@ onMounted(() => {
           @click="openCustomEdit"
           class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm transition"
         >
-          ➕ 新增自定义镜像源
+          ➕ 新增自定义
         </button>
       </div>
 
@@ -369,14 +369,14 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="测试连接"
                     >
-                      🔗
+                      测试
                     </button>
                     <button
                       @click="copyUrl(option.value)"
                       class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="复制地址"
                     >
-                      📋
+                      复制
                     </button>
                     <button
                       v-if="option.id === 'custom' || option.value"
@@ -384,7 +384,7 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="编辑"
                     >
-                      ✏️
+                      编辑
                     </button>
                     <button
                       v-if="option.id === 'custom'"
@@ -392,7 +392,7 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="删除自定义"
                     >
-                      🗑️
+                      删除
                     </button>
                   </div>
                 </td>

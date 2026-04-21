@@ -91,6 +91,42 @@ function ensureVersionInList(versions: string[], version: string): void {
   }
 }
 
+// 错误信息格式化
+function formatErrorMessage(error: any): string {
+  const errorMsg = String(error);
+  
+  // Docker 相关错误
+  if (errorMsg.includes('Docker') || errorMsg.includes('docker')) {
+    if (errorMsg.includes('not running') || errorMsg.includes('unavailable')) {
+      return '❌ Docker 未运行\n\n请启动 Docker Desktop 后重试。';
+    }
+    if (errorMsg.includes('permission')) {
+      return '❌ 权限不足\n\n请以管理员身份运行或检查 Docker 权限设置。';
+    }
+  }
+  
+  // 端口冲突
+  if (errorMsg.includes('端口') || errorMsg.includes('port')) {
+    return `⚠️  端口冲突\n\n${errorMsg}\n\n请修改冲突服务的端口号。`;
+  }
+  
+  // 文件操作
+  if (errorMsg.includes('读取') || errorMsg.includes('read')) {
+    return '❌ 文件读取失败\n\n请检查文件是否存在且有读取权限。';
+  }
+  if (errorMsg.includes('写入') || errorMsg.includes('write')) {
+    return '❌ 文件写入失败\n\n请检查目录是否有写入权限。';
+  }
+  
+  // 配置解析
+  if (errorMsg.includes('解析') || errorMsg.includes('parse')) {
+    return '❌ 配置文件格式错误\n\n请检查 .env 文件格式是否正确。';
+  }
+  
+  // 默认错误
+  return `❌ 操作失败\n\n${errorMsg}`;
+}
+
 async function loadExistingConfig() {
   console.log('[EnvConfig] 开始加载现有配置...');
   try {
@@ -328,7 +364,7 @@ async function handlePreview() {
     previewCompose.value = composeContent;
     showPreviewModal.value = true;
   } catch (e) {
-    error.value = e as string;
+    error.value = formatErrorMessage(e);
   } finally {
     loading.value = false;
   }
@@ -405,7 +441,7 @@ async function handleApply() {
       showNginxHint.value = true;
     }
   } catch (e) {
-    error.value = e as string;
+    error.value = formatErrorMessage(e);
   } finally {
     applying.value = false;
   }
@@ -439,7 +475,7 @@ async function handleStart() {
     const result = await invoke<string>('start_environment');
     successMsg.value = '环境启动成功！\n' + result;
   } catch (e) {
-    error.value = e as string;
+    error.value = formatErrorMessage(e);
   } finally {
     starting.value = false;
   }

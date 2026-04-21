@@ -49,6 +49,18 @@ function getIconConfig() {
             </div>
           </div>
           
+          <!-- 复选框选项 -->
+          <div v-if="state.options.checkboxLabel" class="px-6 py-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                v-model="state.checkboxValue"
+                class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+              />
+              <span class="text-sm text-slate-300">{{ state.options.checkboxLabel }}</span>
+            </label>
+          </div>
+          
           <!-- 按钮栏 -->
           <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
             <button 

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use chrono::Local;
 
 use super::env_parser::EnvFile;
 use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
@@ -30,6 +31,15 @@ pub struct EnvConfig {
 }
 
 pub struct ConfigGenerator;
+
+/// Backup state enum for two-phase commit
+enum BackupState {
+    NothingToBackup,
+    Ready {
+        timestamp: String,
+        items: Vec<String>,
+    },
+}
 
 impl ConfigGenerator {
     /// Get project root directory (parent of src-tauri)
@@ -647,10 +657,132 @@ impl ConfigGenerator {
         Ok(())
     }
 
+    /// Phase 1: Pre-check backup feasibility
+    /// Returns BackupState or error if pre-check fails
+    fn precheck_backup(project_root: &Path) -> Result<BackupState, String> {
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        
+        // List of files/directories to backup
+        let items_to_backup = vec![".env", "docker-compose.yml", "services"];
+        let mut existing_items = Vec::new();
+        
+        // Check which items exist
+        for item in &items_to_backup {
+            let path = project_root.join(item);
+            if path.exists() {
+                existing_items.push(item.to_string());
+            }
+        }
+        
+        if existing_items.is_empty() {
+            return Ok(BackupState::NothingToBackup);
+        }
+        
+        // Pre-check: verify all backup target paths don't exist (avoid overwriting old backups)
+        for item in &existing_items {
+            let backup_name = format!("{}_{}", item, timestamp);
+            let backup_path = project_root.join(&backup_name);
+            
+            if backup_path.exists() {
+                return Err(format!("备份文件已存在，请删除后重试: {}", backup_name));
+            }
+        }
+        
+        Ok(BackupState::Ready { 
+            timestamp, 
+            items: existing_items 
+        })
+    }
+
+    /// Rollback all backed up items in reverse order
+    fn rollback_all(rollback_list: &[(PathBuf, PathBuf)]) -> Result<(), String> {
+        // Reverse order to ensure dependencies are restored correctly
+        for (backup_path, original_path) in rollback_list.iter().rev() {
+            if let Err(e) = std::fs::rename(backup_path, original_path) {
+                eprintln!("⚠️  回滚失败 {:?} -> {:?}: {}", backup_path, original_path, e);
+                return Err(format!("回滚失败: {}", e));
+            }
+        }
+        Ok(())
+    }
+
+    /// Phase 2: Execute backup with atomic rollback
+    /// If any item fails to backup, all previously backed up items will be rolled back
+    fn execute_backup(state: BackupState, project_root: &Path) -> Result<Vec<String>, String> {
+        match state {
+            BackupState::NothingToBackup => Ok(vec![]),
+            BackupState::Ready { timestamp, items } => {
+                let mut backed_up = Vec::new();
+                let mut rollback_list: Vec<(PathBuf, PathBuf)> = Vec::new();
+                
+                // Try to backup each item
+                for item in &items {
+                    let item_path = project_root.join(item);
+                    let backup_name = format!("{}_{}", item, timestamp);
+                    let backup_path = project_root.join(&backup_name);
+                    
+                    match std::fs::rename(&item_path, &backup_path) {
+                        Ok(()) => {
+                            eprintln!("✅ 已备份: {} -> {}", item, backup_name);
+                            backed_up.push(backup_name.clone());
+                            rollback_list.push((backup_path, item_path.clone()));
+                        }
+                        Err(e) => {
+                            eprintln!("❌ 备份 {} 失败: {}", item, e);
+                            
+                            // Immediate rollback on failure
+                            if !rollback_list.is_empty() {
+                                eprintln!("🔄 正在回滚已备份的 {} 项...", rollback_list.len());
+                                if let Err(rollback_err) = Self::rollback_all(&rollback_list) {
+                                    eprintln!("⚠️  严重错误：回滚也失败: {}", rollback_err);
+                                    return Err(format!(
+                                        "备份 {} 失败，且回滚操作也失败（请手动恢复）: {}\n回滚错误: {}",
+                                        item, e, rollback_err
+                                    ));
+                                }
+                                eprintln!("✅ 回滚成功，所有文件已恢复原状");
+                            }
+                            
+                            return Err(format!(
+                                "备份 {} 失败，已自动回滚之前的操作 {} ",
+                                item, e
+                            ));
+                        }
+                    }
+                }
+                
+                eprintln!("✅ 备份完成，共 {} 项", backed_up.len());
+                Ok(backed_up)
+            }
+        }
+    }
+
+    /// Backup existing configuration files by renaming them with timestamp suffix.
+    /// This function implements atomic backup with automatic rollback on failure.
+    /// Format: .env -> .env_YYYYMMDD_HHMMSS
+    ///         services/ -> services_YYYYMMDD_HHMMSS/
+    pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
+        eprintln!("🔍 开始预检查备份...");
+        
+        // Phase 1: Pre-check
+        let backup_state = Self::precheck_backup(project_root)?;
+        
+        // Phase 2: Execute with rollback
+        eprintln!("📦 执行备份...");
+        Self::execute_backup(backup_state, project_root)
+    }
+
     /// Apply config: write .env, docker-compose.yml, create directories.
-    pub async fn apply(config: &EnvConfig, project_root: &Path) -> Result<(), String> {
+    /// If enable_backup is true, backup existing config files before overwriting.
+    pub async fn apply(config: &EnvConfig, project_root: &Path, enable_backup: bool) -> Result<Vec<String>, String> {
         // Validate first
         Self::validate(config)?;
+
+        // Backup existing config if requested
+        let mut backed_up_files = Vec::new();
+        if enable_backup {
+            backed_up_files = Self::backup_existing_config(project_root)?;
+        }
 
         // Read existing .env if present
         let env_path = project_root.join(".env");
@@ -687,7 +819,7 @@ impl ConfigGenerator {
                 .map_err(|e| format!("写入 .npmrc 文件失败: {}", e))?;
         }
 
-        Ok(())
+        Ok(backed_up_files)
     }
 
     /// Collect all keys managed by ConfigGenerator for a given config.

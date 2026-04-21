@@ -24,8 +24,8 @@ dist-ssr
 *.sw?
 
 # Generated files (runtime generated, not templates)
-.env
-docker-compose.yml
+.env*
+docker-compose.yml*
 data/
 logs/
 
@@ -34,8 +34,5 @@ logs/
 .user_mirror_config.json
 
 # Ignore runtime services directory (but keep src-tauri/services templates)
-services/
+services*/
 !src-tauri/services/
-
-# Environment variables
-.env

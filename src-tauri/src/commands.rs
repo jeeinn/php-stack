@@ -287,7 +287,7 @@ pub fn check_config_files_exist() -> Result<Vec<String>, String> {
 
 /// 应用配置（写入 .env、docker-compose.yml、创建目录）
 #[tauri::command]
-pub async fn apply_env_config(config: EnvConfig, app_handle: tauri::AppHandle) -> Result<(), String> {
+pub async fn apply_env_config(config: EnvConfig, enable_backup: bool, app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     use tauri::Emitter;
     
     // 辅助函数：发送日志到前端并打印到终端
@@ -314,11 +314,17 @@ pub async fn apply_env_config(config: EnvConfig, app_handle: tauri::AppHandle) -
     emit_log("🐳 生成 docker-compose.yml...");
     emit_log("📂 创建服务目录结构...");
     
-    match ConfigGenerator::apply(&config, &project_root).await {
-        Ok(()) => {
+    match ConfigGenerator::apply(&config, &project_root, enable_backup).await {
+        Ok(backed_up_files) => {
+            if !backed_up_files.is_empty() {
+                emit_log(&format!("💾 已备份 {} 个文件/目录", backed_up_files.len()));
+                for file in &backed_up_files {
+                    emit_log(&format!("   - {}", file));
+                }
+            }
             emit_log("✅ 配置应用成功！");
             emit_log("💡 提示：请重启容器使新配置生效");
-            Ok(())
+            Ok(backed_up_files)
         }
         Err(e) => {
             emit_log(&format!("❌ 配置应用失败: {}", e));

@@ -425,19 +425,31 @@ async function handleApply() {
   }
   
   // 检查配置文件是否存在
+  let enableBackup = false;
   try {
     const existingFiles = await invoke<string[]>('check_config_files_exist');
     if (existingFiles.length > 0) {
       // 有文件存在，显示确认对话框
       const fileList = existingFiles.map(f => `• ${f}`).join('\n');
-      const confirmed = await showConfirm({
+      const result = await showConfirm({
         title: '配置文件已存在',
         message: `检测到以下配置文件已存在：\n\n${fileList}\n\n继续操作将覆盖这些文件，是否继续？`,
-        confirmText: '覆盖',
-        type: 'warning'
+        confirmText: '应用配置',
+        cancelText: '取消',
+        type: 'warning',
+        checkboxLabel: '备份现有配置（自动回滚机制，失败会恢复原状）',
+        checkboxDefault: true
       });
+      
+      // 如果返回的是对象（有复选框），解构获取结果
+      const confirmed = typeof result === 'object' ? result.confirmed : result;
       if (!confirmed) {
         return; // 用户取消
+      }
+      
+      // 获取复选框的值
+      if (typeof result === 'object') {
+        enableBackup = result.checkboxValue;
       }
     }
   } catch (e) {
@@ -449,16 +461,21 @@ async function handleApply() {
   showNginxHint.value = false;
   try {
     const config = buildConfig();
-    await invoke('apply_env_config', { config });
+    const backedUpFiles = await invoke<string[]>('apply_env_config', { config, enableBackup });
     
     // 显示成功消息
-    showToast(
-      import.meta.env.DEV 
-        ? '配置已成功应用！配置文件已生成在项目根目录。' 
-        : '配置已成功应用！配置文件已生成在程序所在目录。',
-      'success',
-      4000
-    );
+    let successMsg = import.meta.env.DEV 
+      ? '配置已成功应用！配置文件已生成在项目根目录。' 
+      : '配置已成功应用！配置文件已生成在程序所在目录。';
+    
+    if (backedUpFiles && backedUpFiles.length > 0) {
+      successMsg += `\n\n✅ 已备份 ${backedUpFiles.length} 个文件/目录：\n` + 
+        backedUpFiles.map(f => `• ${f}`).join('\n');
+    } else if (enableBackup) {
+      successMsg += '\n\n⚠️  注意：部分文件备份失败（可能文件被占用），请关闭相关程序后重试。';
+    }
+    
+    showToast(successMsg, 'success', 6000);
     showPreviewModal.value = false;
     
     // 检查是否同时启用了 PHP 和 Nginx

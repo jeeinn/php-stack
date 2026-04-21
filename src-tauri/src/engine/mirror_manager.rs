@@ -121,7 +121,7 @@ impl MirrorManager {
             "apt" => "APT_MIRROR",
             "composer" => "COMPOSER_MIRROR",
             "npm" => "NPM_MIRROR",
-            "github" => "GITHUB_PROXY",
+            "github_proxy" => "GITHUB_PROXY",
             _ => return Err(format!("未知的镜像源类别: {}", category)),
         };
 

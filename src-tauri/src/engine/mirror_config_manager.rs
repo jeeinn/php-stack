@@ -156,28 +156,40 @@ impl MirrorConfigManager {
             
             // 确定当前选中的选项
             let has_user_override = user_config.has_user_override(&category_id);
-            let (selected_id, current_value) = if has_user_override {
+            let (selected_id, current_value, mut final_options) = if has_user_override {
                 // 用户有自定义配置
                 if let Some(user_cat) = user_config.get_category(&category_id) {
                     // 查找匹配的选项 ID
-                    let matched_id = options.iter()
-                        .find(|opt| opt.value == user_cat.source)
-                        .map(|opt| opt.id.clone())
-                        .unwrap_or_else(|| "custom".to_string());
+                    let matched_option = options.iter()
+                        .find(|opt| opt.value == user_cat.source);
                     
-                    (matched_id, user_cat.source.clone())
+                    if let Some(opt) = matched_option {
+                        // 匹配到预设选项
+                        (opt.id.clone(), user_cat.source.clone(), options.clone())
+                    } else {
+                        // 自定义地址，不匹配任何预设，添加 custom 选项
+                        let mut opts_with_custom = options.clone();
+                        opts_with_custom.push(MirrorSourceOption {
+                            id: "custom".to_string(),
+                            name: "自定义".to_string(),
+                            value: user_cat.source.clone(),
+                            description: user_cat.description.clone().unwrap_or_default(),
+                        });
+                        
+                        ("custom".to_string(), user_cat.source.clone(), opts_with_custom)
+                    }
                 } else {
                     // 回退到第一个选项
-                    (options[0].id.clone(), options[0].value.clone())
+                    (options[0].id.clone(), options[0].value.clone(), options.clone())
                 }
             } else {
                 // 使用默认配置的第一个选项
-                (options[0].id.clone(), options[0].value.clone())
+                (options[0].id.clone(), options[0].value.clone(), options.clone())
             };
             
             merged_list.push(MergedMirrorCategory {
                 category_id,
-                options,
+                options: final_options,
                 selected_id,
                 current_value,
                 has_user_override,

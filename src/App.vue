@@ -22,8 +22,8 @@ const loading = ref(false);
 const logs = ref<string[]>([]);
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
-const showLogs = ref(true); // 控制日志面板显示隐藏
-const sidebarCollapsed = ref(false); // 控制侧边栏展开/收缩
+const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
+const sidebarCollapsed = ref(true); // 控制侧边栏展开/收缩（默认收缩）
 
 const addLog = (msg: string) => {
   const time = new Date().toLocaleTimeString();
@@ -153,7 +153,7 @@ onMounted(() => {
     <!-- Sidebar -->
     <div 
       class="bg-slate-900 flex flex-col border-r border-slate-800 overflow-y-auto transition-all duration-300 ease-in-out"
-      :class="sidebarCollapsed ? 'w-20 p-3' : 'w-64 p-6'"
+      :class="sidebarCollapsed ? 'w-20 p-3' : 'w-52 p-4'"
     >
       <!-- Logo -->
       <div class="mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
@@ -247,7 +247,7 @@ onMounted(() => {
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden p-8">
+    <div class="flex-1 flex flex-col overflow-hidden p-4 md:p-6">
       <!-- 1. 环境管理 (Dashboard) -->
       <div v-if="activeTab === 'dashboard'" class="flex-1 flex flex-col overflow-hidden">
         <header class="flex justify-between items-center mb-8">

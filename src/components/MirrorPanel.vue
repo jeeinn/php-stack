@@ -16,6 +16,7 @@ interface MirrorCategory {
 const applying = ref(false);
 const error = ref<string | null>(null);
 const successMsg = ref<string | null>(null);
+const showInfo = ref(false); // 提示信息默认折叠
 
 const categories = ref<MirrorCategory[]>([
   { 
@@ -237,59 +238,62 @@ onMounted(() => {
     </div>
 
     <div class="flex-1 overflow-y-auto pr-2 space-y-6">
-      <!-- 使用说明 -->
-      <section class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-6">
-        <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-blue-400">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <!-- 使用说明 (可折叠) -->
+      <section class="bg-blue-500/10 border border-blue-500/20 rounded-xl overflow-hidden">
+        <button
+          @click="showInfo = !showInfo"
+          class="w-full px-6 py-4 flex items-center justify-between hover:bg-blue-500/5 transition"
+        >
+          <h2 class="text-base font-bold flex items-center gap-2 text-blue-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            镜像源说明
+          </h2>
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            class="w-5 h-5 text-slate-400 transition-transform duration-200"
+            :class="showInfo ? 'rotate-180' : ''"
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            stroke-width="2"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
           </svg>
-          镜像源说明
-        </h2>
-        <div class="space-y-3 text-sm text-slate-300">
-          <div>
-            <p class="font-semibold text-blue-300 mb-2">📌 作用时机：</p>
-            <ul class="list-disc list-inside space-y-1 ml-4 text-slate-400">
-              <li><strong>Docker Registry:</strong> 构建 Docker 镜像时拉取基础镜像（如 php:8.5-fpm）</li>
-              <li><strong>APT / Debian:</strong> Dockerfile 中执行 apt-get install 安装系统依赖时</li>
-              <li><strong>Composer:</strong> PHP 项目中执行 composer install 安装依赖包时</li>
-              <li><strong>NPM:</strong> 前端项目执行 npm install 安装 node 模块时</li>
-              <li><strong>GitHub Proxy:</strong> 从 GitHub 下载资源时（如 install-php-extensions 脚本）</li>
-            </ul>
+        </button>
+              
+        <transition name="slide-down">
+          <div v-show="showInfo" class="px-6 pb-5 border-t border-blue-500/10">
+            <div class="pt-4 space-y-3 text-sm text-slate-300">
+              <div>
+                <p class="font-semibold text-blue-300 mb-1">📌 作用：</p>
+                <p class="text-slate-400 text-xs">加速 Docker 镜像拉取、APT/Composer/NPM 包安装、GitHub 资源下载</p>
+              </div>
+                    
+              <div>
+                <p class="font-semibold text-blue-300 mb-1">💡 提示：</p>
+                <ul class="list-disc list-inside space-y-1 ml-2 text-xs text-slate-400">
+                  <li>国内用户建议选阿里云/腾讯云</li>
+                  <li>修改后需<strong class="text-yellow-400">重新构建</strong>镜像生效</li>
+                  <li>点击“测试连接”验证可用性</li>
+                </ul>
+              </div>
+                    
+              <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                <p class="font-semibold text-amber-300 mb-1 text-xs flex items-center gap-1">
+                  ⚠️ Docker Registry 需全局配置
+                </p>
+                <button
+                  @click="openDockerSettings"
+                  class="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded transition text-white mt-2"
+                >
+                  📋 复制 Docker 配置
+                </button>
+              </div>
+            </div>
           </div>
-          
-          <div>
-            <p class="font-semibold text-blue-300 mb-2">💡 使用建议：</p>
-            <ul class="list-disc list-inside space-y-1 ml-4 text-slate-400">
-              <li>国内用户建议选择阿里云、腾讯云等加速镜像</li>
-              <li>修改后需要<strong class="text-yellow-400">重新构建</strong> Docker 镜像才能生效</li>
-              <li>点击“测试连接”可验证镜像源是否可用</li>
-            </ul>
-          </div>
-          
-          <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
-            <p class="font-semibold text-amber-300 mb-2 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              ⚙️ Docker Registry 配置
-            </p>
-            <p class="text-slate-400 text-xs mb-2">
-              Docker Registry 镜像需要在 Docker Desktop 中全局配置：
-            </p>
-            <button
-              @click="openDockerSettings"
-              class="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded transition text-white flex items-center gap-1"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-              打开 Docker Desktop 设置
-            </button>
-            <p class="text-slate-500 text-xs mt-2">
-              路径：Settings → Docker Engine → 添加 "registry-mirrors": ["你的镜像地址"]
-            </p>
-          </div>
-        </div>
+        </transition>
       </section>
 
       <!-- Individual Categories -->
@@ -355,3 +359,23 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@reference "tailwindcss";
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+  max-height: 500px;
+  opacity: 1;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+</style>

@@ -1,0 +1,297 @@
+/// 用户自定义镜像源配置管理器
+///
+/// 类似于 UserOverrideManager，管理用户对镜像源的自定义配置。
+/// 配置文件：.user_mirror_config.json
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+/// 用户自定义的单个镜像源类别配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserMirrorCategory {
+    /// 自定义的镜像源地址
+    pub source: String,
+    /// 是否启用此自定义配置
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    /// 备注说明
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+fn default_enabled() -> bool {
+    true
+}
+
+/// 用户镜像源配置文件结构
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserMirrorConfig {
+    /// 用户选择的预设方案 ID（如果有的话）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_preset: Option<String>,
+    
+    /// 用户自定义的各个类别配置
+    #[serde(default)]
+    pub categories: HashMap<String, UserMirrorCategory>,
+}
+
+impl UserMirrorConfig {
+    /// 从文件加载用户配置
+    pub fn load(project_root: &Path) -> Result<Self, String> {
+        let config_path = project_root.join(".user_mirror_config.json");
+        
+        if !config_path.exists() {
+            return Ok(Self::default());
+        }
+        
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("读取用户镜像配置文件失败: {}", e))?;
+        
+        serde_json::from_str(&content)
+            .map_err(|e| format!("解析用户镜像配置文件失败: {}", e))
+    }
+    
+    /// 保存用户配置到文件
+    pub fn save(&self, project_root: &Path) -> Result<(), String> {
+        let config_path = project_root.join(".user_mirror_config.json");
+        
+        let content = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("序列化用户镜像配置失败: {}", e))?;
+        
+        std::fs::write(&config_path, content)
+            .map_err(|e| format!("写入用户镜像配置文件失败: {}", e))
+    }
+    
+    /// 检查某个类别是否有用户自定义配置
+    pub fn has_user_override(&self, category_id: &str) -> bool {
+        self.categories.get(category_id)
+            .map(|c| c.enabled)
+            .unwrap_or(false)
+    }
+    
+    /// 获取某个类别的自定义配置
+    pub fn get_category(&self, category_id: &str) -> Option<&UserMirrorCategory> {
+        self.categories.get(category_id)
+    }
+    
+    /// 设置某个类别的自定义配置
+    pub fn set_category(&mut self, category_id: String, category: UserMirrorCategory) {
+        self.categories.insert(category_id, category);
+    }
+    
+    /// 删除某个类别的自定义配置
+    pub fn remove_category(&mut self, category_id: &str) -> Option<UserMirrorCategory> {
+        self.categories.remove(category_id)
+    }
+    
+    /// 清空所有自定义配置
+    pub fn clear_all(&mut self) {
+        self.categories.clear();
+        self.selected_preset = None;
+    }
+}
+
+/// 合并后的镜像源信息（默认配置 + 用户自定义）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergedMirrorInfo {
+    pub category_id: String,
+    pub name: String,
+    pub description: String,
+    pub default_value: String,
+    pub current_value: String,
+    pub has_user_override: bool,
+}
+
+pub struct MirrorConfigManager;
+
+impl MirrorConfigManager {
+    /// 从嵌入的 JSON 数据加载默认镜像配置
+    pub fn load_default_config() -> Result<serde_json::Value, String> {
+        let json_data = include_str!("../../services/mirror_config.json");
+        serde_json::from_str(json_data)
+            .map_err(|e| format!("解析 mirror_config.json 失败: {}", e))
+    }
+    
+    /// 获取合并后的镜像源列表（默认配置 + 用户自定义）
+    pub fn get_merged_mirror_list(project_root: &Path) -> Result<Vec<MergedMirrorInfo>, String> {
+        let default_config = Self::load_default_config()?;
+        let user_config = UserMirrorConfig::load(project_root)?;
+        
+        let categories = default_config["categories"]
+            .as_array()
+            .ok_or("mirror_config.json 中缺少 categories")?;
+        
+        let mut merged_list = Vec::new();
+        
+        for category in categories {
+            let category_id = category["id"]
+                .as_str()
+                .ok_or("category 缺少 id 字段")?
+                .to_string();
+            
+            let name = category["name"]
+                .as_str()
+                .unwrap_or(&category_id)
+                .to_string();
+            
+            let description = category["description"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            
+            let default_value = category["default_value"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            
+            let has_user_override = user_config.has_user_override(&category_id);
+            
+            let current_value = if has_user_override {
+                user_config.get_category(&category_id)
+                    .map(|c| c.source.clone())
+                    .unwrap_or(default_value.clone())
+            } else {
+                default_value.clone()
+            };
+            
+            merged_list.push(MergedMirrorInfo {
+                category_id,
+                name,
+                description,
+                default_value,
+                current_value,
+                has_user_override,
+            });
+        }
+        
+        Ok(merged_list)
+    }
+    
+    /// 获取合并后的预设列表
+    pub fn get_merged_presets(project_root: &Path) -> Result<serde_json::Value, String> {
+        let default_config = Self::load_default_config()?;
+        let user_config = UserMirrorConfig::load(project_root)?;
+        
+        let presets = default_config["presets"].clone();
+        
+        // 添加用户当前选中的预设信息
+        let mut result = presets.clone();
+        if let Some(presets_array) = result.as_array_mut() {
+            for preset in presets_array.iter_mut() {
+                if let Some(preset_obj) = preset.as_object_mut() {
+                    let preset_id = preset_obj.get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    
+                    let is_selected = user_config.selected_preset.as_deref() == Some(preset_id);
+                    preset_obj.insert("is_selected".to_string(), serde_json::json!(is_selected));
+                }
+            }
+        }
+        
+        Ok(result)
+    }
+    
+    /// 保存用户选择的预设
+    pub fn save_selected_preset(project_root: &Path, preset_id: &str) -> Result<(), String> {
+        let mut user_config = UserMirrorConfig::load(project_root)?;
+        user_config.selected_preset = Some(preset_id.to_string());
+        user_config.save(project_root)
+    }
+    
+    /// 保存用户自定义的单个类别配置
+    pub fn save_user_category(
+        project_root: &Path,
+        category_id: &str,
+        source: &str,
+        description: Option<String>,
+    ) -> Result<(), String> {
+        let mut user_config = UserMirrorConfig::load(project_root)?;
+        
+        let category = UserMirrorCategory {
+            source: source.to_string(),
+            enabled: true,
+            description,
+        };
+        
+        user_config.set_category(category_id.to_string(), category);
+        user_config.save(project_root)
+    }
+    
+    /// 删除用户自定义的类别配置
+    pub fn remove_user_category(project_root: &Path, category_id: &str) -> Result<(), String> {
+        let mut user_config = UserMirrorConfig::load(project_root)?;
+        user_config.remove_category(category_id);
+        user_config.save(project_root)
+    }
+    
+    /// 重置所有用户自定义配置
+    pub fn reset_all_overrides(project_root: &Path) -> Result<(), String> {
+        let mut user_config = UserMirrorConfig::load(project_root)?;
+        user_config.clear_all();
+        user_config.save(project_root)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    
+    fn create_test_project() -> (TempDir, PathBuf) {
+        let dir = TempDir::new().expect("创建临时目录失败");
+        let path = dir.path().to_path_buf();
+        (dir, path)
+    }
+    
+    #[test]
+    fn test_load_default_config() {
+        let config = MirrorConfigManager::load_default_config();
+        assert!(config.is_ok());
+        
+        let config = config.unwrap();
+        assert!(config.get("presets").is_some());
+        assert!(config.get("categories").is_some());
+    }
+    
+    #[test]
+    fn test_user_config_save_and_load() {
+        let (_dir, path) = create_test_project();
+        
+        let mut user_config = UserMirrorConfig::default();
+        user_config.selected_preset = Some("aliyun".to_string());
+        
+        let category = UserMirrorCategory {
+            source: "https://custom.mirror.com".to_string(),
+            enabled: true,
+            description: Some("Custom mirror".to_string()),
+        };
+        user_config.set_category("npm".to_string(), category);
+        
+        user_config.save(&path).expect("保存配置失败");
+        
+        let loaded = UserMirrorConfig::load(&path).expect("加载配置失败");
+        assert_eq!(loaded.selected_preset, Some("aliyun".to_string()));
+        assert!(loaded.has_user_override("npm"));
+    }
+    
+    #[test]
+    fn test_get_merged_mirror_list() {
+        let (_dir, path) = create_test_project();
+        
+        let merged = MirrorConfigManager::get_merged_mirror_list(&path);
+        assert!(merged.is_ok());
+        
+        let merged = merged.unwrap();
+        assert!(!merged.is_empty());
+        
+        // 检查是否包含所有类别
+        let category_ids: Vec<&String> = merged.iter().map(|m| &m.category_id).collect();
+        assert!(category_ids.contains(&&"docker_registry".to_string()));
+        assert!(category_ids.contains(&&"apt".to_string()));
+        assert!(category_ids.contains(&&"composer".to_string()));
+        assert!(category_ids.contains(&&"npm".to_string()));
+        assert!(category_ids.contains(&&"github_proxy".to_string()));
+    }
+}

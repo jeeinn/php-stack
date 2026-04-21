@@ -1,0 +1,86 @@
+{
+  "presets": [
+    {
+      "id": "aliyun",
+      "name": "阿里云全套",
+      "docker_registry": "https://registry.cn-hangzhou.aliyuncs.com",
+      "apt": "https://mirrors.aliyun.com/debian",
+      "composer": "https://mirrors.aliyun.com/composer/",
+      "npm": "https://registry.npmmirror.com",
+      "github_proxy": "",
+      "description": "阿里云镜像源，国内访问速度快"
+    },
+    {
+      "id": "tsinghua",
+      "name": "清华大学全套",
+      "docker_registry": "https://docker.mirrors.tuna.tsinghua.edu.cn",
+      "apt": "https://mirrors.tuna.tsinghua.edu.cn/debian",
+      "composer": "https://packagist.org",
+      "npm": "https://registry.npmmirror.com",
+      "github_proxy": "",
+      "description": "清华大学开源软件镜像站"
+    },
+    {
+      "id": "tencent",
+      "name": "腾讯云全套",
+      "docker_registry": "https://mirror.ccs.tencentyun.com",
+      "apt": "https://mirrors.cloud.tencent.com/debian",
+      "composer": "https://mirrors.cloud.tencent.com/composer/",
+      "npm": "https://registry.npmmirror.com",
+      "github_proxy": "",
+      "description": "腾讯云镜像源"
+    },
+    {
+      "id": "ustc",
+      "name": "中科大全套",
+      "docker_registry": "https://docker.mirrors.ustc.edu.cn",
+      "apt": "https://mirrors.ustc.edu.cn/debian",
+      "composer": "https://packagist.org",
+      "npm": "https://registry.npmmirror.com",
+      "github_proxy": "",
+      "description": "中国科学技术大学镜像源"
+    },
+    {
+      "id": "default",
+      "name": "官方默认",
+      "docker_registry": "",
+      "apt": "https://deb.debian.org/debian",
+      "composer": "https://packagist.org",
+      "npm": "https://registry.npmjs.org",
+      "github_proxy": "",
+      "description": "使用官方默认源（无加速）"
+    }
+  ],
+  "categories": [
+    {
+      "id": "docker_registry",
+      "name": "Docker Registry",
+      "description": "Docker 镜像仓库地址",
+      "default_value": ""
+    },
+    {
+      "id": "apt",
+      "name": "APT 镜像",
+      "description": "Debian/Ubuntu APT 包管理器镜像",
+      "default_value": "https://deb.debian.org/debian"
+    },
+    {
+      "id": "composer",
+      "name": "Composer 镜像",
+      "description": "PHP Composer 包管理器镜像",
+      "default_value": "https://packagist.org"
+    },
+    {
+      "id": "npm",
+      "name": "NPM 镜像",
+      "description": "Node.js NPM 包管理器镜像",
+      "default_value": "https://registry.npmjs.org"
+    },
+    {
+      "id": "github_proxy",
+      "name": "GitHub 代理",
+      "description": "GitHub 访问代理（可选）",
+      "default_value": ""
+    }
+  ]
+}

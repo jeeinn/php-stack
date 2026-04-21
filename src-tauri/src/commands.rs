@@ -1,6 +1,7 @@
 use crate::docker::manager::{DockerManager, PsContainer};
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
 use crate::engine::mirror_manager::{MirrorManager as UnifiedMirrorManager, MirrorPreset};
+use crate::engine::mirror_config_manager::{MirrorConfigManager, MergedMirrorInfo};
 use crate::engine::backup_engine::BackupEngine;
 use crate::engine::backup_manifest::BackupOptions;
 use crate::engine::restore_engine::{RestoreEngine, RestorePreview};
@@ -459,6 +460,54 @@ pub fn get_current_mirror_preset() -> Result<String, String> {
     let project_root = get_project_root()?;
     let env_path = project_root.join(".env");
     UnifiedMirrorManager::detect_current_preset(&env_path)
+}
+
+// ==================== 增强镜像源管理命令 (V2.2) ====================
+
+/// 获取合并后的镜像源列表（默认配置 + 用户自定义）
+#[tauri::command]
+pub fn get_merged_mirror_list() -> Result<Vec<MergedMirrorInfo>, String> {
+    let project_root = get_project_root()?;
+    MirrorConfigManager::get_merged_mirror_list(&project_root)
+}
+
+/// 获取合并后的预设列表（包含选中状态）
+#[tauri::command]
+pub fn get_merged_presets() -> Result<serde_json::Value, String> {
+    let project_root = get_project_root()?;
+    MirrorConfigManager::get_merged_presets(&project_root)
+}
+
+/// 保存用户选择的预设
+#[tauri::command]
+pub fn save_selected_preset(preset_id: String) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    MirrorConfigManager::save_selected_preset(&project_root, &preset_id)
+}
+
+/// 保存用户自定义的单个类别配置
+#[tauri::command]
+pub fn save_user_mirror_category(
+    category_id: String,
+    source: String,
+    description: Option<String>,
+) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    MirrorConfigManager::save_user_category(&project_root, &category_id, &source, description)
+}
+
+/// 删除用户自定义的类别配置
+#[tauri::command]
+pub fn remove_user_mirror_category(category_id: String) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    MirrorConfigManager::remove_user_category(&project_root, &category_id)
+}
+
+/// 重置所有用户自定义镜像源配置
+#[tauri::command]
+pub fn reset_all_mirror_overrides() -> Result<(), String> {
+    let project_root = get_project_root()?;
+    MirrorConfigManager::reset_all_overrides(&project_root)
 }
 
 // ==================== 备份命令 ====================

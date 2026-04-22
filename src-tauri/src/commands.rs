@@ -397,6 +397,12 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         emit_log("✅ 旧容器已清理");
     }
     
+    // 等待容器完全停止（避免检测到正在停止的容器）
+    emit_log("⏳ 等待容器完全停止...");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    emit_log("✅ 容器已完全停止");
+    emit_log("");
+    
     // 第二步：端口冲突检测
     emit_log("🔍 检查端口冲突...");
     

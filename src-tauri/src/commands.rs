@@ -397,6 +397,74 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         emit_log("✅ 旧容器已清理");
     }
     
+    // 第二步：端口冲突检测
+    emit_log("🔍 检查端口冲突...");
+    
+    // 获取所有运行中的容器
+    let manager = DockerManager::new().map_err(|e| {
+        let err_msg = format!("创建 Docker 管理器失败: {}", e);
+        emit_log(&format!("❌ {}", err_msg));
+        err_msg
+    })?;
+    
+    let all_containers = manager.list_all_running_containers().await.map_err(|e| {
+        let err_msg = format!("获取容器列表失败: {}", e);
+        emit_log(&format!("❌ {}", err_msg));
+        err_msg
+    })?;
+    
+    // 加载配置并检查端口
+    let config_result = load_existing_config()?;
+    if let Some(config) = config_result {
+        let mut conflicts: Vec<(String, u16, String)> = Vec::new();
+        
+        for service in &config.services {
+            let port = service.host_port;
+            let service_name = format!("{:?}{}", service.service_type, service.version.replace('.', ""));
+            
+            // 检查是否有容器占用了这个端口
+            for container in &all_containers {
+                if container.ports.iter().any(|&p| p == port as i32) {
+                    conflicts.push((
+                        container.name.clone(),
+                        port,
+                        service_name.clone(),
+                    ));
+                    break;
+                }
+            }
+        }
+        
+        if !conflicts.is_empty() {
+            emit_log("❌ 检测到端口冲突！");
+            emit_log("");
+            
+            for (container_name, port, service_name) in &conflicts {
+                emit_log(&format!("   ❌ 端口 {} ({}) 被容器 {} 占用", port, service_name, container_name));
+            }
+            
+            emit_log("");
+            emit_log("💡 解决方案：");
+            emit_log("   • 停止冲突容器: docker stop <容器名>");
+            emit_log("   • 或删除冲突容器: docker rm <容器名>");
+            emit_log("   • 或在环境配置中修改为其他端口");
+            emit_log("");
+            emit_log("⚠️ 请在前端解决冲突后重新启动");
+            
+            // 返回错误，终止后续流程
+            let conflict_details: Vec<String> = conflicts.iter()
+                .map(|(name, port, service)| format!("端口 {} ({}) 被容器 {} 占用", port, service, name))
+                .collect();
+            
+            return Err(format!("PORT_CONFLICT:{}", conflict_details.join("; ")));
+        } else {
+            emit_log("✅ 没有检测到端口冲突");
+        }
+    } else {
+        emit_log("⚠️ 未找到配置文件，跳过端口检查");
+    }
+    emit_log("");
+    
     // 第二步:启动新容器(流式输出)
     emit_log("🔧 执行: docker compose --progress plain up -d");
     emit_log("⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");

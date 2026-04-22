@@ -9,8 +9,7 @@ import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import { getLogs, addLog } from './composables/useToast';
-import { checkContainerPortConflicts, formatContainerConflictMessage } from './utils/portChecker';
-import type { EnvConfig } from './types/env-config';
+import { showConfirm } from './composables/useConfirmDialog';
 
 interface Container {
   id: String;
@@ -142,77 +141,50 @@ const handleStartEnvironment = () => {
 const confirmStart = async () => {
   showStartConfirm.value = false;
   
-  // 自动打开日志面板，让用户看到检查过程
+  // 自动打开日志面板
   showLogs.value = true;
   
-  // 第一步：加载当前配置
-  addLog('🔍 检查 Docker 容器端口冲突...');
-  console.log('[DEBUG] 开始容器端口冲突检查');
-  
-  try {
-    addLog('📄 正在加载配置文件...');
-    const configResult = await invoke<EnvConfig | null>('load_existing_config');
-    console.log('[DEBUG] 配置加载结果:', configResult);
-    
-    if (configResult) {
-      addLog(`✅ 配置加载成功，发现 ${configResult.services.length} 个服务`);
-      
-      // 第二步：检查容器端口冲突
-      addLog('🔎 正在检查运行中的容器...');
-      const { hasConflicts, conflicts } = await checkContainerPortConflicts(configResult);
-      console.log('[DEBUG] 容器端口冲突检查结果:', { hasConflicts, conflicts });
-      
-      if (hasConflicts) {
-        // 有冲突，显示警告并询问用户
-        addLog('');
-        addLog('⚠️ 检测到容器端口冲突！');
-        
-        // 显示每个冲突的详细信息
-        conflicts.forEach(conflict => {
-          addLog(`   ❌ 端口 ${conflict.port} (${conflict.service})`);
-          addLog(`      被占用容器: ${conflict.container_name}`);
-          addLog(`      镜像: ${conflict.container_image}`);
-          addLog(`      容器ID: ${conflict.container_id}`);
-        });
-        
-        addLog('');
-        const conflictMessage = formatContainerConflictMessage(conflicts);
-        addLog(conflictMessage);
-        
-        // 显示确认对话框
-        const shouldContinue = confirm(
-          `检测到容器端口冲突：\n\n${conflictMessage}\n是否继续启动？`
-        );
-        
-        if (!shouldContinue) {
-          addLog('❌ 用户取消启动，请先解决端口冲突');
-          starting.value = false;
-          return;
-        }
-        
-        addLog('⚠️ 用户选择忽略冲突，继续启动...');
-      } else {
-        addLog('');
-        addLog('✅ 没有检测到端口冲突，可以安全启动');
-      }
-    } else {
-      addLog('⚠️ 未找到配置文件，跳过端口检查');
-    }
-  } catch (error) {
-    console.error('[DEBUG] 端口检查错误:', error);
-    addLog(`⚠️ 端口检查失败: ${error}，将继续启动...`);
-  }
-  
-  // 第三步：启动环境
-  addLog('');
   starting.value = true;
   addLog('🚀 开始一键启动环境...');
+  
   try {
     await invoke('start_environment');
-    addLog('✅ 环境启动命令已发送，请观察容器状态');
+    addLog('✅ 环境启动成功！');
     await refreshContainers();
-  } catch (e) {
-    addLog(`❌ 启动失败: ${e}`);
+  } catch (e: any) {
+    const errorMsg = String(e);
+    
+    // 检查是否是端口冲突错误
+    if (errorMsg.startsWith('PORT_CONFLICT:')) {
+      const conflictDetails = errorMsg.substring('PORT_CONFLICT:'.length);
+      const formattedConflicts = conflictDetails.replace(/; /g, '\n• ');
+      
+      // 显示自定义确认对话框
+      const result = await showConfirm({
+        title: '⚠️ 检测到端口冲突',
+        message: `发现以下端口冲突：\n\n• ${formattedConflicts}\n\n是否继续启动？（可能会导致容器启动失败）`,
+        confirmText: '忽略并继续',
+        cancelText: '取消启动',
+        type: 'warning'
+      });
+      
+      if (result) {
+        // 用户选择继续
+        addLog('⚠️ 用户选择忽略冲突，继续启动...');
+        try {
+          await invoke('start_environment');
+          addLog('✅ 环境启动成功！');
+          await refreshContainers();
+        } catch (err) {
+          addLog(`❌ 启动失败: ${err}`);
+        }
+      } else {
+        // 用户取消
+        addLog('❌ 用户取消启动，请先解决端口冲突');
+      }
+    } else {
+      addLog(`❌ 启动失败: ${e}`);
+    }
   } finally {
     starting.value = false;
   }

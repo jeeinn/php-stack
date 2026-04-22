@@ -183,8 +183,9 @@ impl MirrorConfigManager {
                     (options[0].id.clone(), options[0].value.clone(), options.clone())
                 }
             } else {
-                // 使用默认配置的第一个选项
-                (options[0].id.clone(), options[0].value.clone(), options.clone())
+                // 首次设置：没有用户自定义配置
+                // selected_id 返回空字符串，让前端显示所有选项为可点选状态
+                ("".to_string(), String::new(), options.clone())
             };
             
             merged_list.push(MergedMirrorCategory {

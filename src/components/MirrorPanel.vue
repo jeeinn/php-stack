@@ -113,6 +113,11 @@ function getCurrentOptions(): MirrorSourceOption[] {
   return category?.options || [];
 }
 
+// 获取当前类别对象
+function getCurrentCategory(): MergedMirrorCategory | undefined {
+  return categories.value.find(c => c.category_id === selectedCategory.value);
+}
+
 // 测试连接
 async function testConnection(option: MirrorSourceOption) {
   if (!option.value) return;
@@ -502,7 +507,7 @@ onMounted(() => {
                 <td class="py-3 px-3 text-sm">
                   <span class="font-medium">{{ option.name }}</span>
                   <span 
-                    v-if="categories.find(c => c.category_id === selectedCategory)?.selected_id === option.id" 
+                    v-if="getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id" 
                     class="ml-2 text-xs text-blue-400"
                   >
                     (当前)
@@ -540,11 +545,11 @@ onMounted(() => {
                       @click="selectMirror(option)"
                       :class="[
                         'px-3 py-1.5 rounded text-xs transition whitespace-nowrap',
-                        categories.find(c => c.category_id === selectedCategory)?.selected_id === option.id
+                        getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id
                           ? 'bg-blue-600 text-white cursor-default'
                           : 'bg-slate-700 hover:bg-slate-600 text-white'
                       ]"
-                      :disabled="categories.find(c => c.category_id === selectedCategory)?.selected_id === option.id"
+                      :disabled="!!getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id"
                       title="选择此镜像源"
                     >
                       选择

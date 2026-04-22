@@ -21,11 +21,13 @@ interface Container {
 
 const containers = ref<Container[]>([]);
 const loading = ref(false);
+const starting = ref(false); // 启动环境时的加载状态
 const logs = getLogs(); // 使用 composable 中的全局日志
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(true); // 控制侧边栏展开/收缩（默认收缩）
+const showStartConfirm = ref(false); // 控制启动确认弹窗
 
 // 判断容器是否运行中（兼容多种格式）
 const isRunning = (state: string): boolean => {
@@ -129,6 +131,30 @@ const openServiceConfig = async (name: String) => {
   } catch (e) {
     addLog(`打开配置失败: ${e}`);
   }
+};
+
+const handleStartEnvironment = () => {
+  showStartConfirm.value = true;
+};
+
+const confirmStart = async () => {
+  showStartConfirm.value = false;
+  starting.value = true;
+  addLog('🚀 开始一键启动环境...');
+  try {
+    await invoke('start_environment');
+    addLog('✅ 环境启动命令已发送，请观察容器状态');
+    await refreshContainers();
+  } catch (e) {
+    addLog(`❌ 启动失败: ${e}`);
+  } finally {
+    starting.value = false;
+  }
+};
+
+const goToMirrorSettings = () => {
+  showStartConfirm.value = false;
+  activeTab.value = 'mirrors-unified';
 };
 
 onMounted(() => {
@@ -238,6 +264,14 @@ onMounted(() => {
             >
               {{ loading ? '刷新中...' : '手动刷新' }}
             </button>
+            <button 
+              @click="handleStartEnvironment"
+              :disabled="loading || starting"
+              class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              {{ starting ? '启动中...' : '一键启动' }}
+            </button>
           </div>
         </header>
 
@@ -304,14 +338,14 @@ onMounted(() => {
           <!-- Empty State -->
           <div v-if="containers.length === 0 && !loading" class="col-span-full py-20 text-center bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-2xl">
             <div class="text-slate-500 mb-2">未发现 ps- 前缀的容器</div>
-            <div class="text-slate-600 text-sm">请先在“软件管理”中安装 PHP、Nginx 等环境</div>
+            <div class="text-slate-600 text-sm">请先在“环境配置”中配置 PHP、Nginx 等环境</div>
           </div>
         </div>
       </div>
 
       <!-- 环境配置 (EnvConfig) -->
       <div v-if="activeTab === 'env-config'" class="flex-1 flex flex-col overflow-hidden">
-        <EnvConfigPage />
+        <EnvConfigPage @request-switch-tab="(tab) => activeTab = tab" />
       </div>
 
       <!-- New: 设置项 (SettingsPage) -->
@@ -361,6 +395,40 @@ onMounted(() => {
     
     <!-- Workspace Initialization Dialog -->
     <WorkspaceInitDialog />
+
+    <!-- Start Environment Confirmation Dialog -->
+    <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-white mb-4">⚠️ 启动环境提示</h2>
+        <p class="text-slate-400 mb-6">
+          在启动过程中，Docker 可能需要从网络拉取镜像或下载扩展脚本。
+          如果遇到网络连接问题（如 GitHub 访问失败），建议您先配置 <strong>GITHUB_PROXY</strong>。
+        </p>
+
+        <div class="space-y-4">
+          <div class="flex gap-3">
+            <button 
+              @click="showStartConfirm = false"
+              class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+            >
+              取消
+            </button>
+            <button 
+              @click="goToMirrorSettings"
+              class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+            >
+              去配置镜像源
+            </button>
+          </div>
+          <button 
+            @click="confirmStart"
+            class="w-full px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
+          >
+            直接启动
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

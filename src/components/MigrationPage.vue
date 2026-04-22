@@ -9,7 +9,7 @@ const activeTab = ref<TabType>('backup');
 
 const tabs = [
   { id: 'backup' as TabType, label: '环境备份', icon: '💾' },
-  { id: 'restore' as TabType, label: '环境恢复', icon: '📥' },
+  { id: 'restore' as TabType, label: '环境恢复', icon: '⬇️' },
 ];
 </script>
 

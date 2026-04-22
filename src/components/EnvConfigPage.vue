@@ -5,6 +5,10 @@ import type { ServiceEntry, EnvConfig, VersionInfo } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
+const emit = defineEmits<{
+  (e: 'request-switch-tab', tabName: string): void;
+}>();
+
 // Available versions (将从后端动态加载)
 const phpVersions = ref<VersionInfo[]>([]);
 const mysqlVersions = ref<VersionInfo[]>([]);
@@ -37,6 +41,7 @@ const showPreviewModal = ref(false);
 // Nginx 配置提示状态
 const showNginxHint = ref(false);
 const phpContainerNames = ref<string[]>([]);
+const showStartConfirm = ref(false);
 
 // Load existing config on mount
 onMounted(async () => {
@@ -525,6 +530,11 @@ async function openNginxConfigDir() {
 
 // Start environment
 async function handleStart() {
+  showStartConfirm.value = true;
+}
+
+async function confirmStart() {
+  showStartConfirm.value = false;
   starting.value = true;
   try {
     const result = await invoke<string>('start_environment');
@@ -535,6 +545,11 @@ async function handleStart() {
     starting.value = false;
   }
 }
+
+const goToMirrorSettings = () => {
+  showStartConfirm.value = false;
+  emit('request-switch-tab', 'mirrors-unified');
+};
 </script>
 
 <template>
@@ -829,6 +844,40 @@ async function handleStart() {
           </button>
           <button @click="handleApply" :disabled="applying" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50">
             {{ applying ? '应用中...' : '应用配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start Environment Confirmation Dialog -->
+    <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-white mb-4">⚠️ 启动环境提示</h2>
+        <p class="text-slate-400 mb-6">
+          在启动过程中，Docker 可能需要从网络拉取镜像或下载扩展脚本。
+          如果遇到网络连接问题（如 GitHub 访问失败），建议您先配置 <strong>GITHUB_PROXY</strong>。
+        </p>
+
+        <div class="space-y-4">
+          <div class="flex gap-3">
+            <button 
+              @click="showStartConfirm = false"
+              class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+            >
+              取消
+            </button>
+            <button 
+              @click="goToMirrorSettings"
+              class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+            >
+              去配置镜像源
+            </button>
+          </div>
+          <button 
+            @click="confirmStart"
+            class="w-full px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
+          >
+            直接启动
           </button>
         </div>
       </div>

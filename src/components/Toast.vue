@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { getToasts, removeToast } from '../composables/useToast';
-import { computed } from 'vue';
 
 const toasts = getToasts();
 

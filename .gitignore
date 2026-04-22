@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 # Generated files (runtime generated, not templates)
+workspace.json
 .env*
 docker-compose.yml*
 data/

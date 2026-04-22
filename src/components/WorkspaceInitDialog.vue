@@ -7,14 +7,9 @@ const isOpen = ref(false);
 const currentPath = ref('');
 const errorMessage = ref('');
 
-interface WorkspaceConfig {
-  workspace_path: string;
-  last_updated?: string;
-}
-
 onMounted(async () => {
   try {
-    const info = await invoke<Option<WorkspaceConfig>>('get_workspace_info');
+    const info = await invoke<any>('get_workspace_info');
     if (!info) {
       isOpen.value = true;
     } else {

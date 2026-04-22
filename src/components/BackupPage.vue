@@ -2,12 +2,13 @@
 import { ref, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { homeDir } from '@tauri-apps/api/path';
 import { listen } from '@tauri-apps/api/event';
 import type { BackupOptions, BackupProgress } from '../types/env-config';
 import { showToast, addLog } from '../composables/useToast';
 
 const options = ref<BackupOptions>({
+  include_database: false,
+  include_vhosts: false,
   include_projects: false,
   project_patterns: [],
   include_logs: false,

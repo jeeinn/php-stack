@@ -7,7 +7,6 @@ import { showConfirm } from '../composables/useConfirmDialog';
 
 const categories = ref<MergedMirrorCategory[]>([]);
 const loading = ref(false);
-const applying = ref(false); // 专门用于"应用配置"按钮的 loading
 const selectedCategory = ref('docker_registry');
 const testingOptions = ref<Set<string>>(new Set()); // 跟踪正在测试的选项
 
@@ -74,17 +73,24 @@ function isTesting(option: MirrorSourceOption): boolean {
   return testingOptions.value.has(optionKey);
 }
 
-// 选择镜像源
+// 选择镜像源并自动应用配置
 async function selectMirror(option: MirrorSourceOption) {
   loading.value = true;
   
   try {
+    // 1. 保存用户选择
     await invoke('save_selected_mirror_option', {
       categoryId: selectedCategory.value,
       optionId: option.id
     });
     
-    showToast(`已选择 ${option.name}`, 'success');
+    // 2. 立即应用到 .env 文件
+    await invoke('update_single_mirror', {
+      category: selectedCategory.value,
+      source: option.value
+    });
+    
+    showToast(`已选择并应用 ${option.name}`, 'success');
     
     // 重新加载数据
     await loadMirrorList();
@@ -113,7 +119,42 @@ function openEditDialog(option: MirrorSourceOption) {
   showEditDialog.value = true;
 }
 
-// 保存自定义镜像源
+// 保存编辑（更新已有选项）并自动应用配置
+async function saveEdit() {
+  if (!editValue.value.trim()) {
+    showToast('请输入镜像源地址', 'warning');
+    return;
+  }
+  
+  loading.value = true;
+  
+  try {
+    // 1. 保存用户自定义配置
+    await invoke('save_user_mirror_category', {
+      categoryId: selectedCategory.value,
+      source: editValue.value.trim(),
+      description: editDescription.value || undefined
+    });
+    
+    // 2. 立即应用到 .env 文件
+    await invoke('update_single_mirror', {
+      category: selectedCategory.value,
+      source: editValue.value.trim()
+    });
+    
+    showToast('镜像源已更新并应用！', 'success');
+    showEditDialog.value = false;
+    
+    // 重新加载数据
+    await loadMirrorList();
+  } catch (e) {
+    showToast(`更新失败: ${e}`, 'error');
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 保存自定义镜像源并自动应用配置
 async function saveCustomMirror() {
   if (!editValue.value.trim()) {
     showToast('请输入镜像源地址', 'warning');
@@ -123,13 +164,20 @@ async function saveCustomMirror() {
   loading.value = true;
   
   try {
+    // 1. 保存用户自定义配置
     await invoke('save_user_mirror_category', {
       categoryId: selectedCategory.value,
       source: editValue.value.trim(),
       description: editDescription.value || undefined
     });
     
-    showToast('自定义镜像源已保存！', 'success');
+    // 2. 立即应用到 .env 文件
+    await invoke('update_single_mirror', {
+      category: selectedCategory.value,
+      source: editValue.value.trim()
+    });
+    
+    showToast('自定义镜像源已保存并应用！', 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
@@ -155,11 +203,37 @@ async function removeCustomMirror() {
   loading.value = true;
   
   try {
+    // 1. 从用户配置中删除
     await invoke('remove_user_mirror_category', {
       categoryId: selectedCategory.value
     });
     
-    showToast('已恢复为默认配置', 'success');
+    // 2. 同步更新 .env 文件（恢复为默认值）
+    let defaultValue = '';
+    switch (selectedCategory.value) {
+      case 'docker_registry':
+        defaultValue = '';
+        break;
+      case 'apt':
+        defaultValue = 'https://deb.debian.org/debian';
+        break;
+      case 'composer':
+        defaultValue = 'https://packagist.org';
+        break;
+      case 'npm':
+        defaultValue = 'https://registry.npmjs.org';
+        break;
+      case 'github_proxy':
+        defaultValue = '';
+        break;
+    }
+    
+    await invoke('update_single_mirror', {
+      category: selectedCategory.value,
+      source: defaultValue
+    });
+    
+    showToast('已恢复为默认配置并更新 .env', 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
@@ -185,9 +259,26 @@ async function resetAllOverrides() {
   loading.value = true;
   
   try {
+    // 1. 重置所有用户自定义配置
     await invoke('reset_all_mirror_overrides');
     
-    showToast('已重置所有自定义配置', 'success');
+    // 2. 同步更新 .env 文件（恢复所有类别为默认值）
+    const defaults = {
+      docker_registry: '',
+      apt: 'https://deb.debian.org/debian',
+      composer: 'https://packagist.org',
+      npm: 'https://registry.npmjs.org',
+      github_proxy: ''
+    };
+    
+    for (const [category, defaultValue] of Object.entries(defaults)) {
+      await invoke('update_single_mirror', {
+        category,
+        source: defaultValue
+      });
+    }
+    
+    showToast('已重置所有自定义配置并更新 .env', 'success');
     
     // 重新加载数据
     await loadMirrorList();
@@ -195,26 +286,6 @@ async function resetAllOverrides() {
     showToast(`重置失败: ${e}`, 'error');
   } finally {
     loading.value = false;
-  }
-}
-
-// 应用配置（更新 .env）
-async function applyConfig() {
-  applying.value = true;
-  
-  try {
-    for (const category of categories.value) {
-      await invoke('update_single_mirror', {
-        category: category.category_id,
-        source: category.current_value
-      });
-    }
-    
-    showToast('镜像源配置已应用到 .env 文件！', 'success');
-  } catch (e) {
-    showToast(`应用配置失败: ${e}`, 'error');
-  } finally {
-    applying.value = false;
   }
 }
 
@@ -247,17 +318,8 @@ onMounted(() => {
         >
           🔄 重置所有自定义
         </button>
-        <button
-          @click="applyConfig"
-          :disabled="applying"
-          class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50 text-sm"
-        >
-          {{ applying ? '应用中...' : '应用配置' }}
-        </button>
       </div>
     </header>
-
-    <!-- Loading State -->
     <div v-if="loading && categories.length === 0" class="flex-1 flex items-center justify-center">
       <div class="text-center">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -414,7 +476,7 @@ onMounted(() => {
       <div class="mt-4 p-4 bg-slate-800/50 rounded-lg text-sm text-slate-400">
         <p>💡 提示：</p>
         <ul class="list-disc list-inside mt-2 space-y-1">
-          <li>选择镜像源后点击"应用配置"保存到 .env 文件</li>
+          <li>点击"选择"按钮后会自动应用配置到 .env 文件</li>
           <li>自定义镜像源会被保存到 .user_mirror_config.json</li>
           <li>点击"测试连接"验证镜像源是否可用</li>
         </ul>
@@ -466,7 +528,7 @@ onMounted(() => {
             删除
           </button>
           <button
-            @click="isCustomEdit ? saveCustomMirror() : null"
+            @click="isCustomEdit ? saveCustomMirror() : saveEdit()"
             :disabled="!editValue.trim()"
             class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition"
           >

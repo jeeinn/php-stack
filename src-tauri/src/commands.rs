@@ -433,6 +433,16 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
 
 // ==================== 统一镜像源管理命令 ====================
 
+/// 标准化镜像源 URL（去除尾部斜杠）
+fn normalize_mirror_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    // 去除尾部斜杠，但保留协议部分的斜杠（如 https://）
+    trimmed.trim_end_matches('/').to_string()
+}
+
 /// 获取所有镜像源预设方案
 #[tauri::command]
 pub fn get_mirror_presets() -> Result<Vec<MirrorPreset>, String> {
@@ -452,7 +462,11 @@ pub async fn apply_mirror_preset(preset_name: String) -> Result<(), String> {
 pub fn update_single_mirror(category: String, source: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     let env_path = project_root.join(".env");
-    UnifiedMirrorManager::update_single(&category, &source, &env_path)
+    
+    // 标准化镜像源地址（去除尾部斜杠）
+    let normalized_source = normalize_mirror_url(&source);
+    
+    UnifiedMirrorManager::update_single(&category, &normalized_source, &env_path)
 }
 
 /// 测试镜像源连接（3秒超时）
@@ -506,14 +520,33 @@ pub fn save_user_mirror_category(
     description: Option<String>,
 ) -> Result<(), String> {
     let project_root = get_project_root()?;
-    MirrorConfigManager::save_user_category(&project_root, &category_id, &source, description)
+    
+    // 标准化镜像源地址（去除尾部斜杠）
+    let normalized_source = normalize_mirror_url(&source);
+    
+    MirrorConfigManager::save_user_category(&project_root, &category_id, &normalized_source, description)
 }
 
 /// 删除用户自定义的类别配置
 #[tauri::command]
 pub fn remove_user_mirror_category(category_id: String) -> Result<(), String> {
     let project_root = get_project_root()?;
-    MirrorConfigManager::remove_user_category(&project_root, &category_id)
+    
+    // 1. 从用户配置中删除
+    MirrorConfigManager::remove_user_category(&project_root, &category_id)?;
+    
+    // 2. 同步更新 .env 文件，恢复为默认值
+    let env_path = project_root.join(".env");
+    let default_value = match category_id.as_str() {
+        "docker_registry" => "",
+        "apt" => "https://deb.debian.org/debian",
+        "composer" => "https://packagist.org",
+        "npm" => "https://registry.npmjs.org",
+        "github_proxy" => "",
+        _ => return Err(format!("未知的镜像源类别: {}", category_id)),
+    };
+    
+    UnifiedMirrorManager::update_single(&category_id, default_value, &env_path)
 }
 
 /// 重置所有用户自定义镜像源配置

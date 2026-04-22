@@ -55,13 +55,13 @@
     {
       "id": "aliyun",
       "name": "阿里云",
-      "value": "https://mirrors.aliyun.com/composer/",
+      "value": "https://mirrors.aliyun.com/composer",
       "description": "阿里云 Composer 镜像，依托云资源，稳定性强"
     },
     {
       "id": "tencent",
       "name": "腾讯云",
-      "value": "https://mirrors.cloud.tencent.com/composer/",
+      "value": "https://mirrors.cloud.tencent.com/composer",
       "description": "腾讯云 Composer 镜像，国内节点，速度快"
     },
     {
@@ -81,7 +81,7 @@
     {
       "id": "tencent",
       "name": "腾讯云",
-      "value": "https://mirrors.cloud.tencent.com/npm/",
+      "value": "https://mirrors.cloud.tencent.com/npm",
       "description": "腾讯云 NPM 镜像，国内节点加速"
     },
     {

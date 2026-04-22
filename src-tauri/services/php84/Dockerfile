@@ -31,12 +31,12 @@ RUN if [ -n "$GITHUB_PROXY" ]; then \
     else \
       EXTENSIONS_URL="https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions"; \
     fi && \
-    curl -sSLf -o /usr/local/bin/install-php-extensions $EXTENSIONS_URL && \
+    curl --connect-timeout 10 -sSLf -o /usr/local/bin/install-php-extensions $EXTENSIONS_URL && \
     chmod +x /usr/local/bin/install-php-extensions && \
     install-php-extensions $(echo $PHP_EXTENSIONS | tr ',' ' ')
 
 # Install composer and change it's cache home
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+RUN curl --connect-timeout 10 -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 ENV COMPOSER_HOME=/tmp/composer
 
 # Configure Composer mirror

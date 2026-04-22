@@ -47,6 +47,96 @@ pub async fn check_docker() -> Result<(), String> {
     manager.check_docker_availability().await
 }
 
+/// 检查单个端口是否被占用
+#[tauri::command]
+pub fn check_port_available(port: u16) -> Result<bool, String> {
+    use std::net::TcpListener;
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(_) => Ok(true),  // 端口可用
+        Err(_) => Ok(false), // 端口被占用
+    }
+}
+
+/// 批量检查多个端口的占用情况
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct PortCheckResult {
+    pub port: u16,
+    pub service: String,
+    pub is_available: bool,
+    pub occupied_by: Option<String>, // 可选：显示占用进程信息（Windows）
+}
+
+#[tauri::command]
+pub fn check_ports_availability(ports: Vec<(u16, String)>) -> Result<Vec<PortCheckResult>, String> {
+    let mut results = Vec::new();
+    
+    for (port, service) in ports {
+        let is_available = check_port_available(port)?;
+        
+        // 在 Windows 上尝试获取占用进程信息
+        let occupied_by = if !is_available && cfg!(target_os = "windows") {
+            get_port_owner_windows(port).ok()
+        } else {
+            None
+        };
+        
+        results.push(PortCheckResult {
+            port,
+            service,
+            is_available,
+            occupied_by,
+        });
+    }
+    
+    Ok(results)
+}
+
+/// Windows 下获取端口占用者信息
+#[cfg(target_os = "windows")]
+fn get_port_owner_windows(port: u16) -> Result<String, String> {
+    use std::process::Command;
+    
+    // 使用 netstat 查找占用端口的 PID
+    let output = Command::new("netstat")
+        .args(&["-ano"])
+        .output()
+        .map_err(|e| format!("执行 netstat 失败: {}", e))?;
+    
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    
+    // 查找包含端口的行，例如：TCP 0.0.0.0:3306 0.0.0.0:0 LISTENING 1234
+    let pattern = format!(":{}\s", port);
+    for line in output_str.lines() {
+        if line.contains(&pattern) && line.contains("LISTENING") {
+            // 提取 PID（最后一列）
+            if let Some(pid) = line.split_whitespace().last() {
+                // 尝试获取进程名称
+                if let Ok(proc_output) = Command::new("tasklist")
+                    .args(&["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+                    .output() 
+                {
+                    let proc_str = String::from_utf8_lossy(&proc_output.stdout);
+                    if let Some(proc_name) = proc_str.lines().next() {
+                        // CSV 格式："进程名","PID","..."
+                        let name = proc_name.split(',').next()
+                            .unwrap_or("")
+                            .trim_matches('"');
+                        return Ok(format!("{} (PID: {})", name, pid));
+                    }
+                }
+                return Ok(format!("PID: {}", pid));
+            }
+        }
+    }
+    
+    Err("未知进程".to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_port_owner_windows(_port: u16) -> Result<String, String> {
+    Err("不支持的平台".to_string())
+}
+
 #[tauri::command]
 pub async fn list_containers() -> Result<Vec<PsContainer>, String> {
     check_docker().await?;
@@ -389,44 +479,113 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         emit_log("✅ 旧容器已清理");
     }
     
-    // 第二步：启动新容器
-    emit_log("🔧 执行: docker compose up -d");
-    emit_log("⏳ 首次启动可能需要几分钟（下载镜像、安装扩展）...");
-    
-    let output = Command::new("docker")
-        .args(&["compose", "up", "-d"])
+    // 第二步:启动新容器(流式输出)
+    emit_log("🔧 执行: docker compose --progress plain up -d");
+    emit_log("⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");
+        
+    let mut child = Command::new("docker")
+        .args(&["compose", "--progress", "plain", "up", "-d"])
         .current_dir(&project_root)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| {
             let err_msg = format!("执行 docker compose 失败: {}", e);
             emit_log(&format!("❌ {}", err_msg));
             err_msg
         })?;
     
-    // 输出 stdout
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if !stdout.is_empty() {
-        emit_log("📤 Docker Compose 输出:");
-        for line in stdout.lines() {
-            emit_log(&format!("   {}", line));
+    // 读取 stdout（流式）
+    let mut stdout_lines = Vec::new();
+    if let Some(stdout) = child.stdout.take() {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    if !line.is_empty() {
+                        emit_log(&format!("   {}", line));
+                        stdout_lines.push(line);
+                    }
+                }
+                Err(_) => break,
+            }
         }
     }
     
-    // 输出 stderr（警告信息）
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !stderr.is_empty() {
-        emit_log("⚠️ Docker Compose 警告/错误:");
-        for line in stderr.lines() {
-            emit_log(&format!("   {}", line));
+    // 读取 stderr（流式）并收集内容
+    let mut stderr_lines = Vec::new();
+    if let Some(stderr) = child.stderr.take() {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    if !line.is_empty() {
+                        emit_log(&format!("   ⚠️ {}", line));
+                        stderr_lines.push(line);
+                    }
+                }
+                Err(_) => break,
+            }
         }
     }
     
-    if output.status.success() {
-        emit_log("✅ 环境启动成功！");
-        Ok(stdout.to_string())
-    } else {
-        let err_msg = format!("Docker Compose 启动失败:\n{}", stderr);
+    let stderr_content = stderr_lines.join("\n");
+    
+    let status = child.wait().map_err(|e| {
+        let err_msg = format!("等待 docker compose 完成失败: {}", e);
         emit_log(&format!("❌ {}", err_msg));
+        err_msg
+    })?;
+    
+    if status.success() {
+        emit_log("✅ 环境启动成功！");
+        Ok("环境启动成功".to_string())
+    } else {
+        // 分析错误类型，提供更友好的提示
+        let exit_code = status.code();
+        
+        // 检查是否是端口冲突错误
+        let is_port_conflict = stderr_content.contains("port is already allocated") 
+            || stderr_content.contains("Bind for") 
+            || stderr_content.contains("address already in use");
+        
+        if is_port_conflict {
+            emit_log("❌ 端口冲突 detected！");
+            emit_log("");
+            emit_log("💡 可能的原因：");
+            emit_log("   1. 其他 Docker 容器占用了相同端口");
+            emit_log("   2. 本地服务（如 MySQL、Nginx）正在运行");
+            emit_log("");
+            emit_log("🔧 解决方案：");
+            emit_log("   方案 1: 停止占用端口的容器");
+            emit_log("           docker ps  # 查看运行中的容器");
+            emit_log("           docker stop <容器名>");
+            emit_log("");
+            emit_log("   方案 2: 修改 .env 文件中的端口配置");
+            emit_log("           例如：MYSQL_PORT=3307 (改为其他端口)");
+            emit_log("           然后重新应用配置");
+            emit_log("");
+            emit_log("   方案 3: 停止本地服务");
+            emit_log("           检查是否有本地 MySQL/Nginx/Redis 在运行");
+            emit_log("");
+            
+            // 提取具体冲突的端口信息
+            if let Some(line) = stderr_lines.iter().find(|l| l.contains("Bind for")) {
+                emit_log(&format!("📍 详细信息: {}", line.trim()));
+            }
+        } else {
+            emit_log(&format!("❌ Docker Compose 启动失败，退出码: {:?}", exit_code));
+            emit_log("");
+            emit_log("💡 建议检查：");
+            emit_log("   1. Docker Desktop 是否正常运行");
+            emit_log("   2. docker-compose.yml 文件格式是否正确");
+            emit_log("   3. 镜像是否存在或网络是否正常");
+        }
+        
+        let err_msg = format!("Docker Compose 启动失败: {}", 
+            if is_port_conflict { "端口冲突" } else { "未知错误" });
         Err(err_msg)
     }
 }

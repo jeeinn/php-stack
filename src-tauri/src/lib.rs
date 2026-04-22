@@ -20,6 +20,7 @@ pub fn run() {
       // Dashboard
       commands::check_docker,
       commands::list_containers,
+      commands::list_all_running_containers,
       commands::start_container,
       commands::stop_container,
       commands::restart_container,

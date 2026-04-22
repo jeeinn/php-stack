@@ -64,6 +64,35 @@ impl DockerManager {
         Ok(ps_containers)
     }
 
+    /// 获取所有运行中的容器（用于端口冲突检测）
+    pub async fn list_all_running_containers(&self) -> Result<Vec<PsContainer>, Box<dyn std::error::Error>> {
+        let options = Some(ListContainersOptions {
+            all: false, // 只返回运行中的容器
+            ..Default::default()
+        });
+
+        let containers = self.docker.list_containers(options).await?;
+        
+        let all_containers = containers.into_iter().map(|c| {
+            let name = c.names.clone().unwrap_or_default().get(0)
+                .map(|n| n.trim_start_matches('/').to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+
+            PsContainer {
+                id: c.id.unwrap_or_default(),
+                name,
+                image: c.image.unwrap_or_default(),
+                status: c.status.unwrap_or_default(),
+                state: format!("{:?}", c.state),
+                ports: c.ports.unwrap_or_default().into_iter()
+                    .filter_map(|p| p.public_port.map(|port| port as i32))
+                    .collect(),
+            }
+        }).collect();
+
+        Ok(all_containers)
+    }
+
     pub async fn start_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
         self.docker.start_container(name, None::<StartContainerOptions>).await?;
         Ok(())

@@ -6,6 +6,7 @@ use chrono::Local;
 use super::env_parser::EnvFile;
 use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
 use super::user_override_manager::UserOverrideManager;
+use super::mirror_config_manager::UserMirrorConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ServiceType {
@@ -99,6 +100,7 @@ impl ConfigGenerator {
 
     /// Generate .env file content from EnvConfig.
     /// If existing_env is provided, preserve user custom variables.
+    /// Also merges mirror configuration from .user_mirror_config.json.
     pub fn generate_env(config: &EnvConfig, existing_env: Option<&EnvFile>) -> EnvFile {
         // Collect all managed keys so we know what NOT to treat as custom
         let managed_keys = Self::managed_keys(config);
@@ -239,6 +241,38 @@ impl ConfigGenerator {
                     env.set(&format!("NGINX{}_CONF_FILE", ver), &format!("./services/nginx{}/nginx.conf", ver));
                     env.set(&format!("NGINX{}_CONFD_DIR", ver), &format!("./services/nginx{}/conf.d", ver));
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
+                }
+            }
+        }
+
+        // Merge mirror configuration from .user_mirror_config.json
+        let project_root = Self::get_project_root();
+        if let Ok(user_mirror_config) = UserMirrorConfig::load(&project_root) {
+            // APT Mirror
+            if let Some(apt_cat) = user_mirror_config.get_category("apt") {
+                if apt_cat.enabled && !apt_cat.source.is_empty() {
+                    env.set("APT_MIRROR", &apt_cat.source);
+                }
+            }
+            
+            // Composer Mirror
+            if let Some(composer_cat) = user_mirror_config.get_category("composer") {
+                if composer_cat.enabled && !composer_cat.source.is_empty() {
+                    env.set("COMPOSER_MIRROR", &composer_cat.source);
+                }
+            }
+            
+            // NPM Mirror
+            if let Some(npm_cat) = user_mirror_config.get_category("npm") {
+                if npm_cat.enabled && !npm_cat.source.is_empty() {
+                    env.set("NPM_MIRROR", &npm_cat.source);
+                }
+            }
+            
+            // GitHub Proxy
+            if let Some(github_cat) = user_mirror_config.get_category("github_proxy") {
+                if github_cat.enabled && !github_cat.source.is_empty() {
+                    env.set("GITHUB_PROXY", &github_cat.source);
                 }
             }
         }

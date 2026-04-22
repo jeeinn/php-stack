@@ -1,6 +1,6 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: V2.3  
+> **版本**: V2.4  
 > **最后更新**: 2026-04-22  
 > **维护者**: PHP-Stack Team
 
@@ -171,24 +171,48 @@ sequenceDiagram
     U->>FE: 点击"一键启动"
     FE->>FE: 显示确认弹窗
     U->>FE: 点击"直接启动"
-    FE->>CMD: invoke('load_existing_config')
-    CMD->>FS: 读取 .env 文件
-    FS-->>CMD: 返回 EnvConfig
-    CMD-->>FE: 返回配置
-    FE->>CMD: invoke('list_containers')
-    CMD->>DC: 获取运行中的容器列表
-    DC-->>CMD: 返回容器信息
-    CMD-->>FE: 返回容器列表
-    FE->>FE: 检查端口冲突
-    alt 检测到冲突
-        FE->>U: 显示冲突详情和解决方案
-        U->>FE: 选择继续或取消
-        alt 用户取消
-            FE->>U: 中止启动
+    FE->>CMD: invoke('start_environment')
+    CMD->>DC: docker compose down (清理旧容器)
+    DC-->>CMD: 清理完成
+    CMD->>CMD: ⏳ 等待容器完全停止...
+    loop 循环检测（最多 10 次）
+        CMD->>DM: list_ps_containers()
+        DM->>DC: 获取 ps- 前缀容器列表
+        DC-->>DM: 返回容器状态
+        DM-->>CMD: 返回 PsContainer[]
+        alt 所有 ps- 容器已停止
+            CMD->>CMD: ✅ 所有 ps- 容器已完全停止
+        else 仍有容器运行
+            alt 第 10 次检测（超时）
+                CMD->>CMD: ⚠️ 等待超时，显示未停止的容器
+            else 继续等待
+                CMD->>CMD: 等待 1 秒后再次检测
+            end
         end
     end
-    FE->>CMD: invoke('start_environment')
-    CMD->>DC: docker compose --progress plain up -d
+    CMD->>CMD: 🔍 检查端口冲突...
+    CMD->>DM: list_all_running_containers()
+    DM->>DC: 获取所有运行中的容器
+    DC-->>DM: 返回 Container[]
+    DM-->>CMD: 返回容器列表
+    CMD->>FS: load_existing_config()
+    FS-->>CMD: 返回 EnvConfig
+    CMD->>CMD: 遍历配置端口，检查冲突
+    alt 检测到冲突
+        CMD->>CMD: ❌ 返回 PORT_CONFLICT 错误
+        CMD-->>FE: 错误信息
+        FE->>FE: 显示 ConfirmDialog
+        FE->>U: 显示冲突详情和解决方案
+        U->>FE: 选择"忽略并继续"或"取消启动"
+        alt 用户取消
+            FE->>U: 中止启动
+        else 用户继续
+            FE->>CMD: 再次 invoke('start_environment')
+            CMD->>DC: docker compose --progress plain up -d
+        end
+    else 无冲突
+        CMD->>DC: docker compose --progress plain up -d
+    end
     DC->>DC: 读取 .env 和 docker-compose.yml
     DC->>DC: 拉取镜像 (mysql:8.4)
     DC->>DC: 启动容器
@@ -198,14 +222,44 @@ sequenceDiagram
 ```
 
 **端口冲突检测机制**：
-- **检测时机**: 用户点击"直接启动"后，执行 `docker compose up` 之前
-- **检测方式**: 通过 Docker API (`list_containers`) 获取所有运行中的容器
-- **冲突判断**: 检查配置中的端口是否已被其他容器的 `ports` 数组占用
-- **优势**: 
-  - ✅ 完全跨平台（Docker API 统一）
-  - ✅ 精准定位（显示容器名、镜像、ID）
-  - ✅ 无需权限（不需要 netstat/tasklist）
-  - ✅ 用户友好（提供明确的解决命令）
+
+#### 1. 检测时机
+- **位置**: `start_environment` 命令中，清理旧容器后、启动新容器前
+- **流程**: 
+  ```
+  清理旧容器 → 等待 ps- 容器停止 → 检查端口冲突 → 启动新容器
+  ```
+
+#### 2. 容器停止等待机制（循环检测）
+- **目的**: 避免检测到正在停止的 ps- 容器，导致误判
+- **实现**: 
+  - 循环调用 `list_ps_containers()` 检查 ps- 前缀容器状态
+  - 最多等待 10 次，每次间隔 1 秒
+  - 所有 ps- 容器停止后立即继续，不浪费时间
+  - 超时时显示未停止的容器列表，方便排查
+- **优势**:
+  - ✅ 自适应：不同机器、不同容器数量都能准确判断
+  - ✅ 高效：容器停止后立即继续，不等固定时间
+  - ✅ 可靠：基于 Docker API 实际状态，而非猜测
+
+#### 3. 端口冲突检测方式
+- **API**: `list_all_running_containers()` - 获取所有运行中的容器（包括外部容器）
+- **冲突判断**: 遍历配置中的端口，检查是否被其他容器的 `ports` 数组占用
+- **返回格式**: `PORT_CONFLICT:端口 X (服务A) 被容器 Y 占用; 端口 Z (服务B) 被容器 W 占用`
+
+#### 4. 前端处理逻辑
+- **错误捕获**: 检测 `errorMsg.startsWith('PORT_CONFLICT:')`
+- **弹窗提示**: 使用 ConfirmDialog 显示冲突详情
+- **用户选择**:
+  - "取消启动": 终止流程，不执行 `docker compose up`
+  - "忽略并继续": 再次调用 `start_environment`，跳过端口检查
+
+#### 5. 整体优势
+- ✅ **完全跨平台**: Docker API 统一接口，无需系统特定命令
+- ✅ **精准定位**: 显示容器名、镜像、ID，而非进程名
+- ✅ **无需权限**: 不需要 netstat/tasklist 等系统命令
+- ✅ **用户友好**: 提供明确的解决命令和自定义弹窗
+- ✅ **时序可靠**: 循环检测确保容器完全停止后再检查
 
 ### 3.2 版本映射查询流程
 
@@ -441,6 +495,57 @@ alt 有冲突
 end
 ```
 
+### 5.4 ConfirmDialog 交互规范
+
+**位置**: `src/components/ConfirmDialog.vue` + `src/composables/useConfirmDialog.ts`
+
+**设计理念**: 关键确认操作必须通过明确的按钮选择，禁止点击外部关闭。
+
+**使用场景**:
+- 端口冲突检测（是否继续启动）
+- 配置文件覆盖确认
+- 删除/停止等危险操作
+- 其他需要用户明确确认的场景
+
+**交互流程**:
+```mermaid
+graph TD
+    A[调用 showConfirm] --> B[显示 ConfirmDialog]
+    B --> C{用户操作}
+    C -->|点击遮罩层| D[无反应，弹窗保持]
+    C -->|点击取消按钮| E[返回 false]
+    C -->|点击确认按钮| F[返回 true]
+    C -->|按 ESC 键| E
+    D --> C
+    E --> G[执行取消逻辑]
+    F --> H[执行确认逻辑]
+```
+
+**API 示例**:
+```typescript
+import { showConfirm } from '../composables/useConfirmDialog';
+
+const result = await showConfirm({
+  title: '⚠️ 检测到端口冲突',
+  message: `发现以下端口冲突：\n\n• 端口 80 (Nginx127) 被容器 nginx 占用\n\n是否继续启动？`,
+  confirmText: '忽略并继续',
+  cancelText: '取消启动',
+  type: 'warning'  // 'danger' | 'warning' | 'info'
+});
+
+if (result) {
+  // 用户点击了"忽略并继续"
+} else {
+  // 用户点击了"取消启动"或按 ESC
+}
+```
+
+**优势**:
+- ✅ **防止误触**: 点击外部不关闭，避免关键操作丢失
+- ✅ **强制确认**: 用户必须明确选择，减少操作失误
+- ✅ **统一体验**: 所有重要确认使用相同交互模式
+- ✅ **可访问性**: 支持键盘操作（ESC 取消，Enter 确认）
+
 ---
 
 ## 6. 关键技术决策
@@ -493,20 +598,68 @@ mysql84:
 
 **问题**:
 - 传统方法使用 `netstat`/`lsof` 检查宿主机端口
-- 需要管理员权限，跨平台兼容性差
-- 显示进程名（如 `mysqld.exe`），用户不知道是哪个容器
+- 跨平台兼容性差（Windows/Linux/macOS 命令不同）
+- 需要管理员权限
+- 显示进程名而非容器名，用户难以理解
 
-**解决方案**:
-- 通过 Docker API (`list_containers`) 获取运行中的容器
-- 检查容器的 `ports` 数组是否包含配置中的端口
-- 显示容器名称、镜像、ID 等详细信息
+**解决方案**: 使用 Docker API (`list_all_running_containers`)
 
 **优势**:
-- ✅ 完全跨平台（Docker API 统一）
-- ✅ 精准定位（显示容器详情而非进程名）
-- ✅ 无需特殊权限（普通用户即可）
-- ✅ 简化实现（复用现有 API，减少 90+ 行代码）
-- ✅ 用户友好（提供明确的 `docker stop/rm` 命令）
+- ✅ **完全跨平台**: Docker API 统一接口
+- ✅ **精准定位**: 显示容器名、镜像、ID
+- ✅ **无需权限**: 不需要系统特定命令
+- ✅ **简化实现**: 减少 90+ 行后端代码
+
+### 6.5 为什么采用循环检测等待容器停止？
+
+**问题**:
+- 硬编码等待时间（如 `sleep(2)`）不可靠
+- 可能等待时间不足（容器还在停止）
+- 可能等待时间过长（浪费时间）
+- 无法知道容器是否真的停止了
+
+**解决方案**: 循环检测 ps- 容器状态
+
+**实现**:
+```rust
+for attempt in 1..=10 {
+    let ps_containers = manager.list_ps_containers().await?;
+    let running = ps_containers.iter()
+        .filter(|c| c.state.contains("running"))
+        .collect();
+    
+    if running.is_empty() {
+        break; // 所有容器已停止
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+```
+
+**优势**:
+- ✅ **自适应**: 不同机器、不同容器数量都能准确判断
+- ✅ **高效**: 容器停止后立即继续，不等固定时间
+- ✅ **可靠**: 基于 Docker API 实际状态，而非猜测
+- ✅ **友好**: 超时时显示未停止的容器列表
+
+### 6.6 为什么禁止点击 ConfirmDialog 外部关闭？
+
+**问题**:
+- 点击遮罩层会触发 `handleCancel`
+- 关键确认操作（如端口冲突）容易误触丢失
+- 用户体验差，需要重新操作
+
+**解决方案**: 移除 `@click.self` 事件处理器
+
+**设计理念**:
+- 关键确认必须通过明确的按钮选择
+- 防止误触导致操作中断
+- 强制用户认真阅读提示信息
+
+**影响范围**:
+- 端口冲突确认
+- 配置文件覆盖确认
+- 删除/停止等危险操作
+- 所有重要确认场景
 
 ---
 

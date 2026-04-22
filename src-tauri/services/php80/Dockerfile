@@ -11,10 +11,11 @@ ARG GITHUB_PROXY
 ENV TZ=${TZ}
 
 # Set debian mirror
-RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-      sed -i "s|deb.debian.org|${DEBIAN_MIRROR_DOMAIN:-deb.debian.org}|g" /etc/apt/sources.list.d/debian.sources; \
+RUN DEBIAN_HOST=$(echo "${DEBIAN_MIRROR_DOMAIN:-deb.debian.org}" | sed 's|https\?://||') && \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i "s|deb.debian.org|${DEBIAN_HOST}|g" /etc/apt/sources.list.d/debian.sources; \
     elif [ -f /etc/apt/sources.list ]; then \
-      sed -i "s|deb.debian.org|${DEBIAN_MIRROR_DOMAIN:-deb.debian.org}|g" /etc/apt/sources.list; \
+      sed -i "s|deb.debian.org|${DEBIAN_HOST}|g" /etc/apt/sources.list; \
     fi
 
 # Install required packages

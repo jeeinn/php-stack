@@ -7,7 +7,7 @@ import { showConfirm } from '../composables/useConfirmDialog';
 
 const categories = ref<MergedMirrorCategory[]>([]);
 const loading = ref(false);
-const selectedCategory = ref('docker_registry');
+const selectedCategory = ref('apt');
 const testingOptions = ref<Set<string>>(new Set()); // 跟踪正在测试的选项
 
 // 类别标签映射

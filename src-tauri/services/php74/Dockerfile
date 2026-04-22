@@ -31,12 +31,7 @@ RUN if [ -n "$COMPOSER_MIRROR" ] && [ "$COMPOSER_MIRROR" != "https://packagist.o
     fi
 
 # Install composer and change it's cache home
-RUN if [ -n "$GITHUB_PROXY" ]; then \
-      COMPOSER_URL="${GITHUB_PROXY}/https://getcomposer.org/installer"; \
-    else \
-      COMPOSER_URL="https://getcomposer.org/installer"; \
-    fi && \
-    curl -sS $COMPOSER_URL | php -- --install-dir=/usr/local/bin --filename=composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 ENV COMPOSER_HOME=/tmp/composer
 
 # Set work directory

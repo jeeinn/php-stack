@@ -1,7 +1,7 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: V2.2  
-> **最后更新**: 2026-04-21  
+> **版本**: V2.3  
+> **最后更新**: 2026-04-22  
 > **维护者**: PHP-Stack Team
 
 ---
@@ -169,15 +169,43 @@ sequenceDiagram
     FE->>U: 显示"应用成功"
     
     U->>FE: 点击"一键启动"
+    FE->>FE: 显示确认弹窗
+    U->>FE: 点击"直接启动"
+    FE->>CMD: invoke('load_existing_config')
+    CMD->>FS: 读取 .env 文件
+    FS-->>CMD: 返回 EnvConfig
+    CMD-->>FE: 返回配置
+    FE->>CMD: invoke('list_containers')
+    CMD->>DC: 获取运行中的容器列表
+    DC-->>CMD: 返回容器信息
+    CMD-->>FE: 返回容器列表
+    FE->>FE: 检查端口冲突
+    alt 检测到冲突
+        FE->>U: 显示冲突详情和解决方案
+        U->>FE: 选择继续或取消
+        alt 用户取消
+            FE->>U: 中止启动
+        end
+    end
     FE->>CMD: invoke('start_environment')
-    CMD->>DC: docker compose up -d
+    CMD->>DC: docker compose --progress plain up -d
     DC->>DC: 读取 .env 和 docker-compose.yml
     DC->>DC: 拉取镜像 (mysql:8.4)
     DC->>DC: 启动容器
-    DC-->>CMD: 返回结果
-    CMD-->>FE: 返回日志
+    DC-->>CMD: 流式输出日志
+    CMD-->>FE: 实时推送日志
     FE->>U: 显示启动状态
 ```
+
+**端口冲突检测机制**：
+- **检测时机**: 用户点击"直接启动"后，执行 `docker compose up` 之前
+- **检测方式**: 通过 Docker API (`list_containers`) 获取所有运行中的容器
+- **冲突判断**: 检查配置中的端口是否已被其他容器的 `ports` 数组占用
+- **优势**: 
+  - ✅ 完全跨平台（Docker API 统一）
+  - ✅ 精准定位（显示容器名、镜像、ID）
+  - ✅ 无需权限（不需要 netstat/tasklist）
+  - ✅ 用户友好（提供明确的解决命令）
 
 ### 3.2 版本映射查询流程
 
@@ -325,6 +353,7 @@ pub fn get_merged_image_info(&self, service_type, version) -> Option<ImageInfo> 
 | **BackupEngine** | `backup_engine.rs` | 环境备份（ZIP + manifest + SHA256） |
 | **RestoreEngine** | `restore_engine.rs` | 环境恢复（验证 + 还原） |
 | **DockerManager** | `docker/manager.rs` | 容器列表、启停操作 |
+| **PortChecker** | `src/utils/portChecker.ts` | 前端端口冲突检测工具（基于 Docker API） |
 
 ---
 
@@ -380,6 +409,38 @@ docker-compose.yml: image: mysql:${MYSQL84_VERSION}
 Docker Compose 解析 → 拉取 mysql:8.4
 ```
 
+### 5.3 端口冲突检测数据流
+
+```
+用户点击"直接启动"
+    ↓
+load_existing_config() → 读取 .env 文件
+    ↓
+EnvConfig { services: [...] }
+    ↓
+extractPortsFromConfig() → 提取需要的端口
+    ↓
+Map { 3306: "mysql80", 6379: "redis82", ... }
+    ↓
+list_containers() → 获取运行中的容器
+    ↓
+Container[] { id, name, image, ports, state }
+    ↓
+遍历配置端口，检查是否有容器占用
+    ↓
+conflicts: ContainerPortConflict[]
+    ↓
+alt 有冲突
+    formatContainerConflictMessage()
+    ↓
+显示冲突详情（容器名、镜像、ID）
+    ↓
+用户选择：继续 / 取消
+    else 无冲突
+    继续启动流程
+end
+```
+
 ---
 
 ## 6. 关键技术决策
@@ -427,6 +488,25 @@ mysql84:
 - ✅ .env 和 docker-compose.yml 解耦
 - ✅ 修改配置无需重新生成 compose 文件
 - ✅ 符合 Docker Compose 最佳实践
+
+### 6.4 为什么采用 Docker API 进行端口检测？
+
+**问题**:
+- 传统方法使用 `netstat`/`lsof` 检查宿主机端口
+- 需要管理员权限，跨平台兼容性差
+- 显示进程名（如 `mysqld.exe`），用户不知道是哪个容器
+
+**解决方案**:
+- 通过 Docker API (`list_containers`) 获取运行中的容器
+- 检查容器的 `ports` 数组是否包含配置中的端口
+- 显示容器名称、镜像、ID 等详细信息
+
+**优势**:
+- ✅ 完全跨平台（Docker API 统一）
+- ✅ 精准定位（显示容器详情而非进程名）
+- ✅ 无需特殊权限（普通用户即可）
+- ✅ 简化实现（复用现有 API，减少 90+ 行代码）
+- ✅ 用户友好（提供明确的 `docker stop/rm` 命令）
 
 ---
 

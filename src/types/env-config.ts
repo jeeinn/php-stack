@@ -93,3 +93,12 @@ export interface RestoreProgress {
   step: string;
   percentage: number;
 }
+
+// Docker 容器端口冲突信息
+export interface ContainerPortConflict {
+  port: number;
+  service: string;
+  container_name: string;
+  container_image: string;
+  container_id: string;
+}

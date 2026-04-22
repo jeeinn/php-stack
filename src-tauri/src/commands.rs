@@ -397,10 +397,41 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         emit_log("✅ 旧容器已清理");
     }
     
-    // 等待容器完全停止（避免检测到正在停止的容器）
+    // 等待 ps- 前缀的容器完全停止（最多等待 10 秒）
     emit_log("⏳ 等待容器完全停止...");
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    emit_log("✅ 容器已完全停止");
+    let manager = DockerManager::new().map_err(|e| {
+        let err_msg = format!("创建 Docker 管理器失败: {}", e);
+        emit_log(&format!("❌ {}", err_msg));
+        err_msg
+    })?;
+    
+    for attempt in 1..=10 {
+        let ps_containers = manager.list_ps_containers().await.map_err(|e| {
+            let err_msg = format!("检查容器状态失败: {}", e);
+            emit_log(&format!("❌ {}", err_msg));
+            err_msg
+        })?;
+        
+        // 过滤出仍在运行的 ps- 容器
+        let running_ps_containers: Vec<_> = ps_containers.iter()
+            .filter(|c| c.state.to_lowercase().contains("running") || 
+                        c.state.to_lowercase().contains("up"))
+            .collect();
+        
+        if running_ps_containers.is_empty() {
+            emit_log("✅ 所有 ps- 容器已完全停止");
+            break;
+        }
+        
+        if attempt == 10 {
+            emit_log(&format!("⚠️ 等待超时，仍有 {} 个容器未停止", running_ps_containers.len()));
+            for container in &running_ps_containers {
+                emit_log(&format!("   - {} ({})", container.name, container.state));
+            }
+        } else {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    }
     emit_log("");
     
     // 第二步：端口冲突检测

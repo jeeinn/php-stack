@@ -267,10 +267,9 @@ impl ConfigGenerator {
                     lines.push(format!("      args:"));
                     lines.push(format!("        PHP_EXTENSIONS: \"${{PHP{}_EXTENSIONS}}\"", ver));
                     lines.push(format!("        TZ: \"${{TZ}}\""));
-                    // 镜像源配置
+                    // 镜像源配置（仅容器内依赖）
                     lines.push(format!("        DEBIAN_MIRROR_DOMAIN: \"${{APT_MIRROR:-deb.debian.org}}\""));
                     lines.push(format!("        COMPOSER_MIRROR: \"${{COMPOSER_MIRROR:-https://packagist.org}}\""));
-                    lines.push(format!("        NPM_REGISTRY: \"${{NPM_MIRROR:-https://registry.npmjs.org}}\""));
                     lines.push(format!("        GITHUB_PROXY: \"${{GITHUB_PROXY:-}}\""));
                     lines.push(format!("    container_name: ps-php{}", ver));
                     lines.push(format!("    expose:"));
@@ -810,11 +809,19 @@ impl ConfigGenerator {
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
         
-        // Generate .npmrc file if NPM mirror is configured
+        // Generate .npmrc file in workspace path if NPM mirror is configured
         let npm_mirror = env_file.get("NPM_MIRROR").unwrap_or("");
         if !npm_mirror.is_empty() && npm_mirror != "https://registry.npmjs.org" {
+            // 从 workspace.json 获取工作区路径
+            let workspace_path = if let Some(workspace_config) = crate::engine::workspace_manager::WorkspaceManager::load_workspace()? {
+                PathBuf::from(workspace_config.workspace_path)
+            } else {
+                // 如果没有配置 workspace，使用项目根目录作为后备
+                project_root.to_path_buf()
+            };
+            
             let npmrc_content = format!("registry={}\n", npm_mirror);
-            let npmrc_path = project_root.join(".npmrc");
+            let npmrc_path = workspace_path.join(".npmrc");
             std::fs::write(&npmrc_path, npmrc_content)
                 .map_err(|e| format!("写入 .npmrc 文件失败: {}", e))?;
         }

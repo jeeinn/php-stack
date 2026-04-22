@@ -5,7 +5,6 @@ ARG TZ
 ARG PHP_EXTENSIONS
 ARG DEBIAN_MIRROR_DOMAIN
 ARG COMPOSER_MIRROR
-ARG NPM_REGISTRY
 ARG GITHUB_PROXY
 
 ENV TZ=${TZ}
@@ -29,11 +28,6 @@ RUN if [ -n "$GITHUB_PROXY" ]; then \
 # Configure Composer mirror
 RUN if [ -n "$COMPOSER_MIRROR" ] && [ "$COMPOSER_MIRROR" != "https://packagist.org" ]; then \
       composer config -g repo.packagist composer $COMPOSER_MIRROR; \
-    fi
-
-# Configure NPM registry
-RUN if [ -n "$NPM_REGISTRY" ] && [ "$NPM_REGISTRY" != "https://registry.npmjs.org" ]; then \
-      npm config set registry $NPM_REGISTRY; \
     fi
 
 # Install composer and change it's cache home

@@ -81,7 +81,6 @@ export interface PortConflict {
 export interface RestorePreview {
   manifest: BackupManifest;
   port_conflicts: PortConflict[];
-  missing_images: string[];
 }
 
 export interface BackupProgress {

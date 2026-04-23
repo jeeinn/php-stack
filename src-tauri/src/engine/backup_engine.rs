@@ -260,10 +260,8 @@ mod tests {
 
         let backup_path = project_root.join("backup.zip");
         let options = BackupOptions {
-            include_database: false,
             include_projects: false,
             project_patterns: Vec::new(),
-            include_vhosts: false,
             include_logs: false,
         };
 

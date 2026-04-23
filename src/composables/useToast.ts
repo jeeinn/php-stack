@@ -16,8 +16,8 @@ let nextId = 0;
 // 添加日志（用于实时日志面板）
 export function addLog(message: string) {
   const time = new Date().toLocaleTimeString();
-  logs.value.unshift(`[${time}] ${message}`);
-  if (logs.value.length > 50) logs.value.pop();
+  logs.value.push(`[${time}] ${message}`);
+  if (logs.value.length > 50) logs.value.shift();
 }
 
 // 获取当前所有日志

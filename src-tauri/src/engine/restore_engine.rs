@@ -208,6 +208,7 @@ impl RestoreEngine {
         conflicts
     }
 
+
     /// Find next available port starting from the given port.
     fn find_available_port(start_port: u16) -> u16 {
         let mut port = start_port;
@@ -440,10 +441,8 @@ mod tests {
                 ports,
             }],
             options: BackupOptions {
-                include_database: false,
                 include_projects: false,
                 project_patterns: Vec::new(),
-                include_vhosts: false,
                 include_logs: false,
             },
             files,
@@ -533,10 +532,8 @@ mod tests {
             os_info: "linux".to_string(),
             services: Vec::new(),
             options: BackupOptions {
-                include_database: false,
                 include_projects: false,
                 project_patterns: Vec::new(),
-                include_vhosts: false,
                 include_logs: false,
             },
             files,

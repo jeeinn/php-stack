@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import EnvConfigPage from './components/EnvConfigPage.vue';
@@ -29,6 +29,7 @@ const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(true); // 控制侧边栏展开/收缩（默认收缩）
 const showStartConfirm = ref(false); // 控制启动确认弹窗
+const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 
 // 判断容器是否运行中（兼容多种格式）
 const isRunning = (state: string): boolean => {
@@ -206,6 +207,14 @@ onMounted(() => {
     addLog(msg);
   });
 });
+
+// 监听日志变化，自动滚动到底部
+watch(logs, async () => {
+  await nextTick();
+  if (logPanelRef.value) {
+    logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+  }
+}, { deep: true });
 </script>
 
 <template>
@@ -415,7 +424,11 @@ onMounted(() => {
         </div>
         
         <transition name="fade">
-          <div v-show="showLogs" class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden">
+          <div 
+            v-show="showLogs" 
+            ref="logPanelRef"
+            class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
+          >
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
               {{ log }}
             </div>

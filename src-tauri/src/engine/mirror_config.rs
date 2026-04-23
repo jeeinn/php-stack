@@ -10,7 +10,7 @@ use std::path::Path;
 
 /// 镜像源配置
 /// 
-/// V1.0: 统一管理容器内依赖镜像源（APT/Composer/PyPI/NPM）
+/// 统一管理容器内依赖镜像源（APT/Composer/PyPI/NPM）
 /// 注意：Docker Daemon 的 registry-mirrors 由 docker/mirror.rs 管理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MirrorConfig {

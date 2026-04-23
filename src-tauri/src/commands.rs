@@ -675,7 +675,7 @@ pub fn get_current_mirror_preset() -> Result<String, String> {
     UnifiedMirrorManager::detect_current_preset(&env_path)
 }
 
-// ==================== 增强镜像源管理命令 (V2.2) ====================
+// ==================== 增强镜像源管理命令 ====================
 
 /// 获取合并后的镜像源列表（默认配置 + 用户自定义）
 #[tauri::command]

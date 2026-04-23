@@ -1,4 +1,4 @@
-# 代码清理计划 - V2.0 冗余代码清理
+# 代码清理计划 - v0.1.0 冗余代码清理
 
 ## 📊 当前状态分析
 
@@ -36,7 +36,7 @@ network_manager.rs (间接未使用)
 1. **没有任何 Tauri 命令**暴露这些模块的功能
 2. **前端没有任何相关组件**（无 SoftwareCenter.vue 等）
 3. `config_generator.rs` **并未实际使用** `compose_manager.rs`
-4. 这些模块是 **v1.1 软件管理中心**的遗留代码
+4. 这些模块是 **软件管理中心**的遗留代码
 
 ---
 
@@ -49,7 +49,7 @@ network_manager.rs (间接未使用)
 #### 要删除的文件
 1. ❌ `src-tauri/src/engine/software_manager.rs` (22.2 KB)
    - 完整的软件安装/卸载逻辑
-   - v1.1 功能的核心实现
+   - 软件管理中心功能的核心实现
    
 2. ❌ `src-tauri/src/engine/environment_builder.rs` (27.8 KB)
    - 环境部署向导逻辑
@@ -58,7 +58,7 @@ network_manager.rs (间接未使用)
 3. ❌ `src-tauri/src/engine/compose_manager.rs` (16.6 KB)
    - Docker Compose 文件重建逻辑
    - 依赖 software_manager 的类型
-   - 未被 V2.0 核心功能使用
+   - 未被 v0.1.0 核心功能使用
 
 #### 要保留的文件
 1. ✅ `src-tauri/src/engine/network_manager.rs` (2.6 KB)
@@ -76,7 +76,7 @@ network_manager.rs (间接未使用)
 
 ### 方案 B：激进清理
 
-**原则**: 删除所有与 v1.1/v1.2 相关的代码
+**原则**: 删除所有与软件管理中心相关的代码
 
 #### 要删除的文件
 1. ❌ `software_manager.rs`
@@ -97,8 +97,8 @@ network_manager.rs (间接未使用)
 #### 操作
 1. 在每个文件顶部添加注释：
    ```rust
-   /// ⚠️ DEPRECATED: This module is not used in V2.0
-   /// It was part of the v1.1 Software Center feature which is not included in this release.
+   /// ⚠️ DEPRECATED: This module is not used in v0.1.0
+   /// It was part of the Software Center feature which is not included in this release.
    /// Kept for potential future use. Do not add new dependencies to this module.
    ```
 
@@ -122,7 +122,7 @@ network_manager.rs (间接未使用)
 ```bash
 git status
 git add .
-git commit -m "Backup before cleanup of unused v1.1 modules"
+git commit -m "Backup before cleanup of unused modules"
 ```
 
 #### Step 2: 删除明确的遗留文件
@@ -170,12 +170,12 @@ npm run build
 ```
 src-tauri/src/engine/
 ├── mod.rs                    # 更新：移除 software_manager, environment_builder
-├── env_parser.rs             # ✅ V2.0 核心
-├── config_generator.rs       # ✅ V2.0 核心
-├── mirror_manager.rs         # ✅ V2.0 核心
-├── backup_manifest.rs        # ✅ V2.0 核心
-├── backup_engine.rs          # ✅ V2.0 核心
-├── restore_engine.rs         # ✅ V2.0 核心
+├── env_parser.rs             # ✅ 核心
+├── config_generator.rs       # ✅ 核心
+├── mirror_manager.rs         # ✅ 核心
+├── backup_manifest.rs        # ✅ 核心
+├── backup_engine.rs          # ✅ 核心
+├── restore_engine.rs         # ✅ 核心
 ├── compose_manager.rs        # ✅ 保留（重构后）
 ├── network_manager.rs        # ✅ 保留（独立工具）
 ├── restart_analyzer.rs       # ✅ 保留（有用工具）
@@ -272,8 +272,8 @@ cargo clippy
 ## ✅ 清理执行结果
 
 ### 已删除的文件（5个）
-1. ✅ `software_manager.rs` (22.2 KB) - v1.1 软件管理核心
-2. ✅ `environment_builder.rs` (27.8 KB) - v1.1 环境部署向导
+1. ✅ `software_manager.rs` (22.2 KB) - 软件管理核心
+2. ✅ `environment_builder.rs` (27.8 KB) - 环境部署向导
 3. ✅ `compose_manager.rs` (16.6 KB) - Compose 文件重建（未使用）
 4. ✅ `network_manager.rs` (2.6 KB) - Docker 网络管理（未使用）
 5. ✅ `restart_analyzer.rs` (7.8 KB) - 重启依赖分析（仅测试）
@@ -282,13 +282,13 @@ cargo clippy
 **总计删除**: ~82.2 KB 代码
 
 ### 保留的模块（7个）
-1. ✅ `mirror_config.rs` - 被 mirror_manager 使用（V2.0 核心）
-2. ✅ `env_parser.rs` - V2.0 核心功能
-3. ✅ `backup_manifest.rs` - V2.0 核心功能
-4. ✅ `config_generator.rs` - V2.0 核心功能
-5. ✅ `mirror_manager.rs` - V2.0 核心功能
-6. ✅ `backup_engine.rs` - V2.0 核心功能
-7. ✅ `restore_engine.rs` - V2.0 核心功能
+1. ✅ `mirror_config.rs` - 被 mirror_manager 使用（核心）
+2. ✅ `env_parser.rs` - 核心功能
+3. ✅ `backup_manifest.rs` - 核心功能
+4. ✅ `config_generator.rs` - 核心功能
+5. ✅ `mirror_manager.rs` - 核心功能
+6. ✅ `backup_engine.rs` - 核心功能
+7. ✅ `restore_engine.rs` - 核心功能
 
 ### 测试结果
 - **清理前**: 72 个测试
@@ -336,21 +336,21 @@ src-tauri/src/engine/ (14 个模块)
 **清理后**:
 ```
 src-tauri/src/engine/ (7 个模块)
-├── mirror_config.rs          ✅ V2.0: 镜像源配置（向后兼容）
-├── env_parser.rs             ✅ V2.0: Env 解析器/格式化器
-├── backup_manifest.rs        ✅ V2.0: 备份清单数据模型
-├── config_generator.rs       ✅ V2.0: 可视化配置生成器
-├── mirror_manager.rs         ✅ V2.0: 统一镜像源管理器
-├── backup_engine.rs          ✅ V2.0: 增强备份引擎
-└── restore_engine.rs         ✅ V2.0: 恢复引擎
+├── mirror_config.rs          ✅ 镜像源配置（向后兼容）
+├── env_parser.rs             ✅ Env 解析器/格式化器
+├── backup_manifest.rs        ✅ 备份清单数据模型
+├── config_generator.rs       ✅ 可视化配置生成器
+├── mirror_manager.rs         ✅ 统一镜像源管理器
+├── backup_engine.rs          ✅ 增强备份引擎
+└── restore_engine.rs         ✅ 恢复引擎
 ```
 
 ### 优势
-1. **代码更清晰**: 只保留 V2.0 实际使用的模块
+1. **代码更清晰**: 只保留实际使用的模块
 2. **维护成本降低**: 减少了 50% 的模块数量
 3. **编译速度提升**: 减少了需要编译的代码量
 4. **新开发者友好**: 更容易理解项目结构
-5. **无功能损失**: 所有 V2.0 功能正常工作
+5. **无功能损失**: 所有核心功能正常工作
 
 ---
 
@@ -361,7 +361,7 @@ src-tauri/src/engine/ (7 个模块)
 - [x] 运行 `cargo test --lib` - 55/55 通过
 - [x] 运行 `npm run build` - 成功
 - [x] 检查无编译警告
-- [x] 确认 V2.0 核心功能正常
+- [x] 确认核心功能正常
 - [x] 更新清理计划文档
 
 ---

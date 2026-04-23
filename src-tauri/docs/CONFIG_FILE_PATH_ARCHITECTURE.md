@@ -226,4 +226,4 @@ Remove-Item data/, logs/, services/ -Recurse -ErrorAction SilentlyContinue
 ---
 
 **最后更新**: 2026-04-20  
-**适用版本**: PHP-Stack V2.1+
+**适用版本**: PHP-Stack v0.1.0+

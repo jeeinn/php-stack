@@ -1,4 +1,4 @@
-# PHP-Stack V2.0 快速参考指南
+# PHP-Stack v0.1.0 快速参考指南
 
 ## 📚 文档导航
 
@@ -6,12 +6,12 @@
 |------|------|
 | [README.md](./README.md) | 项目介绍、安装指南、功能特性 |
 | [AGENTS.md](./AGENTS.md) | AI Agent 开发指南、架构说明、后续任务 |
-| [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md) | V2.0 实现总结、测试统计、代码质量报告 |
-| [QUICKSTART-V2.md](./QUICKSTART-V2.md) | V2.0 快速启动指南（如存在） |
+| [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md) | v0.1.0 实现总结、测试统计、代码质量报告 |
+| [QUICKSTART-V2.md](./QUICKSTART-V2.md) | v0.1.0 快速启动指南（如存在） |
 
 ---
 
-## 🎯 V2.0 核心功能速览
+## 🎯 v0.1.0 核心功能速览
 
 ### 1. 可视化环境配置
 **入口**: 侧边栏 → ⚙️ 环境配置  
@@ -396,9 +396,9 @@ cargo build
 
 ## 🚀 快速开始新任务
 
-### V2.0 版本定位
+### v0.1.0 版本定位
 
-**重要说明**: PHP-Stack V2.0 是一个**环境配置管理与迁移工具**，专注于：
+**重要说明**: PHP-Stack v0.1.0 是一个**环境配置管理与迁移工具**，专注于：
 - ✅ 可视化配置生成（替代手动编辑 .env 和 docker-compose.yml）
 - ✅ 镜像源统一管理（加速国内开发体验）
 - ✅ 环境备份与恢复（快速迁移开发环境到新机器）
@@ -410,7 +410,7 @@ cargo build
 ### 1. 理解需求
 - 阅读 `.kiro/specs/` 中的需求和设计文档
 - 确认是前端还是后端任务
-- **注意**: V2.0 生产版不规划软件管理和虚拟主机功能
+- **注意**: v0.1.0 内测版不规划软件管理和虚拟主机功能
 
 ### 2. 编写测试
 ```bash
@@ -450,5 +450,5 @@ cd .. && npm run build
 ---
 
 **最后更新**: 2026-04-17  
-**版本**: V2.0  
+**版本**: v0.1.0  
 **维护者**: PHP-Stack Team

@@ -273,7 +273,7 @@ watch(logs, async () => {
       <!-- Version & Toggle Button -->
       <div class="mt-auto pt-4 border-t border-slate-800">
         <div v-if="!sidebarCollapsed" class="text-sm text-slate-500 text-center mb-3">
-          v1.0.0-beta
+          v0.1.0
         </div>
         
         <!-- Toggle Button -->

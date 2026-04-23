@@ -330,4 +330,4 @@ Docker Desktop:
 ---
 
 **最后更新**: 2026-04-17  
-**版本**: PHP-Stack v2.0
+**版本**: PHP-Stack v0.1.0

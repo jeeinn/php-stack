@@ -40,7 +40,7 @@ pub fn run() {
       commands::test_mirror,
       commands::get_mirror_status,
       commands::get_current_mirror_preset,
-      // 增强镜像源管理 (V2.2)
+      // 增强镜像源管理
       commands::get_merged_mirror_list,
       commands::save_selected_mirror_option,
       commands::save_user_mirror_category,

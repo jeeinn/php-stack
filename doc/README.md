@@ -81,6 +81,12 @@
 - USER_OVERRIDE_*.md - 用户覆盖功能文档
 - VERSION_*.md - 版本相关文档
 
+#### AI 辅助开发文档（按日期归档）
+- [2026-04-16_Docker_Compose_集成实施.md](history/2026-04-16_Docker_Compose_集成实施.md) - Docker Compose 集成实施方案
+- [2026-04-17_requirements.md](history/2026-04-17_requirements.md) - 环境配置与备份需求文档
+- [2026-04-17_design.md](history/2026-04-17_design.md) - 系统设计方案
+- [2026-04-17_tasks.md](history/2026-04-17_tasks.md) - 开发任务清单
+
 > 💡 **提示**: 历史文档主要用于了解项目开发过程和问题解决思路，日常开发可参考架构文档和使用指南。
 
 ---

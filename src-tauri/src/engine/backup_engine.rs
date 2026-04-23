@@ -61,6 +61,35 @@ impl BackupEngine {
             Self::add_dir_to_zip(&mut zip, &services_dir, "services", &mut manifest)?;
         }
 
+        // Step 3.5: Pack user custom configuration files (35%)
+        Self::emit_progress(app_handle, "打包用户自定义配置...", 35);
+        
+        // .user_mirror_config.json - User mirror source configuration
+        let user_mirror_config_path = project_root.join(".user_mirror_config.json");
+        if user_mirror_config_path.exists() {
+            let content = fs::read(&user_mirror_config_path)
+                .map_err(|e| format!("读取 .user_mirror_config.json 失败: {}", e))?;
+            Self::add_file_to_zip(
+                &mut zip,
+                ".user_mirror_config.json",
+                &content,
+                &mut manifest,
+            )?;
+        }
+        
+        // .user_version_overrides.json - User version override configuration
+        let user_version_overrides_path = project_root.join(".user_version_overrides.json");
+        if user_version_overrides_path.exists() {
+            let content = fs::read(&user_version_overrides_path)
+                .map_err(|e| format!("读取 .user_version_overrides.json 失败: {}", e))?;
+            Self::add_file_to_zip(
+                &mut zip,
+                ".user_version_overrides.json",
+                &content,
+                &mut manifest,
+            )?;
+        }
+
         // Step 4: Optional — Project files (50%)
         if options.include_projects && !options.project_patterns.is_empty() {
             Self::emit_progress(app_handle, "打包项目文件...", 60);
@@ -277,6 +306,18 @@ mod tests {
         fs::write(services_dir.join("php.ini"), "memory_limit=256M\n")
             .expect("写入 php.ini 失败");
 
+        // Create user custom configuration files
+        fs::write(
+            project_root.join(".user_mirror_config.json"),
+            "{\"apt\":{\"source\":\"http://mirrors.aliyun.com/debian/\",\"enabled\":true}}",
+        )
+        .expect("写入 .user_mirror_config.json 失败");
+        fs::write(
+            project_root.join(".user_version_overrides.json"),
+            "{\"php\":{\"8.2\":{\"tag\":\"8.2-custom\"}}}",
+        )
+        .expect("写入 .user_version_overrides.json 失败");
+
         let backup_path = project_root.join("backup.zip");
         let options = BackupOptions {
             include_projects: false,
@@ -319,6 +360,16 @@ mod tests {
             file_names
         );
         assert!(
+            file_names.contains(&".user_mirror_config.json".to_string()),
+            "ZIP 应包含 .user_mirror_config.json，实际: {:?}",
+            file_names
+        );
+        assert!(
+            file_names.contains(&".user_version_overrides.json".to_string()),
+            "ZIP 应包含 .user_version_overrides.json，实际: {:?}",
+            file_names
+        );
+        assert!(
             file_names.contains(&"manifest.json".to_string()),
             "ZIP 应包含 manifest.json，实际: {:?}",
             file_names
@@ -345,6 +396,14 @@ mod tests {
         assert!(
             manifest.files.contains_key("services/php82/php.ini"),
             "manifest 应包含 services/php82/php.ini 的 SHA256"
+        );
+        assert!(
+            manifest.files.contains_key(".user_mirror_config.json"),
+            "manifest 应包含 .user_mirror_config.json 的 SHA256"
+        );
+        assert!(
+            manifest.files.contains_key(".user_version_overrides.json"),
+            "manifest 应包含 .user_version_overrides.json 的 SHA256"
         );
     }
 }

@@ -962,9 +962,10 @@ cat src-tauri/services/version_manifest.json | jq
 
 ### C. 相关文档
 
-- [VERSION_MANIFEST.md](./src-tauri/docs/VERSION_MANIFEST.md) - 版本清单系统详细说明
-- [VERSION_MANIFEST_VERIFICATION.md](./src-tauri/docs/VERSION_MANIFEST_VERIFICATION.md) - 验证报告
-- [README.md](./README.md) - 项目总览
+- [VERSION_MANIFEST.md](../history/VERSION_MANIFEST.md) - 版本清单系统详细说明
+- [VERSION_MANIFEST_VERIFICATION.md](../history/VERSION_MANIFEST_VERIFICATION.md) - 验证报告
+- [README.md](../../README.md) - 项目总览
+- [IMPLEMENTATION_SUMMARY.md](../implementation/IMPLEMENTATION_SUMMARY.md) - 实现总结报告
 
 ---
 

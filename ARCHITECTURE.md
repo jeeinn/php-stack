@@ -1,7 +1,7 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: V2.4  
-> **最后更新**: 2026-04-22  
+> **版本**: V2.5  
+> **最后更新**: 2026-04-23  
 > **维护者**: PHP-Stack Team
 
 ---
@@ -297,6 +297,169 @@ graph LR
     H --> I[发送进度事件]
     I --> J[完成]
 ```
+
+### 3.4 环境恢复流程（分步卡片式交互）
+
+**设计理念**：采用向导式分步卡片布局，用户主动控制节奏，避免信息过载。
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant FE as RestorePage.vue
+    participant CMD as Commands
+    participant RE as RestoreEngine
+    participant FS as 文件系统
+
+    Note over U,FS: 步骤 1: 选择文件
+    U->>FE: 点击“浏览文件”
+    FE->>U: 打开文件选择对话框
+    U->>FE: 选择 backup.zip
+    FE->>FE: 标记步骤 1 完成
+    FE->>FE: 自动进入步骤 2
+
+    Note over U,FS: 步骤 2: 预览内容
+    U->>FE: 点击“开始预览”
+    FE->>CMD: invoke('preview_restore', zipPath)
+    CMD->>RE: RestoreEngine::preview()
+    RE->>FS: 读取 ZIP 中的 manifest.json
+    RE->>RE: 解析备份清单
+    RE->>RE: 检测端口冲突
+    RE-->>CMD: 返回 RestorePreview
+    CMD-->>FE: 返回预览数据
+    FE->>FE: 显示备份摘要、服务列表
+    FE->>FE: 标记步骤 2 完成
+    FE->>U: 显示“下一步：校验”按钮
+    
+    U->>FE: 点击“下一步：校验 →”
+    FE->>FE: 进入步骤 3
+
+    Note over U,FS: 步骤 3: 校验完整性
+    U->>FE: 点击“开始校验”
+    FE->>CMD: invoke('verify_backup', zipPath)
+    CMD->>RE: RestoreEngine::verify_integrity()
+    RE->>FS: 读取 ZIP 中的所有文件
+    RE->>RE: 计算每个文件的 SHA256
+    RE->>RE: 与 manifest 中的哈希对比
+    alt 校验通过
+        RE-->>CMD: 返回 true
+        CMD-->>FE: 返回 true
+        FE->>FE: 显示“✓ SHA256 校验通过”
+        FE->>FE: 标记步骤 3 完成
+        FE->>U: 显示“下一步：开始恢复”按钮
+    else 校验失败
+        RE-->>CMD: 返回 false
+        CMD-->>FE: 返回 false
+        FE->>U: 显示“✗ 校验失败，备份可能已损坏”
+    end
+
+    U->>FE: 点击“下一步：开始恢复 →”
+    FE->>FE: 进入步骤 4
+
+    Note over U,FS: 步骤 4: 开始恢复
+    U->>FE: 点击“确认并开始恢复”
+    FE->>FE: 弹出 ConfirmDialog
+    FE->>U: 显示恢复影响说明
+    Note right of U: • 将覆盖 N 个配置文件<br/>• 服务配置详情<br/>• 端口映射调整<br/>• 备份时的警告<br/>• 注意：现有配置将被覆盖
+    
+    alt 用户取消
+        U->>FE: 点击“取消”
+        FE->>U: 中止恢复
+    else 用户确认
+        U->>FE: 点击“开始恢复”
+        FE->>CMD: invoke('execute_restore', zipPath, portOverrides)
+        CMD->>RE: RestoreEngine::restore()
+        RE->>FS: 解压 .env 文件
+        RE->>FS: 应用端口覆盖（如有）
+        RE->>FS: 解压 docker-compose.yml
+        RE->>FS: 解压 services/ 目录
+        RE->>FS: 解压 vhosts/ 到 nginx/conf.d/
+        RE->>FS: 解压 projects/ 到 SOURCE_DIR
+        RE->>FS: 解压 database/ SQL 文件
+        RE-->>CMD: 返回 RestoreResult
+        CMD-->>FE: 返回成功
+        FE->>FE: 标记步骤 4 完成
+        FE->>U: 显示“✓ 环境恢复成功！”
+        FE->>U: 提示“点击一键启动即可运行环境”
+    end
+```
+
+**关键设计决策**：
+
+#### 1. 分步卡片式布局
+- **每个步骤独立卡片**：一次只显示当前步骤的内容
+- **操作按钮固定在卡片底部**：无需滚动即可操作
+- **平滑过渡动画**：300ms fade + slide 效果
+- **视觉引导清晰**：蓝色“下一步”按钮引导用户继续
+
+#### 2. 手动控制节奏
+- **不自动跳转**：每步完成后停留在当前步骤
+- **显示操作结果**：用户有足够时间查看信息
+- **Toast 提示反馈**：告知用户当前状态
+- **“下一步”按钮**：用户主动决定是否继续
+
+#### 3. 职责分离原则
+- **恢复 = 文件解压**：仅处理配置文件还原
+- **启动 = 镜像拉取+容器运行**：在“一键启动”时处理
+- **移除镜像检测**：避免用户在恢复阶段产生困惑
+- **简化用户心智模型**：恢复和启动职责明确
+
+#### 4. 端口冲突处理
+- **预览时检测**：`detect_port_conflicts()` 检查端口占用
+- **自动分配建议**：为每个冲突端口推荐可用端口
+- **用户可修改**：提供输入框让用户自定义端口
+- **恢复时应用**：`port_overrides` 参数应用到 .env 文件
+
+#### 5. 完整性校验
+- **SHA256 验证**：确保备份文件未被篡改
+- **逐文件校验**：遍历 manifest 中的所有文件
+- **即时反馈**：校验通过后才能进入下一步
+- **安全保障**：防止损坏或恶意的备份包
+
+**技术实现**：
+
+```rust
+// RestorePreview 结构体（精简版）
+pub struct RestorePreview {
+    pub manifest: BackupManifest,
+    pub port_conflicts: Vec<PortConflict>,
+    pub file_count: usize,
+    // missing_images 字段已移除（职责分离）
+}
+
+// 恢复流程核心逻辑
+pub async fn restore(
+    zip_path: &str,
+    project_root: &Path,
+    port_overrides: HashMap<String, u16>,
+    app_handle: Option<&tauri::AppHandle>,
+) -> Result<RestoreResult, String> {
+    // 1. 解析 manifest
+    // 2. 解压 .env（应用端口覆盖）
+    // 3. 解压 docker-compose.yml
+    // 4. 解压 services/ 目录
+    // 5. 解压 vhosts/ 到 nginx/conf.d/
+    // 6. 解压 projects/ 到 SOURCE_DIR
+    // 7. 解压 database/ SQL 文件
+    // 8. 发送进度事件
+}
+```
+
+**用户体验优化**：
+
+| 方面 | 优化前 | 优化后 |
+|------|--------|--------|
+| **页面长度** | 很长，需要滚动 | 紧凑，一屏显示 |
+| **操作按钮** | 在页面底部 | 固定在卡片底部 |
+| **信息密度** | 高，容易 overwhelm | 低，一次专注一件事 |
+| **视觉焦点** | 分散 | 集中在当前步骤 |
+| **步骤切换** | 无动画 | 平滑过渡动画 |
+| **用户控制** | 被动接受 | 主动决定 |
+| **理解时间** | 不足 | 充足 |
+
+**相关文件**：
+- 前端：`src/components/RestorePage.vue`
+- 后端：`src-tauri/src/engine/restore_engine.rs`
+- 类型定义：`src/types/env-config.ts`
 
 ---
 

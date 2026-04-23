@@ -80,7 +80,7 @@ export interface PortConflict {
 
 export interface RestorePreview {
   manifest: BackupManifest;
-  port_conflicts: PortConflict[];
+  file_count: number;
 }
 
 export interface BackupProgress {

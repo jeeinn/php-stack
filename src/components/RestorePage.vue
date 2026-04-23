@@ -3,7 +3,7 @@ import { ref, computed, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
-import type { RestorePreview, RestoreProgress, PortConflict } from '../types/env-config';
+import type { RestorePreview, RestoreProgress } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
@@ -20,9 +20,6 @@ const progress = ref<RestoreProgress | null>(null);
 // Current step tracking
 const currentStep = ref<RestoreStep>('select');
 const completedSteps = ref<Set<RestoreStep>>(new Set());
-
-// Port overrides for conflicts
-const portOverrides = ref<Record<string, number>>({});
 
 // Listen for restore progress events
 let unlisten: (() => void) | null = null;
@@ -59,12 +56,6 @@ const canRestore = computed(() => {
   
   // Must pass integrity verification
   if (verified.value !== true) return false;
-  
-  // All port conflicts must be resolved (have overrides)
-  const hasUnresolvedConflicts = preview.value.port_conflicts.some(
-    conflict => !portOverrides.value[conflict.service]
-  );
-  if (hasUnresolvedConflicts) return false;
   
   return true;
 });
@@ -116,15 +107,6 @@ function buildRestoreImpactDescription(): string {
   });
   lines.push('');
   
-  // Port overrides
-  if (Object.keys(portOverrides.value).length > 0) {
-    lines.push(`🔌 端口映射调整:`);
-    Object.entries(portOverrides.value).forEach(([service, port]) => {
-      lines.push(`   • ${service} → 端口 ${port}`);
-    });
-    lines.push('');
-  }
-  
   // Warnings from backup
   if (preview.value.manifest.errors.length > 0) {
     lines.push(`⚠️  备份时的警告:`);
@@ -149,7 +131,6 @@ async function selectFile() {
     zipPath.value = selected as string;
     preview.value = null;
     verified.value = null;
-    portOverrides.value = {};
     resetSteps();
     // Mark select step as completed and advance to preview
     markStepCompleted('select');
@@ -162,12 +143,6 @@ async function handlePreview() {
   loading.value = true;
   try {
     preview.value = await invoke<RestorePreview>('preview_restore', { zipPath: zipPath.value });
-    // Initialize port overrides from conflicts
-    if (preview.value.port_conflicts.length > 0) {
-      for (const conflict of preview.value.port_conflicts) {
-        portOverrides.value[conflict.service] = conflict.suggested_port;
-      }
-    }
     // Mark preview as completed but stay on this step to show results
     markStepCompleted('preview');
     showToast('预览完成，请查看备份内容', 'success');
@@ -218,7 +193,6 @@ async function handleRestore() {
   try {
     await invoke('execute_restore', {
       zipPath: zipPath.value,
-      portOverrides: portOverrides.value,
     });
     showToast('环境恢复成功！', 'success');
     progress.value = { step: '完成', percentage: 100 };
@@ -227,12 +201,6 @@ async function handleRestore() {
     showToast(e as string, 'error');
   } finally {
     restoring.value = false;
-  }
-}
-
-function applyAutoAssign(conflicts: PortConflict[]) {
-  for (const c of conflicts) {
-    portOverrides.value[c.service] = c.suggested_port;
   }
 }
 
@@ -493,35 +461,6 @@ function formatTimestamp(ts: string): string {
           <section v-if="currentStep === 'restore'" class="bg-slate-900 border border-slate-800 rounded-xl p-6">
             <div v-if="!isStepCompleted('restore')">
               <h2 class="text-lg font-bold mb-4">🚀 开始恢复环境</h2>
-              
-              <!-- Port Conflicts Resolution -->
-              <div v-if="preview && preview.port_conflicts.length > 0" class="mb-4">
-                <div class="flex items-center justify-between mb-2">
-                  <div class="text-sm font-medium text-amber-400">端口冲突解决</div>
-                  <button
-                    @click="applyAutoAssign(preview.port_conflicts)"
-                    class="text-xs px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded hover:bg-blue-600 hover:text-white transition"
-                  >
-                    自动分配
-                  </button>
-                </div>
-                <div class="space-y-2">
-                  <div
-                    v-for="conflict in preview.port_conflicts"
-                    :key="conflict.service"
-                    class="flex items-center gap-3 p-2 bg-slate-800/30 border border-amber-500/20 rounded-lg text-sm"
-                  >
-                    <span class="text-slate-300">{{ conflict.service }}</span>
-                    <span class="text-rose-400">端口 {{ conflict.port }} 已占用</span>
-                    <span class="text-slate-500">→</span>
-                    <input
-                      v-model.number="portOverrides[conflict.service]"
-                      type="number"
-                      class="w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
 
               <!-- Restore Button -->
               <button
@@ -537,7 +476,6 @@ function formatTimestamp(ts: string): string {
               <!-- Helper text -->
               <div v-if="!canRestore && !restoring" class="mt-3 text-xs text-center text-slate-500">
                 <span v-if="verified === false">❌ 备份文件校验失败，无法恢复</span>
-                <span v-else-if="preview && preview.port_conflicts.length > 0 && Object.keys(portOverrides).length < preview.port_conflicts.length">⚠️ 请解决所有端口冲突</span>
               </div>
             </div>
 

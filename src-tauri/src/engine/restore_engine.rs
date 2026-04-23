@@ -1,24 +1,14 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
 use super::backup_engine::BackupEngine;
 use super::backup_manifest::BackupManifest;
 
-/// 端口冲突信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortConflict {
-    pub service: String,
-    pub port: u16,
-    pub suggested_port: u16,
-}
-
 /// 恢复预览信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestorePreview {
     pub manifest: BackupManifest,
-    pub port_conflicts: Vec<PortConflict>,
     pub file_count: usize,
 }
 
@@ -51,9 +41,6 @@ impl RestoreEngine {
         // Read manifest.json
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
 
-        // Detect port conflicts
-        let port_conflicts = Self::detect_port_conflicts(&manifest);
-
         // Count total files in ZIP (excluding manifest.json itself)
         let file_count = (0..archive.len())
             .filter(|i| {
@@ -66,7 +53,6 @@ impl RestoreEngine {
 
         Ok(RestorePreview {
             manifest,
-            port_conflicts,
             file_count,
         })
     }
@@ -106,7 +92,6 @@ impl RestoreEngine {
     pub async fn restore(
         zip_path: &str,
         project_root: &Path,
-        port_overrides: HashMap<String, u16>,
         app_handle: Option<&tauri::AppHandle>,
     ) -> Result<RestoreResult, String> {
         let mut restored_files: Vec<String> = Vec::new();
@@ -121,9 +106,9 @@ impl RestoreEngine {
         Self::emit_progress(app_handle, "解析备份包...", 5);
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
 
-        // Step 2: Extract .env (apply port_overrides if any)
+        // Step 2: Extract .env
         Self::emit_progress(app_handle, "恢复环境配置...", 15);
-        match Self::restore_env_file(&mut archive, project_root, &port_overrides) {
+        match Self::restore_env_file(&mut archive, project_root) {
             Ok(()) => restored_files.push(".env".to_string()),
             Err(e) => errors.push(format!("恢复 .env 失败: {}", e)),
         }
@@ -188,44 +173,6 @@ impl RestoreEngine {
         })
     }
 
-    /// Detect port conflicts between manifest services and currently used ports.
-    fn detect_port_conflicts(manifest: &BackupManifest) -> Vec<PortConflict> {
-        let mut conflicts = Vec::new();
-
-        for service in &manifest.services {
-            for (host_port, _container_port) in &service.ports {
-                if !Self::is_port_available(*host_port) {
-                    let suggested = Self::find_available_port(*host_port + 1);
-                    conflicts.push(PortConflict {
-                        service: service.name.clone(),
-                        port: *host_port,
-                        suggested_port: suggested,
-                    });
-                }
-            }
-        }
-
-        conflicts
-    }
-
-
-    /// Find next available port starting from the given port.
-    fn find_available_port(start_port: u16) -> u16 {
-        let mut port = start_port;
-        while port < 65535 {
-            if Self::is_port_available(port) {
-                return port;
-            }
-            port += 1;
-        }
-        // Fallback: return the start port if nothing found
-        start_port
-    }
-
-    /// Check if a port is available by attempting to bind a TcpListener.
-    fn is_port_available(port: u16) -> bool {
-        std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
-    }
 
     /// Read manifest.json from a ZIP archive.
     fn read_manifest_from_archive<R: Read + std::io::Seek>(
@@ -327,11 +274,10 @@ impl RestoreEngine {
         env_file.get("SOURCE_DIR").map(|s| s.to_string())
     }
 
-    /// Restore .env file, applying port overrides if specified.
+    /// Restore .env file from backup.
     fn restore_env_file<R: Read + std::io::Seek>(
         archive: &mut zip::ZipArchive<R>,
         project_root: &Path,
-        port_overrides: &HashMap<String, u16>,
     ) -> Result<(), String> {
         let mut zip_file = archive
             .by_name(".env")
@@ -342,26 +288,8 @@ impl RestoreEngine {
             .read_to_string(&mut content)
             .map_err(|e| format!("读取 .env 内容失败: {}", e))?;
 
-        // Apply port overrides if any
-        let final_content = if port_overrides.is_empty() {
-            content
-        } else {
-            use super::env_parser::EnvFile;
-            match EnvFile::parse(&content) {
-                Ok(mut env_file) => {
-                    for (service_name, new_port) in port_overrides {
-                        // Convention: port key is SERVICE_HOST_PORT (uppercase)
-                        let key = format!("{}_HOST_PORT", service_name.to_uppercase());
-                        env_file.set(&key, &new_port.to_string());
-                    }
-                    env_file.format()
-                }
-                Err(_) => content, // If parsing fails, use original content
-            }
-        };
-
         let env_path = project_root.join(".env");
-        std::fs::write(&env_path, final_content)
+        std::fs::write(&env_path, content)
             .map_err(|e| format!("写入 .env 失败: {}", e))?;
 
         Ok(())
@@ -458,23 +386,6 @@ mod tests {
     }
 
     #[test]
-    fn test_find_available_port() {
-        // find_available_port should return a port that can be bound
-        let port = RestoreEngine::find_available_port(49152);
-        assert!(
-            port >= 49152,
-            "Port should be >= start_port, got {}",
-            port
-        );
-        // Verify the returned port is actually available
-        assert!(
-            RestoreEngine::is_port_available(port),
-            "Returned port {} should be available",
-            port
-        );
-    }
-
-    #[test]
     fn test_preview_backup() {
         let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
         let zip_path = create_test_backup(tmp_dir.path());
@@ -566,7 +477,6 @@ mod tests {
         let result = rt.block_on(RestoreEngine::restore(
             &zip_path,
             &restore_dir,
-            HashMap::new(),
             None,
         ));
 

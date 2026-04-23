@@ -788,14 +788,12 @@ pub fn verify_backup(zip_path: String) -> Result<bool, String> {
 #[tauri::command]
 pub async fn execute_restore(
     zip_path: String,
-    port_overrides: std::collections::HashMap<String, u16>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     let project_root = get_project_root()?;
     let result = RestoreEngine::restore(
         &zip_path,
         &project_root,
-        port_overrides,
         Some(&app_handle),
     )
     .await?;

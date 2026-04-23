@@ -77,9 +77,11 @@
 1. **错误处理**: 统一使用 `Result<T, String>` 或 `Result<T, Box<dyn Error>>`。暴露给前端的 Command 必须将错误转换为 `String`。
 2. **异步处理**: 涉及 Docker 或文件 IO 的操作必须使用 `async/await`。
 3. **测试**: 
-   - 核心逻辑应编写单元测试（位于各模块的 `tests` 子模块）
+   - **单元测试**：放在源文件内的 `#[cfg(test)] mod tests { ... }` 模块中
+   - **集成测试**：放在 `src-tauri/tests/integration/` 目录下
    - 纯函数模块（env_parser、backup_manifest、config_generator）使用 `proptest` 进行属性测试
    - 标签格式：`// Feature: env-config-and-backup, Property N: {property_text}`
+   - 运行测试：`cargo test`
 4. **模块注册**: 新增模块需在 `engine/mod.rs` 中声明 `pub mod xxx;`
 
 ### Vue 前端
@@ -87,6 +89,12 @@
 2. **样式**: 严格遵循 Tailwind CSS v4 规范。在组件内使用 `@apply` 时必须在 `<style scoped>` 中声明 `@reference "tailwindcss";`。
 3. **交互**: 所有后端调用必须经过 `invoke` 封装，并处理 `loading` 和 `error` 状态。
 4. **类型定义**: 前端 TypeScript 类型需与 Rust 后端的 Serialize/Deserialize 结构体对应，定义在 `src/types/` 目录下。
+5. **测试**: 
+   - **测试框架**: Vitest + @vue/test-utils
+   - **测试位置**: 与被测试代码同级目录下的 `__tests__/` 文件夹
+   - **文件命名**: `{模块名}.spec.ts`
+   - 运行测试：`npm run test` 或 `npm run test:run`
+   - 详细规范参见：[doc/guides/TESTING_GUIDE.md](doc/guides/TESTING_GUIDE.md)
 
 ## 📋 关键模块逻辑
 

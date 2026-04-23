@@ -138,16 +138,16 @@ impl RestoreEngine {
             Err(e) => errors.push(format!("恢复 vhosts/ 失败: {}", e)),
         }
 
-        // Step 6: Extract projects/ to SOURCE_DIR from .env
+        // Step 6: Extract projects/ to project_root (paths are already relative to project_root)
         Self::emit_progress(app_handle, "恢复项目文件...", 70);
-        let source_dir = Self::read_source_dir_from_env(project_root);
-        let projects_target = match source_dir {
-            Some(dir) => std::path::PathBuf::from(dir),
-            None => project_root.join("projects"),
-        };
-        match Self::extract_prefix(&mut archive, "projects/", &projects_target) {
-            Ok(files) => restored_files.extend(files),
-            Err(e) => errors.push(format!("恢复项目文件失败: {}", e)),
+        if !manifest.options.project_patterns.is_empty() {
+            // 备份时已经将文件路径存储为相对于 project_root 的路径
+            // 例如："www/test/index.php" → ZIP 中为 "projects/www/test/index.php"
+            // 恢复时直接提取到 project_root 即可
+            match Self::extract_prefix(&mut archive, "projects/", project_root) {
+                Ok(files) => restored_files.extend(files),
+                Err(e) => errors.push(format!("恢复项目文件失败: {}", e)),
+            }
         }
 
         // Step 7: Extract database/ SQL files
@@ -266,6 +266,9 @@ impl RestoreEngine {
     }
 
     /// Read SOURCE_DIR from the restored .env file.
+    /// Note: Currently unused as we restore projects directly to project_root.
+    /// Kept for potential future use or fallback scenarios.
+    #[allow(dead_code)]
     fn read_source_dir_from_env(project_root: &Path) -> Option<String> {
         let env_path = project_root.join(".env");
         let content = std::fs::read_to_string(&env_path).ok()?;
@@ -371,6 +374,72 @@ mod tests {
             options: BackupOptions {
                 include_projects: false,
                 project_patterns: Vec::new(),
+                include_logs: false,
+            },
+            files,
+            errors: Vec::new(),
+        };
+
+        let manifest_json = manifest.serialize().expect("序列化 manifest 失败");
+        zip.start_file("manifest.json", zip_options).unwrap();
+        zip.write_all(manifest_json.as_bytes()).unwrap();
+
+        zip.finish().unwrap();
+        backup_path.to_str().unwrap().to_string()
+    }
+
+    /// Helper: create a test backup ZIP with project files in www/ directory.
+    fn create_test_backup_with_projects(dir: &Path) -> String {
+        let backup_path = dir.join("test_backup_with_projects.zip");
+        let file = fs::File::create(&backup_path).expect("创建备份文件失败");
+        let mut zip = zip::ZipWriter::new(file);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+
+        // Add .env
+        let env_content = b"PHP82_VERSION=8.2.27\nMYSQL_HOST_PORT=3306\n";
+        zip.start_file(".env", zip_options).unwrap();
+        zip.write_all(env_content).unwrap();
+        let env_hash = BackupEngine::compute_sha256(env_content);
+
+        // Add docker-compose.yml
+        let compose_content = b"version: '3'\nservices:\n  php:\n    image: php:8.2\n";
+        zip.start_file("docker-compose.yml", zip_options).unwrap();
+        zip.write_all(compose_content).unwrap();
+        let compose_hash = BackupEngine::compute_sha256(compose_content);
+
+        // Add project files under projects/www/
+        let test_php_content = b"<?php echo 'Hello World'; ?>\n";
+        zip.start_file("projects/www/test/index.php", zip_options)
+            .unwrap();
+        zip.write_all(test_php_content).unwrap();
+        let test_php_hash = BackupEngine::compute_sha256(test_php_content);
+
+        let readme_content = b"# My Project\n";
+        zip.start_file("projects/www/readme.md", zip_options)
+            .unwrap();
+        zip.write_all(readme_content).unwrap();
+        let readme_hash = BackupEngine::compute_sha256(readme_content);
+
+        // Build manifest with project patterns
+        let mut files = HashMap::new();
+        files.insert(".env".to_string(), env_hash);
+        files.insert("docker-compose.yml".to_string(), compose_hash);
+        files.insert("projects/www/test/index.php".to_string(), test_php_hash);
+        files.insert("projects/www/readme.md".to_string(), readme_hash);
+
+        let manifest = BackupManifest {
+            version: "1.0.0".to_string(),
+            timestamp: "2025-01-15T10:30:00+08:00".to_string(),
+            app_version: "0.1.0".to_string(),
+            os_info: "linux".to_string(),
+            services: Vec::new(),
+            options: BackupOptions {
+                include_projects: true,
+                project_patterns: vec![
+                    "www/test/**".to_string(),
+                    "www/readme.md".to_string(),
+                ],
                 include_logs: false,
             },
             files,
@@ -526,6 +595,53 @@ mod tests {
                 .restored_files
                 .contains(&"docker-compose.yml".to_string()),
             "restored_files should contain docker-compose.yml"
+        );
+    }
+
+    #[test]
+    fn test_restore_projects_to_correct_location() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let zip_path = create_test_backup_with_projects(tmp_dir.path());
+
+        // Create a separate restore target directory
+        let restore_dir = tmp_dir.path().join("restored");
+        fs::create_dir_all(&restore_dir).expect("创建恢复目录失败");
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(RestoreEngine::restore(
+            &zip_path,
+            &restore_dir,
+            None,
+        ));
+
+        let restore_result = result.expect("恢复操作失败");
+        assert!(
+            restore_result.success,
+            "Restore should succeed, errors: {:?}",
+            restore_result.errors
+        );
+
+        // Verify that project files are restored to correct location relative to project_root
+        // Backup patterns were ["www/test/**", "www/readme.md"]
+        // ZIP contains: projects/www/test/index.php, projects/www/readme.md
+        // Should restore to: restore_dir/www/test/index.php, restore_dir/www/readme.md
+        let index_php_path = restore_dir.join("www/test/index.php");
+        assert!(
+            index_php_path.exists(),
+            "Project file should be restored to www/test/index.php"
+        );
+
+        let readme_path = restore_dir.join("www/readme.md");
+        assert!(
+            readme_path.exists(),
+            "Project file should be restored to www/readme.md"
+        );
+
+        // Verify content
+        let index_content = fs::read_to_string(&index_php_path).expect("读取 index.php 失败");
+        assert!(
+            index_content.contains("Hello World"),
+            "index.php should contain correct content"
         );
     }
 }

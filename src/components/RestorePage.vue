@@ -89,37 +89,9 @@ const stepStatus = computed(() => {
   };
 });
 
-// Build detailed restore impact description
+// Build simplified restore confirmation message
 function buildRestoreImpactDescription(): string {
-  if (!preview.value) return '';
-  
-  const lines: string[] = [];
-  
-  // Files to be overwritten
-  const fileCount = Object.keys(preview.value.manifest.files).length;
-  lines.push(`📁 将覆盖 ${fileCount} 个配置文件`);
-  lines.push('');
-  
-  // Services info
-  lines.push(`⚙️  服务配置 (${preview.value.manifest.services.length} 个服务):`);
-  preview.value.manifest.services.forEach(svc => {
-    lines.push(`   • ${svc.name}: ${svc.image}:${svc.version}`);
-  });
-  lines.push('');
-  
-  // Warnings from backup
-  if (preview.value.manifest.errors.length > 0) {
-    lines.push(`⚠️  备份时的警告:`);
-    preview.value.manifest.errors.forEach(err => {
-      lines.push(`   • ${err}`);
-    });
-    lines.push('');
-  }
-  
-  lines.push('⚠️  注意: 现有配置文件将被覆盖，建议先备份当前环境');
-  lines.push('💡 恢复完成后，点击“一键启动”即可运行环境');
-  
-  return lines.join('\n');
+  return '⚠️ 注意: 现有配置文件将被覆盖，建议先备份当前环境\n\n💡 恢复完成后，点击"一键启动"即可运行环境';
 }
 
 async function selectFile() {

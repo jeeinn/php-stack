@@ -1,11 +1,10 @@
 // Integration tests for backup and restore functionality
 // These tests verify the end-to-end backup and restore workflow
 
-use app_lib::engine::backup_engine;
-use app_lib::engine::restore_engine;
-use app_lib::engine::backup_manifest;
+use app_lib::engine::backup_engine::BackupEngine;
+use app_lib::engine::restore_engine::RestoreEngine;
+use app_lib::engine::backup_manifest::BackupOptions;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -25,28 +24,33 @@ async fn test_backup_and_restore_workflow() {
     fs::write(&compose_path, compose_content).expect("Failed to write docker-compose.yml");
     
     // Test backup creation
-    let backup_result = backup_engine::create_backup(
+    let backup_path = workspace_path.join("backup.zip");
+    let options = BackupOptions {
+        include_projects: false,
+        project_patterns: vec![],
+        include_logs: false,
+    };
+    
+    let backup_result = BackupEngine::create_backup(
+        backup_path.to_str().unwrap(),
+        options,
         &workspace_path,
-        &workspace_path.join("backup.zip"),
-        false, // include_projects
-        vec![], // project_patterns
-        false, // include_logs
+        None, // No app handle in tests
     ).await;
     
     assert!(backup_result.is_ok(), "Backup should succeed");
     
     // Verify backup file exists
-    let backup_path = workspace_path.join("backup.zip");
     assert!(backup_path.exists(), "Backup file should exist");
     
     // Test restore from backup
     let restore_workspace = temp_dir.path().join("restored");
     fs::create_dir(&restore_workspace).expect("Failed to create restore dir");
     
-    let restore_result = restore_engine::restore_from_backup(
-        &backup_path,
+    let restore_result = RestoreEngine::restore(
+        backup_path.to_str().unwrap(),
         &restore_workspace,
-        None, // port_mapping
+        None, // No app handle in tests
     ).await;
     
     assert!(restore_result.is_ok(), "Restore should succeed");
@@ -71,12 +75,18 @@ async fn test_backup_with_database_export() {
     let env_path = workspace_path.join(".env");
     fs::write(&env_path, env_content).expect("Failed to write .env file");
     
-    let backup_result = backup_engine::create_backup(
+    let backup_path = workspace_path.join("backup_with_db.zip");
+    let options = BackupOptions {
+        include_projects: false,
+        project_patterns: vec![],
+        include_logs: false,
+    };
+    
+    let backup_result = BackupEngine::create_backup(
+        backup_path.to_str().unwrap(),
+        options,
         &workspace_path,
-        &workspace_path.join("backup_with_db.zip"),
-        false, // include_projects
-        vec![], // project_patterns
-        false, // include_logs
+        None,
     ).await;
     
     // Even without a real database, the backup should succeed

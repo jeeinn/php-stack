@@ -66,17 +66,30 @@ impl BackupEngine {
             Self::emit_progress(app_handle, "打包项目文件...", 60);
             for pattern in &options.project_patterns {
                 // 将相对路径模式转换为绝对路径模式
-                let abs_pattern = if std::path::Path::new(pattern).is_absolute() {
-                    pattern.clone()
+                let mut normalized_pattern = pattern.clone();
+                
+                // 如果模式以 /** 结尾，添加 /* 以匹配文件
+                // 例如："www/AAA/**" -> "www/AAA/**/*"
+                if normalized_pattern.ends_with("/**") {
+                    normalized_pattern.push_str("/*");
+                }
+                
+                let abs_pattern = if std::path::Path::new(&normalized_pattern).is_absolute() {
+                    normalized_pattern
                 } else {
-                    project_root.join(pattern).to_string_lossy().replace('\\', "/")
+                    project_root.join(&normalized_pattern).to_string_lossy().replace('\\', "/")
                 };
+                
+                // 记录尝试的模式（用于调试）
+                eprintln!("[Backup] 尝试匹配模式: {} -> {}", pattern, abs_pattern);
                 
                 match glob(&abs_pattern) {
                     Ok(entries) => {
+                        let mut matched_count = 0;
                         for entry in entries {
                             match entry {
                                 Ok(path) if path.is_file() => {
+                                    matched_count += 1;
                                     match fs::read(&path) {
                                         Ok(content) => {
                                             // 计算相对于项目根目录的路径
@@ -84,6 +97,7 @@ impl BackupEngine {
                                                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                                                 .unwrap_or_else(|| path.display().to_string());
                                             let zip_path = format!("projects/{}", relative_path);
+                                            eprintln!("[Backup] 添加文件: {}", zip_path);
                                             Self::add_file_to_zip(
                                                 &mut zip,
                                                 &zip_path,
@@ -100,17 +114,22 @@ impl BackupEngine {
                                         }
                                     }
                                 }
+                                Ok(path) => {
+                                    // 跳过目录
+                                    eprintln!("[Backup] 跳过目录: {:?}", path);
+                                }
                                 Err(e) => {
                                     manifest.errors.push(format!("Glob 匹配错误: {}", e));
+                                    eprintln!("[Backup] Glob 匹配错误: {}", e);
                                 }
-                                _ => {}
                             }
                         }
+                        eprintln!("[Backup] 模式 '{}' 匹配到 {} 个文件", pattern, matched_count);
                     }
                     Err(e) => {
-                        manifest
-                            .errors
-                            .push(format!("Glob 模式错误 '{}': {}", pattern, e));
+                        let error_msg = format!("Glob 模式错误 '{}': {}", pattern, e);
+                        manifest.errors.push(error_msg.clone());
+                        eprintln!("[Backup] {}", error_msg);
                     }
                 }
             }

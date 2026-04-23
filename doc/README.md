@@ -65,13 +65,21 @@
 - [CLEANUP_PLAN.md](history/CLEANUP_PLAN.md) - 代码清理计划（已执行完成）
 
 #### 镜像配置重构
-- [MIRROR_CONFIG_LIST_REFACTOR.md](history/MIRROR_CONFIG_LIST_REFACTOR.md) - 镜像配置列表重构
-- [MIRROR_CONFIG_REFACTOR.md](history/MIRROR_CONFIG_REFACTOR.md) - 镜像配置重构
+- [MIRROR_CONFIG_REFACTOR_SUMMARY.md](history/MIRROR_CONFIG_REFACTOR_SUMMARY.md) - 镜像源管理重构总结（合并版）
 
-#### 问题修复记录
-- FIX_*.md 系列 - 各种问题修复报告
+#### 问题修复归档
+- [FIXES_ARCHIVE_SUMMARY.md](history/FIXES_ARCHIVE_SUMMARY.md) - 问题修复历史归档摘要
+- FIX_*.md 系列 - 详细问题修复报告（供深度参考）
+  - [FIX_CONFIG_GENERATOR_PATH.md](history/FIX_CONFIG_GENERATOR_PATH.md)
+  - [FIX_USER_OVERRIDE_NOT_APPLIED.md](history/FIX_USER_OVERRIDE_NOT_APPLIED.md)
+  - [FIX_VERSION_KEY_MATCHING.md](history/FIX_VERSION_KEY_MATCHING.md)
+  - [FIX_ENV_CONFIG_AUTO_SELECT.md](history/FIX_ENV_CONFIG_AUTO_SELECT.md)
+
+#### 其他历史记录
 - VERIFY_*.md 系列 - 验证报告
 - REFACTOR_*.md 系列 - 重构记录
+- USER_OVERRIDE_*.md - 用户覆盖功能文档
+- VERSION_*.md - 版本相关文档
 
 > 💡 **提示**: 历史文档主要用于了解项目开发过程和问题解决思路，日常开发可参考架构文档和使用指南。
 

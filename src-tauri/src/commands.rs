@@ -369,11 +369,17 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     
     // 第一步：清理旧容器（避免名称冲突）
     ui_log!(app_handle, info, "commands::start_environment", "🧹 清理旧容器...");
-    let down_output = Command::new("docker")
-        .args(["compose", "down", "--remove-orphans"])
-        .current_dir(&project_root)
-        .output()
-        .map_err(|e| {
+    let mut down_cmd = Command::new("docker");
+    down_cmd.args(["compose", "down", "--remove-orphans"])
+        .current_dir(&project_root);
+    
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        down_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    
+    let down_output = down_cmd.output().map_err(|e| {
             let err_msg = format!("清理旧容器失败: {e}");
             ui_log!(app_handle, info, "commands::start_environment", "⚠️ {}", err_msg);
             err_msg
@@ -495,13 +501,19 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose --progress plain up -d");
     ui_log!(app_handle, info, "commands::start_environment", "⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");
         
-    let mut child = Command::new("docker")
-        .args(["compose", "--progress", "plain", "up", "-d"])
+    let mut compose_cmd = Command::new("docker");
+    compose_cmd.args(["compose", "--progress", "plain", "up", "-d"])
         .current_dir(&project_root)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| {
+        .stderr(std::process::Stdio::piped());
+    
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    
+    let mut child = compose_cmd.spawn().map_err(|e| {
             let err_msg = format!("执行 docker compose 失败: {e}");
             ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
             err_msg
@@ -626,11 +638,17 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     // 使用 docker compose restart 重启所有容器
     ui_log!(app_handle, info, "commands::restart_environment", "🔧 执行: docker compose restart");
     
-    let output = Command::new("docker")
-        .args(["compose", "restart"])
-        .current_dir(&project_root)
-        .output()
-        .map_err(|e| {
+    let mut restart_cmd = Command::new("docker");
+    restart_cmd.args(["compose", "restart"])
+        .current_dir(&project_root);
+    
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        restart_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    
+    let output = restart_cmd.output().map_err(|e| {
             let err_msg = format!("执行 docker compose restart 失败: {e}");
             ui_log!(app_handle, info, "commands::restart_environment", "❌ {}", err_msg);
             err_msg
@@ -682,11 +700,17 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     // 使用 docker compose down 停止并删除容器
     ui_log!(app_handle, info, "commands::stop_environment", "🔧 执行: docker compose down");
     
-    let output = Command::new("docker")
-        .args(["compose", "down"])
-        .current_dir(&project_root)
-        .output()
-        .map_err(|e| {
+    let mut stop_cmd = Command::new("docker");
+    stop_cmd.args(["compose", "down"])
+        .current_dir(&project_root);
+    
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        stop_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    
+    let output = stop_cmd.output().map_err(|e| {
             let err_msg = format!("执行 docker compose down 失败: {e}");
             ui_log!(app_handle, info, "commands::stop_environment", "❌ {}", err_msg);
             err_msg

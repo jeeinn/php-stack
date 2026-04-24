@@ -1,6 +1,6 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: v0.2.0  
+> **版本**: v0.1.0 (2026-04-24)  
 > **最后更新**: 2026-04-24  
 > **维护者**: PHP-Stack Team
 
@@ -1110,7 +1110,7 @@ pub async fn restore(
 - 根据用户选择生成 `.env` 文件
 - 生成 `docker-compose.yml` 文件
 - 创建 `services/` 目录结构并复制模板
-- **支持动态基础镜像切换**（v0.2.0 新增）
+- **支持动态基础镜像切换**（v0.1.0 新增）
 
 **关键方法**:
 ```rust
@@ -1277,7 +1277,7 @@ pub fn get_recommended_version(service_type) -> Option<&String>
 **位置**: `src-tauri/src/engine/user_override_manager.rs`  
 **配置文件**: `src-tauri/.user_version_overrides.json`
 
-**状态**: ✅ **已完全集成到配置生成流程中**（v0.2.0）
+**状态**: ✅ **已完全集成到配置生成流程中**（v0.1.0）
 
 **设计目标**:
 - 允许用户自定义特定版本的 Docker 标签
@@ -1832,7 +1832,7 @@ cd src-tauri && cargo build
 }
 ```
 
-**方法 2: 直接修改 `.env` 文件**（v0.2.0 新增）
+**方法 2: 直接修改 `.env` 文件**（v0.1.0 新增）
 ```env
 # PHP 8.2 使用 Alpine 版本
 PHP82_VERSION=php:8.2-fpm-alpine

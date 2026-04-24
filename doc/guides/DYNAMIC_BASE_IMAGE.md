@@ -2,7 +2,7 @@
 
 ## 概述
 
-PHP-Stack v0.2.0 引入了**动态基础镜像切换**功能，允许用户通过修改 `.env` 文件或 `.user_version_overrides.json` 来自定义 PHP 容器的基础镜像标签。
+PHP-Stack v0.1.0 引入了**动态基础镜像切换**功能，允许用户通过修改 `.env` 文件或 `.user_version_overrides.json` 来自定义 PHP 容器的基础镜像标签。
 
 ## 工作原理
 

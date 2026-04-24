@@ -775,6 +775,32 @@ impl ConfigGenerator {
                     }
                 }
                 
+                // Add user custom configuration files (same as backup_engine.rs)
+                let user_config_files = vec![
+                    ".user_mirror_config.json",
+                    ".user_version_overrides.json",
+                ];
+                
+                for config_file in &user_config_files {
+                    let config_path = project_root.join(config_file);
+                    if config_path.exists() {
+                        match std::fs::read(&config_path) {
+                            Ok(content) => {
+                                zip.start_file(config_file, zip_options)
+                                    .map_err(|e| format!("添加用户配置文件到ZIP失败: {e}"))?;
+                                zip.write_all(&content)
+                                    .map_err(|e| format!("写入用户配置文件失败: {e}"))?;
+                                app_log!(info, "engine::config_generator", "已添加用户配置: {}", config_file);
+                                backed_up_count += 1;
+                            }
+                            Err(e) => {
+                                app_log!(warn, "engine::config_generator", "读取用户配置文件 {} 失败: {}", config_file, e);
+                                // Continue with other config files
+                            }
+                        }
+                    }
+                }
+                
                 // Finish ZIP file
                 zip.finish().map_err(|e| format!("完成ZIP文件失败: {e}"))?;
                 
@@ -836,7 +862,7 @@ impl ConfigGenerator {
 
     /// Backup existing configuration files by creating a ZIP archive.
     /// Format: config_backup_YYYYMMDD_HHMMSS.zip
-    /// Contains: .env, docker-compose.yml, services/ directory
+    /// Contains: .env, docker-compose.yml, services/, .user_mirror_config.json, .user_version_overrides.json
     pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
         app_log!(info, "engine::config_generator", "开始预检查备份...");
         

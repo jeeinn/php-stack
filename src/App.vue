@@ -302,10 +302,10 @@ async function copyLogs() {
           @click="activeTab = 'mirrors-unified'"
           :class="{ 'active': activeTab === 'mirrors-unified' }" 
           class="sidebar-item text-sm sm:text-base"
-          :title="sidebarCollapsed ? '设置项' : ''"
+          :title="sidebarCollapsed ? '其他设置' : ''"
         >
           <span class="text-base sm:text-lg">⚙️</span>
-          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">设置项</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">其他设置</span>
         </div>
         <div 
           @click="activeTab = 'migration'"

@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "PHP-Stack",
-        "width": 1000,
-        "height": 700,
+        "width": 1200,
+        "height": 800,
         "resizable": true,
         "fullscreen": false,
         "center": true

@@ -28,7 +28,7 @@ const logs = getLogs(); // 使用 composable 中的全局日志
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
-const sidebarCollapsed = ref(false); // 控制侧边栏展开/收缩（默认展开）
+const sidebarCollapsed = ref(window.innerWidth < 768); // 控制侧边栏展开/收缩（小屏幕默认收缩）
 const showStartConfirm = ref(false); // 控制启动确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
@@ -270,12 +270,12 @@ async function copyLogs() {
     <!-- Sidebar -->
     <div 
       class="bg-slate-900 flex flex-col border-r border-slate-800 overflow-y-auto transition-all duration-300 ease-in-out"
-      :class="sidebarCollapsed ? 'w-20 p-3' : 'w-52 p-4'"
+      :class="sidebarCollapsed ? 'w-16 sm:w-20 p-2 sm:p-3' : 'w-48 sm:w-52 p-3 sm:p-4'"
     >
       <!-- Logo -->
-      <div class="mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
-        <span class="bg-blue-500 text-white p-1 rounded font-bold">PS</span>
-        <span v-if="!sidebarCollapsed" class="text-2xl font-bold text-blue-400">PHP-Stack</span>
+      <div class="mb-4 sm:mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
+        <span class="bg-blue-500 text-white p-1 rounded font-bold text-sm sm:text-base">PS</span>
+        <span v-if="!sidebarCollapsed" class="text-xl sm:text-2xl font-bold text-blue-400 hidden sm:inline">PHP-Stack</span>
       </div>
       
       <!-- Menu Items -->
@@ -283,44 +283,44 @@ async function copyLogs() {
         <div 
           @click="activeTab = 'dashboard'"
           :class="{ 'active': activeTab === 'dashboard' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境管理' : ''"
         >
-          <span class="text-lg">🏠</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">环境管理</span>
+          <span class="text-base sm:text-lg">🏠</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境管理</span>
         </div>
         <div 
           @click="activeTab = 'env-config'"
           :class="{ 'active': activeTab === 'env-config' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境配置' : ''"
         >
-          <span class="text-lg">🍳</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">环境配置</span>
+          <span class="text-base sm:text-lg">🍳</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境配置</span>
         </div>
         <div 
           @click="activeTab = 'mirrors-unified'"
           :class="{ 'active': activeTab === 'mirrors-unified' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '设置项' : ''"
         >
-          <span class="text-lg">⚙️</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">设置项</span>
+          <span class="text-base sm:text-lg">⚙️</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">设置项</span>
         </div>
         <div 
           @click="activeTab = 'migration'"
           :class="{ 'active': activeTab === 'migration' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境迁移' : ''"
         >
-          <span class="text-lg">📦</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">环境迁移</span>
+          <span class="text-base sm:text-lg">📦</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境迁移</span>
         </div>
       </div>
       
       <!-- Version & Toggle Button -->
-      <div class="mt-auto pt-4 border-t border-slate-800">
-        <div v-if="!sidebarCollapsed" class="text-sm text-slate-500 text-center mb-3">
+      <div class="mt-auto pt-3 sm:pt-4 border-t border-slate-800">
+        <div v-if="!sidebarCollapsed" class="text-xs sm:text-sm text-slate-500 text-center mb-2 sm:mb-3 hidden sm:block">
           v0.1.0
         </div>
         
@@ -346,23 +346,23 @@ async function copyLogs() {
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden p-4 md:p-6">
+    <div class="flex-1 flex flex-col overflow-hidden p-3 sm:p-4 md:p-5 lg:p-6">
       <!-- 1. 环境管理 (Dashboard) -->
       <div v-if="activeTab === 'dashboard'" class="flex-1 flex flex-col overflow-hidden">
-        <header class="flex justify-between items-center mb-8">
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
           <h1 class="text-3xl font-bold">运行状态</h1>
-          <div class="flex gap-4">
+          <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <button 
               @click="() => refreshContainers()" 
               :disabled="loading"
-              class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
+              class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
             >
               {{ loading ? '刷新中...' : '手动刷新' }}
             </button>
             <button 
               @click="handleStartEnvironment"
               :disabled="loading || starting"
-              class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+              class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
               {{ starting ? '启动中...' : '一键启动' }}
@@ -388,7 +388,7 @@ async function copyLogs() {
         </div>
 
         <!-- Container Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto mb-8 pr-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 overflow-y-auto mb-8 pr-2">
           <div v-for="c in containers" :key="String(c.id)" class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-blue-500/50 transition-colors shadow-lg">
             <div class="flex justify-between items-start mb-4">
               <span class="text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
@@ -454,13 +454,13 @@ async function copyLogs() {
       </div>
 
       <!-- Log Panel (Global) -->
-      <div class="mt-auto border-t border-slate-800 pt-4 bg-slate-950/50 backdrop-blur-md">
-        <div class="flex justify-between items-center mb-3">
+      <div class="mt-auto border-t border-slate-800 pt-3 sm:pt-4 bg-slate-950/50 backdrop-blur-md">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
           <h2 class="text-lg font-bold flex items-center gap-2 text-slate-400">
             <span class="w-2 h-2 bg-blue-500 rounded-full" :class="{ 'animate-pulse': loading }"></span> 
             实时日志
           </h2>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <button 
               @click="copyLogs"
               class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
@@ -492,7 +492,7 @@ async function copyLogs() {
             v-show="showLogs" 
             ref="logPanelRef"
             @scroll="handleLogScroll"
-            class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
+            class="bg-black/40 p-3 sm:p-4 rounded-xl font-mono text-xs sm:text-sm text-blue-300/80 border border-slate-800 h-32 sm:h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
           >
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
               {{ log }}

@@ -378,15 +378,15 @@ onMounted(() => {
 
 <template>
   <div class="flex-1 flex flex-col overflow-hidden">
-    <header class="mb-6 flex justify-between items-start">
+    <header class="mb-4 sm:mb-6 flex flex-col sm:flex-row justify-between items-start gap-3">
       <div>
-        <h1 class="text-3xl font-bold">镜像源管理</h1>
-        <p class="text-slate-400 text-sm mt-1">统一管理 Docker、APT、Composer、NPM 镜像源</p>
+        <h1 class="text-2xl sm:text-3xl font-bold">镜像源管理</h1>
+        <p class="text-slate-400 text-xs sm:text-sm mt-1">统一管理 Docker、APT、Composer、NPM 镜像源</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 w-full sm:w-auto">
         <button
           @click="resetAllOverrides"
-          class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition text-sm"
+          class="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition text-sm"
         >
           🔄 重置所有自定义
         </button>
@@ -402,13 +402,13 @@ onMounted(() => {
     <!-- Content -->
     <div v-else-if="categories.length > 0" class="flex-1 flex flex-col min-h-0">
       <!-- Category Tabs -->
-      <div class="flex gap-2 mb-4 border-b border-slate-700 pb-2 flex-shrink-0">
+      <div class="flex gap-2 mb-3 sm:mb-4 border-b border-slate-700 pb-2 flex-shrink-0 overflow-x-auto scrollbar-hide">
         <button
           v-for="category in sortedCategories"
           :key="category.category_id"
           @click="selectedCategory = category.category_id"
           :class="[
-            'px-4 py-2 rounded-lg font-medium transition',
+            'px-3 sm:px-4 py-2 rounded-lg font-medium transition whitespace-nowrap text-sm sm:text-base',
             selectedCategory === category.category_id
               ? 'bg-blue-600 text-white'
               : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -423,7 +423,7 @@ onMounted(() => {
       <div v-if="selectedCategory !== 'docker_registry'" class="mb-3 flex-shrink-0">
         <button
           @click="openCustomEdit"
-          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm transition"
+          class="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm transition"
         >
           ➕ 新增自定义
         </button>
@@ -482,7 +482,7 @@ onMounted(() => {
 
       <!-- 其他镜像源: Options Table -->
       <div v-else class="flex-1 overflow-auto min-h-0">
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto -mx-3 sm:mx-0">
           <table class="w-full text-left border-collapse min-w-[600px]">
             <thead class="sticky top-0 bg-slate-900 z-10">
               <tr class="border-b border-slate-700">
@@ -504,7 +504,7 @@ onMounted(() => {
                     : ''
                 ]"
               >
-                <td class="py-3 px-3 text-sm">
+                <td class="py-2 sm:py-3 px-2 sm:px-3 text-xs sm:text-sm">
                   <span class="font-medium">{{ option.name }}</span>
                   <span 
                     v-if="getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id" 
@@ -519,32 +519,32 @@ onMounted(() => {
                     (自定义)
                   </span>
                 </td>
-                <td class="py-3 px-3">
+                <td class="py-2 sm:py-3 px-2 sm:px-3">
                   <code class="bg-slate-800 px-2 py-1 rounded text-xs break-all">{{ option.value || '-' }}</code>
                 </td>
-                <td class="py-3 px-3 text-slate-400 text-xs max-w-[200px] truncate" :title="option.description || ''">
+                <td class="py-2 sm:py-3 px-2 sm:px-3 text-slate-400 text-xs max-w-[150px] sm:max-w-[200px] truncate" :title="option.description || ''">
                   {{ option.description || '-' }}
                 </td>
-                <td class="py-3 px-3">
+                <td class="py-2 sm:py-3 px-2 sm:px-3">
                   <span 
                     v-if="option.value"
-                    class="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400"
+                    class="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 whitespace-nowrap"
                   >
                     可用
                   </span>
                   <span 
                     v-else
-                    class="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-400"
+                    class="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-400 whitespace-nowrap"
                   >
                     官方默认
                   </span>
                 </td>
-                <td class="py-3 px-3">
-                  <div class="flex gap-1.5">
+                <td class="py-2 sm:py-3 px-2 sm:px-3">
+                  <div class="flex flex-col sm:flex-row gap-1.5">
                     <button
                       @click="selectMirror(option)"
                       :class="[
-                        'px-3 py-1.5 rounded text-xs transition whitespace-nowrap',
+                        'w-full sm:w-auto px-3 py-1.5 rounded text-xs transition whitespace-nowrap',
                         getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id
                           ? 'bg-blue-600 text-white cursor-default'
                           : 'bg-slate-700 hover:bg-slate-600 text-white'
@@ -558,7 +558,7 @@ onMounted(() => {
                       v-if="option.value"
                       @click="testConnection(option)"
                       :disabled="isTesting(option)"
-                      class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      class="w-full sm:w-auto px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       title="测试连接"
                     >
                       <span v-if="isTesting(option)" class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-white"></span>
@@ -566,7 +566,7 @@ onMounted(() => {
                     </button>
                     <button
                       @click="copyUrl(option.value)"
-                      class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition whitespace-nowrap"
+                      class="w-full sm:w-auto px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="复制地址"
                     >
                       复制
@@ -574,7 +574,7 @@ onMounted(() => {
                     <button
                       v-if="option.id === 'custom' || option.value"
                       @click="openEditDialog(option)"
-                      class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition whitespace-nowrap"
+                      class="w-full sm:w-auto px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="编辑"
                     >
                       编辑
@@ -582,7 +582,7 @@ onMounted(() => {
                     <button
                       v-if="option.id === 'custom'"
                       @click="removeCustomMirror"
-                      class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition whitespace-nowrap"
+                      class="w-full sm:w-auto px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition whitespace-nowrap"
                       title="删除自定义"
                     >
                       删除

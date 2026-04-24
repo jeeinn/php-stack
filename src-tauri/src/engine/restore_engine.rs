@@ -127,6 +127,33 @@ impl RestoreEngine {
             Err(e) => errors.push(format!("恢复 services/ 失败: {}", e)),
         }
 
+        // Step 4.5: Restore user custom configuration files
+        Self::emit_progress(app_handle, "恢复用户自定义配置...", 45);
+        
+        // .user_mirror_config.json - User mirror source configuration
+        match Self::extract_file_to_path(
+            &mut archive,
+            ".user_mirror_config.json",
+            &project_root.join(".user_mirror_config.json"),
+        ) {
+            Ok(()) => restored_files.push(".user_mirror_config.json".to_string()),
+            Err(_) => {
+                // Not a critical error, file may not exist in backup
+            }
+        }
+        
+        // .user_version_overrides.json - User version override configuration
+        match Self::extract_file_to_path(
+            &mut archive,
+            ".user_version_overrides.json",
+            &project_root.join(".user_version_overrides.json"),
+        ) {
+            Ok(()) => restored_files.push(".user_version_overrides.json".to_string()),
+            Err(_) => {
+                // Not a critical error, file may not exist in backup
+            }
+        }
+
         // Step 5: Extract vhosts/ to services/nginx/conf.d/
         Self::emit_progress(app_handle, "恢复虚拟主机配置...", 55);
         match Self::extract_prefix(
@@ -351,11 +378,26 @@ mod tests {
         zip.write_all(php_ini_content).unwrap();
         let php_ini_hash = BackupEngine::compute_sha256(php_ini_content);
 
+        // Add user custom configuration files
+        let user_mirror_config_content = b"{\"apt\":{\"source\":\"http://mirrors.aliyun.com/debian/\",\"enabled\":true}}";
+        zip.start_file(".user_mirror_config.json", zip_options)
+            .unwrap();
+        zip.write_all(user_mirror_config_content).unwrap();
+        let user_mirror_hash = BackupEngine::compute_sha256(user_mirror_config_content);
+
+        let user_version_overrides_content = b"{\"php\":{\"8.2\":{\"tag\":\"8.2-custom\"}}}";
+        zip.start_file(".user_version_overrides.json", zip_options)
+            .unwrap();
+        zip.write_all(user_version_overrides_content).unwrap();
+        let user_version_hash = BackupEngine::compute_sha256(user_version_overrides_content);
+
         // Build manifest
         let mut files = HashMap::new();
         files.insert(".env".to_string(), env_hash);
         files.insert("docker-compose.yml".to_string(), compose_hash);
         files.insert("services/php82/php.ini".to_string(), php_ini_hash);
+        files.insert(".user_mirror_config.json".to_string(), user_mirror_hash);
+        files.insert(".user_version_overrides.json".to_string(), user_version_hash);
 
         let mut ports = HashMap::new();
         ports.insert(3306, 3306);
@@ -466,10 +508,10 @@ mod tests {
         assert_eq!(preview.manifest.services.len(), 1);
         assert_eq!(preview.manifest.services[0].name, "mysql");
 
-        // Verify file count (3 files: .env, docker-compose.yml, services/php82/php.ini)
+        // Verify file count (5 files: .env, docker-compose.yml, services/php82/php.ini, .user_mirror_config.json, .user_version_overrides.json)
         assert_eq!(
-            preview.file_count, 3,
-            "Should have 3 files (excluding manifest.json), got {}",
+            preview.file_count, 5,
+            "Should have 5 files (excluding manifest.json), got {}",
             preview.file_count
         );
     }
@@ -583,6 +625,32 @@ mod tests {
         assert!(
             php_ini_content.contains("memory_limit=256M"),
             "php.ini should contain memory_limit"
+        );
+
+        // Verify .user_mirror_config.json was restored
+        let user_mirror_path = restore_dir.join(".user_mirror_config.json");
+        assert!(
+            user_mirror_path.exists(),
+            ".user_mirror_config.json should be restored"
+        );
+        let user_mirror_content =
+            fs::read_to_string(&user_mirror_path).expect("读取 .user_mirror_config.json 失败");
+        assert!(
+            user_mirror_content.contains("mirrors.aliyun.com"),
+            ".user_mirror_config.json should contain mirror source"
+        );
+
+        // Verify .user_version_overrides.json was restored
+        let user_version_path = restore_dir.join(".user_version_overrides.json");
+        assert!(
+            user_version_path.exists(),
+            ".user_version_overrides.json should be restored"
+        );
+        let user_version_content =
+            fs::read_to_string(&user_version_path).expect("读取 .user_version_overrides.json 失败");
+        assert!(
+            user_version_content.contains("8.2-custom"),
+            ".user_version_overrides.json should contain custom version tag"
         );
 
         // Verify restored_files list

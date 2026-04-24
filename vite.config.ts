@@ -17,5 +17,15 @@ export default defineConfig({
         '**/services/**', // 服务配置目录
       ]
     }
-  }
+  },
+  // 测试配置
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+    },
+  },
 })

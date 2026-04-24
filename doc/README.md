@@ -54,6 +54,22 @@
   - 开发规范速查
   - 常见问题
 
+- [TESTING_GUIDE.md](guides/TESTING_GUIDE.md) - 测试规范指南 ⭐️新增
+  - Rust后端测试规范
+  - Vue前端测试规范
+  - 测试编写示例
+  - 最佳实践
+
+- [TEST_RESTRUCTURE.md](guides/TEST_RESTRUCTURE.md) - 测试结构重构说明 ⭐️新增
+  - 重构前后对比
+  - 目录结构说明
+  - 使用示例
+
+- [TESTING_QUICK_REF.md](guides/TESTING_QUICK_REF.md) - 测试快速参考 ⭐️新增
+  - 常用命令
+  - 代码模板
+  - 覆盖目标
+
 ### 📜 历史文档 (history/)
 
 项目开发过程中的历史记录、问题修复和优化记录：
@@ -97,11 +113,13 @@
 1. 阅读根目录 [README.md](../README.md) 了解项目概况
 2. 查看 [guides/MIRROR_GUIDE.md](guides/MIRROR_GUIDE.md) 学习镜像源配置
 3. 参考 [guides/QUICK_REFERENCE.md](guides/QUICK_REFERENCE.md) 快速上手
+4. 阅读 [guides/TESTING_QUICK_REF.md](guides/TESTING_QUICK_REF.md) 了解测试命令
 
 ### 开发者必读
 1. [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) - 理解系统架构
 2. [implementation/IMPLEMENTATION_SUMMARY.md](implementation/IMPLEMENTATION_SUMMARY.md) - 了解实现细节
-3. 根目录 [AGENTS.md](../AGENTS.md) - AI Agent 开发指南
+3. [guides/TESTING_GUIDE.md](guides/TESTING_GUIDE.md) - 掌握测试规范 ⭐️新增
+4. 根目录 [AGENTS.md](../AGENTS.md) - AI Agent 开发指南
 
 ### 版本信息
 - [implementation/VERSION_SCOPE.md](implementation/VERSION_SCOPE.md) - 版本定位和功能范围

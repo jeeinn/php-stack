@@ -38,6 +38,7 @@ const starting = ref(false);
 const previewEnv = ref('');
 const previewCompose = ref('');
 const showPreviewModal = ref(false);
+const hasEnvFile = ref(false);  // .env 文件是否存在
 
 // Nginx 配置提示状态
 const showNginxHint = ref(false);
@@ -48,6 +49,7 @@ const showStartConfirm = ref(false);
 onMounted(async () => {
   await loadWorkspaceInfo();
   await loadVersionMappings();
+  await checkEnvFileExists();
   await loadExistingConfig();
 });
 
@@ -61,6 +63,18 @@ async function loadWorkspaceInfo() {
     }
   } catch (e) {
     workspacePath.value = '获取失败';
+  }
+}
+
+// 检查 .env 文件是否存在
+async function checkEnvFileExists() {
+  try {
+    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
+    console.log('[EnvConfig] .env 文件存在:', hasEnvFile.value);
+  } catch (e) {
+    console.error('[EnvConfig] 检查配置文件失败:', e);
+    hasEnvFile.value = false;
   }
 }
 
@@ -509,6 +523,9 @@ async function handleApply() {
     showToast(successMsg, 'success', 6000);
     showPreviewModal.value = false;
     
+    // 更新 .env 文件存在状态
+    hasEnvFile.value = true;
+    
     // 检查是否同时启用了 PHP 和 Nginx
     const hasPHP = phpServices.value.length > 0;
     const hasNginx = nginxServices.value.length > 0;
@@ -587,8 +604,9 @@ const goToMirrorSettings = () => {
         </button>
         <button
           @click="handleStart"
-          :disabled="starting"
-          class="w-full sm:w-auto px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition disabled:opacity-50"
+          :disabled="starting || !hasEnvFile"
+          class="w-full sm:w-auto px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+          :title="!hasEnvFile ? '请先应用配置生成 .env 文件' : ''"
         >
           {{ starting ? '启动中...' : '一键启动' }}
         </button>

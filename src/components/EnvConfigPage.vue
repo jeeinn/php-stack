@@ -307,12 +307,10 @@ async function loadExistingConfig() {
   }
 }
 
-// Port conflict detection
+// Port conflict detection (仅检测 MySQL、Redis、Nginx 的宿主机端口)
 const allPorts = computed(() => {
   const ports: { service: string; port: number }[] = [];
-  phpServices.value.forEach((s, i) => {
-    ports.push({ service: `PHP ${s.version} (#${i + 1})`, port: s.host_port });
-  });
+  // PHP 服务不需要宿主机端口映射，跳过
   mysqlServices.value.forEach((s, i) => {
     ports.push({ service: `MySQL ${s.version} (#${i + 1})`, port: s.host_port });
   });
@@ -694,10 +692,6 @@ const goToMirrorSettings = () => {
                   <span v-if="v.eol" class="text-amber-400">(EOL)</span>
                 </option>
               </select>
-            </div>
-            <div class="w-full sm:w-32">
-              <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
-              <input v-model.number="php.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button v-if="phpServices.length > 1" @click="removePhpVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">删除</button>
           </div>

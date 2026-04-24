@@ -1,5 +1,7 @@
-ARG PHP_VERSION
-FROM php:8.3-fpm
+# Dynamic base image support
+# Users can override by setting PHP83_VERSION in .env (e.g., php:8.3-fpm-alpine)
+ARG PHP_BASE_IMAGE=php:8.3-fpm
+FROM ${PHP_BASE_IMAGE}
 
 ARG TZ
 ARG PHP_EXTENSIONS
@@ -26,6 +28,10 @@ RUN export option="--no-install-recommends -y" \
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions (with GitHub proxy if configured)
+# Performance optimizations:
+# - IPE_PROCESSOR_COUNT: Use all available CPU cores for parallel compilation
+# - IPE_GD_WITHOUTAVIF: Skip AVIF support (requires slow Google source download)
+# - IPE_ICU_EN_ONLY: Install English-only ICU library to reduce download size
 RUN if [ -n "$GITHUB_PROXY" ]; then \
       EXTENSIONS_URL="${GITHUB_PROXY}/https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions"; \
     else \
@@ -33,6 +39,9 @@ RUN if [ -n "$GITHUB_PROXY" ]; then \
     fi && \
     curl --connect-timeout 10 -sSLf -o /usr/local/bin/install-php-extensions $EXTENSIONS_URL && \
     chmod +x /usr/local/bin/install-php-extensions && \
+    IPE_PROCESSOR_COUNT=$(nproc) \
+    IPE_GD_WITHOUTAVIF=1 \
+    IPE_ICU_EN_ONLY=1 \
     install-php-extensions $(echo $PHP_EXTENSIONS | tr ',' ' ')
 
 # Install composer and change it's cache home

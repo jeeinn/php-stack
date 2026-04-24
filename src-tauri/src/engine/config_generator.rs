@@ -124,9 +124,27 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "");
+                    
+                    // Get the full image tag from version_manifest or user override
+                    let manifest = VersionManifest::new();
+                    let project_root = Self::get_project_root();
+                    let override_manager = UserOverrideManager::new(&project_root);
+                    
+                    // Get merged image info (user override > default manifest)
+                    let image_tag = override_manager
+                        .get_merged_image_info(&VmServiceType::Php, &service.version)
+                        .map(|info| format!("{}:{}", info.image, info.tag))
+                        .unwrap_or_else(|| {
+                            manifest
+                                .get_image_info(&VmServiceType::Php, &service.version)
+                                .map(|info| format!("{}:{}", info.image, info.tag))
+                                .unwrap_or(format!("php:{}-fpm", service.version))
+                        });
+                    
+                    // Set the full image tag (e.g., php:8.2-fpm or php:5.6-fpm-alpine)
                     env.set(
                         &format!("PHP{ver}_VERSION"),
-                        &service.version,
+                        &image_tag,
                     );
                     env.set(
                         &format!("PHP{ver}_HOST_PORT"),
@@ -164,15 +182,16 @@ impl ConfigGenerator {
                         "80".to_string()
                     };
                     
-                    // Get the correct image tag (user override > default manifest)
+                    // Get the full image tag (user override > default manifest)
+                    // Format: mysql:8.4
                     let image_tag = override_manager
                         .get_merged_image_info(&VmServiceType::Mysql, &service.version)
-                        .map(|info| info.tag.clone())
+                        .map(|info| format!("{}:{}", info.image, info.tag))
                         .unwrap_or_else(|| {
                             manifest
                                 .get_image_info(&VmServiceType::Mysql, &service.version)
-                                .map(|info| info.tag.clone())
-                                .unwrap_or(service.version.clone())
+                                .map(|info| format!("{}:{}", info.image, info.tag))
+                                .unwrap_or(format!("mysql:{}", service.version))
                         });
                     
                     env.set(&format!("MYSQL{ver}_VERSION"), &image_tag);
@@ -200,16 +219,16 @@ impl ConfigGenerator {
                         "72".to_string()
                     };
                     
-                    // Get the correct image tag (user override > default manifest)
-                    // 注意：使用 version_base（纯版本号）来查找用户覆盖配置
+                    // Get the full image tag (user override > default manifest)
+                    // Format: redis:7.2-alpine
                     let image_tag = override_manager
                         .get_merged_image_info(&VmServiceType::Redis, version_base)
-                        .map(|info| info.tag.clone())
+                        .map(|info| format!("{}:{}", info.image, info.tag))
                         .unwrap_or_else(|| {
                             manifest
                                 .get_image_info(&VmServiceType::Redis, version_base)
-                                .map(|info| info.tag.clone())
-                                .unwrap_or(service.version.clone())
+                                .map(|info| format!("{}:{}", info.image, info.tag))
+                                .unwrap_or(format!("redis:{}-alpine", version_base))
                         });
                     
                     env.set(&format!("REDIS{ver}_VERSION"), &image_tag);
@@ -231,16 +250,16 @@ impl ConfigGenerator {
                         "127".to_string()
                     };
                     
-                    // Get the correct image tag (user override > default manifest)
-                    // 注意：使用 version_base（纯版本号）来查找用户覆盖配置
+                    // Get the full image tag (user override > default manifest)
+                    // Format: nginx:1.27-alpine
                     let image_tag = override_manager
                         .get_merged_image_info(&VmServiceType::Nginx, version_base)
-                        .map(|info| info.tag.clone())
+                        .map(|info| format!("{}:{}", info.image, info.tag))
                         .unwrap_or_else(|| {
                             manifest
                                 .get_image_info(&VmServiceType::Nginx, version_base)
-                                .map(|info| info.tag.clone())
-                                .unwrap_or(service.version.clone())
+                                .map(|info| format!("{}:{}", info.image, info.tag))
+                                .unwrap_or(format!("nginx:{}-alpine", version_base))
                         });
                     
                     env.set(&format!("NGINX{ver}_VERSION"), &image_tag);
@@ -307,9 +326,12 @@ impl ConfigGenerator {
                     lines.push("    build:".to_string());
                     lines.push(format!("      context: ./services/php{ver}"));
                     lines.push("      args:".to_string());
+                    // Pass the full image tag to Dockerfile's PHP_BASE_IMAGE ARG
+                    lines.push(format!("        PHP_BASE_IMAGE: \"${{PHP{ver}_VERSION}}\""));
                     lines.push(format!("        PHP_EXTENSIONS: \"${{PHP{ver}_EXTENSIONS}}\""));
                     lines.push("        TZ: \"${TZ}\"".to_string());
-                    // 镜像源配置（仅容器内依赖）
+                    // 镜像源配置（Debian APT 加速，适用于所有 PHP 版本）
+                    // 注意：所有 PHP Dockerfile 现已统一使用 Debian 基础镜像（与 version_manifest.json 一致）
                     lines.push("        DEBIAN_MIRROR_DOMAIN: \"${APT_MIRROR:-deb.debian.org}\"".to_string());
                     lines.push("        COMPOSER_MIRROR: \"${COMPOSER_MIRROR:-https://packagist.org}\"".to_string());
                     lines.push("        GITHUB_PROXY: \"${GITHUB_PROXY:-}\"".to_string());
@@ -341,7 +363,8 @@ impl ConfigGenerator {
                     };
                     
                     lines.push(format!("  mysql{ver}:"));
-                    lines.push(format!("    image: mysql:${{MYSQL{ver}_VERSION}}"));
+                    // Use full image tag directly (e.g., mysql:8.4)
+                    lines.push(format!("    image: ${{MYSQL{ver}_VERSION}}"));
                     lines.push(format!("    container_name: ps-mysql{ver}"));
                     lines.push("    ports:".to_string());
                     lines.push(format!("      - \"${{MYSQL{ver}_HOST_PORT}}:3306\""));
@@ -373,7 +396,8 @@ impl ConfigGenerator {
                     };
                     
                     lines.push(format!("  redis{ver}:"));
-                    lines.push(format!("    image: redis:${{REDIS{ver}_VERSION}}"));
+                    // Use full image tag directly (e.g., redis:7.2-alpine)
+                    lines.push(format!("    image: ${{REDIS{ver}_VERSION}}"));
                     lines.push(format!("    container_name: ps-redis{ver}"));
                     lines.push("    ports:".to_string());
                     lines.push(format!("      - \"${{REDIS{ver}_HOST_PORT}}:6379\""));
@@ -402,6 +426,9 @@ impl ConfigGenerator {
                     lines.push(format!("  nginx{ver}:"));
                     lines.push("    build:".to_string());
                     lines.push(format!("      context: ${{NGINX{ver}_BUILD_CONTEXT}}"));
+                    lines.push("      args:".to_string());
+                    // Pass the full image tag to Dockerfile's NGINX_BASE_IMAGE ARG
+                    lines.push(format!("        NGINX_BASE_IMAGE: \"${{NGINX{ver}_VERSION}}\""));
                     lines.push(format!("    container_name: ps-nginx{ver}"));
                     lines.push("    ports:".to_string());
                     lines.push(format!("      - \"${{NGINX{ver}_HTTP_HOST_PORT}}:80\""));
@@ -1067,7 +1094,8 @@ mod tests {
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
         assert_eq!(map.get("TZ").unwrap(), "Asia/Shanghai");
         assert_eq!(map.get("DATA_DIR").unwrap(), "./data");
-        assert_eq!(map.get("PHP82_VERSION").unwrap(), "8.2");
+        // PHP VERSION now contains full image tag (e.g., php:8.2-fpm)
+        assert_eq!(map.get("PHP82_VERSION").unwrap(), "php:8.2-fpm");
         assert_eq!(map.get("PHP82_HOST_PORT").unwrap(), "9000");
         assert_eq!(map.get("PHP82_EXTENSIONS").unwrap(), "pdo_mysql,gd");
         assert_eq!(
@@ -1079,15 +1107,15 @@ mod tests {
             "./services/php82/php-fpm.conf"
         );
         assert_eq!(map.get("PHP82_LOG_DIR").unwrap(), "./logs/php82");
-        // MySQL 8.0 uses tag "8.0" from version_manifest.json
-        assert_eq!(map.get("MYSQL80_VERSION").unwrap(), "8.0");
+        // MySQL 8.0 uses full image tag "mysql:8.0" from version_manifest.json
+        assert_eq!(map.get("MYSQL80_VERSION").unwrap(), "mysql:8.0");
         assert_eq!(map.get("MYSQL80_HOST_PORT").unwrap(), "3306");
         assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "root");
-        // Redis 7.0 uses tag "7.0-alpine" from version_manifest.json
-        assert_eq!(map.get("REDIS70_VERSION").unwrap(), "7.0-alpine");
+        // Redis 7.0 uses full image tag "redis:7.0-alpine" from version_manifest.json
+        assert_eq!(map.get("REDIS70_VERSION").unwrap(), "redis:7.0-alpine");
         assert_eq!(map.get("REDIS70_HOST_PORT").unwrap(), "6379");
-        // Nginx 1.25 uses tag "1.25-alpine" from version_manifest.json
-        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25-alpine");
+        // Nginx 1.25 uses full image tag "nginx:1.25-alpine" from version_manifest.json
+        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "nginx:1.25-alpine");
         assert_eq!(map.get("NGINX125_HTTP_HOST_PORT").unwrap(), "80");
     }
 
@@ -1115,8 +1143,8 @@ mod tests {
         assert_eq!(map.get("CUSTOM_VAR").unwrap(), "hello");
         // Managed variable updated
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
-        // New managed variable added (uses tag from version_manifest.json)
-        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "1.25-alpine");
+        // New managed variable added (uses full image tag from version_manifest.json)
+        assert_eq!(map.get("NGINX125_VERSION").unwrap(), "nginx:1.25-alpine");
     }
 
     #[test]
@@ -1144,13 +1172,13 @@ mod tests {
         let env = ConfigGenerator::generate_env(&config, None);
         let map = env.to_map();
 
-        // PHP 7.4 vars
-        assert_eq!(map.get("PHP74_VERSION").unwrap(), "7.4");
+        // PHP 7.4 vars (full image tag)
+        assert_eq!(map.get("PHP74_VERSION").unwrap(), "php:7.4-fpm");
         assert_eq!(map.get("PHP74_HOST_PORT").unwrap(), "9074");
         assert_eq!(map.get("PHP74_EXTENSIONS").unwrap(), "pdo_mysql");
 
-        // PHP 8.2 vars
-        assert_eq!(map.get("PHP82_VERSION").unwrap(), "8.2");
+        // PHP 8.2 vars (full image tag)
+        assert_eq!(map.get("PHP82_VERSION").unwrap(), "php:8.2-fpm");
         assert_eq!(map.get("PHP82_HOST_PORT").unwrap(), "9082");
         assert_eq!(map.get("PHP82_EXTENSIONS").unwrap(), "gd,curl");
     }

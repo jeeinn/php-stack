@@ -219,6 +219,16 @@ watch(logs, async () => {
   }
 }, { deep: true });
 
+// 监听日志面板显示状态，显示时自动滚动到底部
+watch(showLogs, async (newValue) => {
+  if (newValue) {
+    await nextTick();
+    if (logPanelRef.value) {
+      logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+    }
+  }
+});
+
 // 处理用户手动滚动
 const handleLogScroll = () => {
   isUserScrolling.value = true;
@@ -228,10 +238,19 @@ const handleLogScroll = () => {
     clearTimeout(scrollTimeout);
   }
   
-  // 3秒后恢复自动滚动
+  // 1秒后恢复自动滚动（缩短等待时间）
   scrollTimeout = setTimeout(() => {
     isUserScrolling.value = false;
-  }, 3000);
+  }, 1000);
+};
+
+// 手动滚动到底部
+const scrollToBottom = async () => {
+  await nextTick();
+  if (logPanelRef.value) {
+    logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+    isUserScrolling.value = false; // 重置手动滚动状态
+  }
 };
 
 // 复制日志到剪贴板
@@ -448,6 +467,13 @@ async function copyLogs() {
               title="复制日志到剪贴板"
             >
               📋 复制
+            </button>
+            <button 
+              @click="scrollToBottom"
+              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              title="滚动到底部"
+            >
+              ⬇️ 底部
             </button>
             <button 
               @click="showLogs = !showLogs"

@@ -1,5 +1,5 @@
 // Test setup file for Vue components
-import { config } from '@vue/test-utils'
+// import { config } from '@vue/test-utils'
 
 // Global test setup - configure global properties if needed
 // config.global.mocks = {}

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::io::Write;
 use chrono::Local;
+use zip::write::FileOptions;
 
 use super::env_parser::EnvFile;
 use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
@@ -704,14 +706,12 @@ impl ConfigGenerator {
             return Ok(BackupState::NothingToBackup);
         }
         
-        // Pre-check: verify all backup target paths don't exist (avoid overwriting old backups)
-        for item in &existing_items {
-            let backup_name = format!("{item}_{timestamp}");
-            let backup_path = project_root.join(&backup_name);
-            
-            if backup_path.exists() {
-                return Err(format!("备份文件已存在，请删除后重试: {backup_name}"));
-            }
+        // Pre-check: verify backup zip file doesn't exist (avoid overwriting old backups)
+        let backup_zip_name = format!("config_backup_{timestamp}.zip");
+        let backup_zip_path = project_root.join(&backup_zip_name);
+        
+        if backup_zip_path.exists() {
+            return Err(format!("备份文件已存在，请删除后重试: {backup_zip_name}"));
         }
         
         Ok(BackupState::Ready { 
@@ -720,71 +720,123 @@ impl ConfigGenerator {
         })
     }
 
-    /// Rollback all backed up items in reverse order
-    fn rollback_all(rollback_list: &[(PathBuf, PathBuf)]) -> Result<(), String> {
-        // Reverse order to ensure dependencies are restored correctly
-        for (backup_path, original_path) in rollback_list.iter().rev() {
-            if let Err(e) = std::fs::rename(backup_path, original_path) {
-                app_log!(warn, "engine::config_generator", "回滚失败 {:?} -> {:?}: {}", backup_path, original_path, e);
-                return Err(format!("回滚失败: {e}"));
-            }
-        }
-        Ok(())
-    }
-
     /// Phase 2: Execute backup with atomic rollback
-    /// If any item fails to backup, all previously backed up items will be rolled back
+    /// Creates a ZIP archive containing all config files
     fn execute_backup(state: BackupState, project_root: &Path) -> Result<Vec<String>, String> {
         match state {
             BackupState::NothingToBackup => Ok(vec![]),
             BackupState::Ready { timestamp, items } => {
-                let mut backed_up = Vec::new();
-                let mut rollback_list: Vec<(PathBuf, PathBuf)> = Vec::new();
+                let backup_zip_name = format!("config_backup_{timestamp}.zip");
+                let backup_zip_path = project_root.join(&backup_zip_name);
                 
-                // Try to backup each item
+                app_log!(info, "engine::config_generator", "开始创建配置备份: {}", backup_zip_name);
+                
+                // Create ZIP file
+                let file = std::fs::File::create(&backup_zip_path)
+                    .map_err(|e| format!("创建备份文件失败: {e}"))?;
+                let mut zip = zip::ZipWriter::new(file);
+                let zip_options = FileOptions::<()>::default()
+                    .compression_method(zip::CompressionMethod::Deflated);
+                
+                let mut backed_up_count = 0;
+                
+                // Add each item to the ZIP
                 for item in &items {
                     let item_path = project_root.join(item);
-                    let backup_name = format!("{item}_{timestamp}");
-                    let backup_path = project_root.join(&backup_name);
                     
-                    match std::fs::rename(&item_path, &backup_path) {
-                        Ok(()) => {
-                            app_log!(info, "engine::config_generator", "已备份: {} -> {}", item, backup_name);
-                            backed_up.push(backup_name.clone());
-                            rollback_list.push((backup_path, item_path.clone()));
-                        }
-                        Err(e) => {
-                            app_log!(error, "engine::config_generator", "备份 {} 失败: {}", item, e);
-                            
-                            // Immediate rollback on failure
-                            if !rollback_list.is_empty() {
-                                app_log!(warn, "engine::config_generator", "正在回滚已备份的 {} 项...", rollback_list.len());
-                                if let Err(rollback_err) = Self::rollback_all(&rollback_list) {
-                                    app_log!(error, "engine::config_generator", "严重错误：回滚也失败: {}", rollback_err);
-                                    return Err(format!(
-                                        "备份 {item} 失败，且回滚操作也失败（请手动恢复）: {e}\n回滚错误: {rollback_err}"
-                                    ));
-                                }
-                                app_log!(info, "engine::config_generator", "回滚成功，所有文件已恢复原状");
+                    if item_path.is_file() {
+                        // Add single file
+                        match std::fs::read(&item_path) {
+                            Ok(content) => {
+                                zip.start_file(item, zip_options)
+                                    .map_err(|e| format!("添加文件到ZIP失败: {e}"))?;
+                                zip.write_all(&content)
+                                    .map_err(|e| format!("写入文件内容失败: {e}"))?;
+                                app_log!(info, "engine::config_generator", "已添加到备份: {}", item);
+                                backed_up_count += 1;
                             }
-                            
-                            return Err(format!(
-                                "备份 {item} 失败，已自动回滚之前的操作 {e} "
-                            ));
+                            Err(e) => {
+                                app_log!(error, "engine::config_generator", "读取文件 {} 失败: {}", item, e);
+                                // Continue with other files, don't fail entire backup
+                            }
+                        }
+                    } else if item_path.is_dir() {
+                        // Add directory recursively
+                        match Self::add_dir_to_zip_recursive(&mut zip, &item_path, item, zip_options) {
+                            Ok(count) => {
+                                app_log!(info, "engine::config_generator", "已添加目录 {} ({} 个文件)", item, count);
+                                backed_up_count += count;
+                            }
+                            Err(e) => {
+                                app_log!(error, "engine::config_generator", "添加目录 {} 失败: {}", item, e);
+                                // Continue with other items
+                            }
                         }
                     }
                 }
                 
-                app_log!(info, "engine::config_generator", "备份完成，共 {} 项", backed_up.len());
-                Ok(backed_up)
+                // Finish ZIP file
+                zip.finish().map_err(|e| format!("完成ZIP文件失败: {e}"))?;
+                
+                if backed_up_count == 0 {
+                    // No files were successfully added, delete the empty ZIP
+                    let _ = std::fs::remove_file(&backup_zip_path);
+                    app_log!(warn, "engine::config_generator", "没有文件被成功备份，已删除空ZIP文件");
+                    return Ok(vec![]);
+                }
+                
+                app_log!(info, "engine::config_generator", "备份完成: {} (共 {} 个文件/目录项)", backup_zip_name, items.len());
+                Ok(vec![backup_zip_name])
             }
         }
     }
+    
+    /// Recursively add directory contents to ZIP
+    fn add_dir_to_zip_recursive(
+        zip: &mut zip::ZipWriter<std::fs::File>,
+        dir_path: &Path,
+        zip_base_path: &str,
+        options: FileOptions<()>,
+    ) -> Result<usize, String> {
+        let mut file_count = 0;
+        
+        for entry in std::fs::read_dir(dir_path)
+            .map_err(|e| format!("读取目录失败: {e}"))?
+        {
+            let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Some(file_name) = path.file_name() {
+                    let zip_path = format!("{}/{}", zip_base_path, file_name.to_string_lossy());
+                    match std::fs::read(&path) {
+                        Ok(content) => {
+                            zip.start_file(&zip_path, options)
+                                .map_err(|e| format!("添加文件到ZIP失败: {e}"))?;
+                            zip.write_all(&content)
+                                .map_err(|e| format!("写入文件内容失败: {e}"))?;
+                            file_count += 1;
+                        }
+                        Err(e) => {
+                            app_log!(warn, "engine::config_generator", "跳过文件 {:?}: {}", path, e);
+                        }
+                    }
+                }
+            } else if path.is_dir() {
+                if let Some(dir_name) = path.file_name() {
+                    let sub_zip_path = format!("{}/{}", zip_base_path, dir_name.to_string_lossy());
+                    let sub_count = Self::add_dir_to_zip_recursive(zip, &path, &sub_zip_path, options)?;
+                    file_count += sub_count;
+                }
+            }
+        }
+        
+        Ok(file_count)
+    }
 
-    /// Backup existing configuration files by renaming them with timestamp suffix.
-    /// This function implements atomic backup with automatic rollback on failure.
-    /// Format: .env -> .env_YYYYMMDD_HHMMSS
-    ///         services/ -> services_YYYYMMDD_HHMMSS/
+    /// Backup existing configuration files by creating a ZIP archive.
+    /// Format: config_backup_YYYYMMDD_HHMMSS.zip
+    /// Contains: .env, docker-compose.yml, services/ directory
     pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
         app_log!(info, "engine::config_generator", "开始预检查备份...");
         

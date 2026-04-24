@@ -139,6 +139,430 @@ sequenceDiagram
 
 ---
 
+### 3.0.5 实时日志工作流程 (Real-time Logging)
+
+**设计理念**：三层日志架构，兼顾持久化、调试和用户体验。
+
+#### 1. 日志架构概览
+
+PHP-Stack 采用**三层日志系统**，分别服务于不同场景：
+
+| 层级 | 目标 | 用途 | 特性 |
+|------|------|------|------|
+| **文件日志** | `php-stack.log` | 问题排查、审计 | 持久化、完整记录、每次启动覆盖 |
+| **控制台日志** | 终端输出 | 开发调试 | 彩色格式化、实时显示 |
+| **UI 日志** | 前端面板 | 用户反馈 | 实时推送、自动滚动、可复制 |
+
+#### 2. 后端日志初始化流程
+
+```mermaid
+sequenceDiagram
+    participant MAIN as lib.rs::run()
+    participant LOG as logging::init_logging()
+    participant FS as 文件系统
+    participant TRACING as tracing-subscriber
+
+    MAIN->>LOG: init_logging(&log_dir)
+    LOG->>FS: create_dir_all(log_dir)
+    alt 目录创建失败
+        LOG-->>MAIN: Err("无法创建目录")
+        MAIN->>MAIN: eprintln!(错误信息)
+    else 目录创建成功
+        LOG->>FS: OpenOptions::new().truncate(true).open("php-stack.log")
+        LOG->>TRACING: 配置 FileLayer (JSON 格式)
+        LOG->>TRACING: 配置 ConsoleLayer (Pretty 格式，仅 debug)
+        LOG->>TRACING: 注册 subscriber
+        LOG-->>MAIN: Ok(())
+        MAIN->>MAIN: app_log!(info, "PHP-Stack 启动")
+    end
+```
+
+**关键代码** ([lib.rs](file:///e:/study/php-stack/src-tauri/src/lib.rs)):
+```rust
+pub fn run() {
+    tauri::Builder::default()
+        .setup(|app| {
+            // 获取项目根目录（优先 workspace.json，否则 exe 同级目录）
+            let log_dir = if cfg!(debug_assertions) {
+                // 开发模式：使用项目根目录
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().and_then(|p| p.parent())
+                        .and_then(|p| p.parent()).and_then(|p| p.parent())
+                        .map(|p| p.to_path_buf()))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            } else {
+                // 生产模式：使用可执行文件所在目录
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            };
+            
+            // 初始化日志系统
+            if let Err(e) = logging::init_logging(&log_dir) {
+                eprintln!("Failed to initialize logging: {}", e);
+            }
+            
+            app_log!(info, "app", "PHP-Stack 启动，日志文件位于: {:?}", log_dir.join("php-stack.log"));
+            // ...
+        })
+}
+```
+
+**日志模块实现** ([logging.rs](file:///e:/study/php-stack/src-tauri/src/logging.rs)):
+```rust
+pub fn init_logging(app_data_dir: &PathBuf) -> Result<(), String> {
+    // 确保目录存在
+    std::fs::create_dir_all(app_data_dir)
+        .map_err(|e| format!("无法创建应用数据目录 {:?}: {}", app_data_dir, e))?;
+    
+    let log_path = app_data_dir.join("php-stack.log");
+    
+    // 每次启动时覆盖写入（truncate）
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)  // 关键：覆盖旧日志
+        .open(&log_path)
+        .map_err(|e| format!("无法创建日志文件 {:?}: {}", log_path, e))?;
+    
+    // 配置 tracing subscriber
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(file)
+        .with_ansi(false)
+        .json();
+    
+    let console_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(true)
+        .pretty();
+    
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .with(console_layer)
+        .init();
+    
+    Ok(())
+}
+```
+
+#### 3. 日志宏定义与使用
+
+**宏定义** ([logging.rs](file:///e:/study/php-stack/src-tauri/src/logging.rs)):
+```rust
+/// 应用日志宏 - 同时输出到文件和 Tauri 事件
+#[macro_export]
+macro_rules! app_log {
+    ($level:ident, $target:expr, $($arg:tt)*) => {{
+        use tracing::{event, Level};
+        let level = match stringify!($level) {
+            "error" => Level::ERROR,
+            "warn" => Level::WARN,
+            "info" => Level::INFO,
+            "debug" => Level::DEBUG,
+            _ => Level::INFO,
+        };
+        
+        let msg = format!($($arg)*);
+        
+        // 1. 输出到 tracing（文件 + 控制台）
+        event!(target: $target, level, "{}", msg);
+        
+        // 2. 发送到前端 UI（通过 Tauri 事件）
+        if let Some(handle) = $crate::get_app_handle() {
+            let _ = handle.emit("env-log", &msg);
+        }
+    }};
+}
+```
+
+**使用示例**:
+```rust
+// 在 commands.rs 中
+#[tauri::command]
+pub fn start_environment(app_handle: tauri::AppHandle) -> Result<(), String> {
+    app_log!(info, "start_env", "开始启动环境...");
+    
+    // 清理旧容器
+    app_log!(info, "start_env", "正在清理旧容器...");
+    manager.stop_all_ps_containers().await?;
+    
+    // 等待容器停止
+    app_log!(info, "start_env", "等待容器完全停止...");
+    wait_for_containers_to_stop(&manager).await?;
+    
+    // 检查端口冲突
+    app_log!(info, "start_env", "检查端口冲突...");
+    check_port_conflicts(&config)?;
+    
+    // 启动容器
+    app_log!(info, "start_env", "启动 Docker Compose...");
+    docker_compose_up().await?;
+    
+    app_log!(info, "start_env", "✅ 环境启动成功！");
+    Ok(())
+}
+```
+
+#### 4. 前端日志接收与显示
+
+**日志状态管理** ([useToast.ts](file:///e:/study/php-stack/src/composables/useToast.ts)):
+```typescript
+const logs = ref<string[]>([]);
+
+export function addLog(message: string) {
+  const time = new Date().toLocaleTimeString();
+  logs.value.push(`[${time}] ${message}`);  // 最新在下
+  if (logs.value.length > 50) logs.value.shift();  // 保留最近 50 条
+}
+
+export function getLogs() {
+  return logs;
+}
+```
+
+**事件监听** ([App.vue](file:///e:/study/php-stack/src/App.vue)):
+```typescript
+onMounted(() => {
+  // 监听后端发送的日志事件
+  listen('env-log', (event) => {
+    const msg = event.payload as string;
+    addLog(msg);
+  });
+});
+```
+
+#### 5. 自动滚动优化机制
+
+**问题**：日志面板需要自动滚动到底部，但不能干扰用户手动阅读。
+
+**解决方案**：智能滚动策略
+
+```mermaid
+graph TD
+    A[新日志到达] --> B{日志面板是否显示?}
+    B -->|否| C[不处理]
+    B -->|是| D{用户是否手动滚动?}
+    D -->|是| E[等待1秒后恢复]
+    D -->|否| F[自动滚动到底部]
+    E --> F
+    G[点击显示按钮] --> H[自动滚动到底部]
+    I[点击⬇️底部按钮] --> J[强制滚动到底部并重置状态]
+```
+
+**实现代码** ([App.vue](file:///e:/study/php-stack/src/App.vue)):
+```typescript
+const logPanelRef = ref<HTMLElement | null>(null);
+const isUserScrolling = ref(false);
+let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// 监听日志变化，自动滚动到底部（用户未手动滚动时）
+watch(logs, async () => {
+  await nextTick();
+  if (logPanelRef.value && !isUserScrolling.value) {
+    logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+  }
+}, { deep: true });
+
+// 监听日志面板显示状态，显示时自动滚动到底部
+watch(showLogs, async (newValue) => {
+  if (newValue) {
+    await nextTick();
+    if (logPanelRef.value) {
+      logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+    }
+  }
+});
+
+// 处理用户手动滚动
+const handleLogScroll = () => {
+  isUserScrolling.value = true;
+  
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout);
+  }
+  
+  // 1秒后恢复自动滚动
+  scrollTimeout = setTimeout(() => {
+    isUserScrolling.value = false;
+  }, 1000);
+};
+
+// 手动滚动到底部
+const scrollToBottom = async () => {
+  await nextTick();
+  if (logPanelRef.value) {
+    logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+    isUserScrolling.value = false; // 重置手动滚动状态
+  }
+};
+```
+
+**UI 模板**:
+```vue
+<div 
+  ref="logPanelRef"
+  @scroll="handleLogScroll"
+  class="bg-black/40 p-4 rounded-xl font-mono text-sm h-40 overflow-y-auto"
+>
+  <div v-for="(log, i) in logs" :key="i" class="mb-1">
+    {{ log }}
+  </div>
+</div>
+
+<!-- 控制按钮 -->
+<button @click="scrollToBottom">⬇️ 底部</button>
+<button @click="copyLogs">📋 复制</button>
+<button @click="showLogs = !showLogs">{{ showLogs ? '隐藏' : '显示' }}</button>
+```
+
+#### 6. 日志复制功能
+
+**权限配置** ([capabilities/default.json](file:///e:/study/php-stack/src-tauri/capabilities/default.json)):
+```json
+{
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "dialog:allow-save",
+    "log:default",
+    "clipboard-manager:allow-write-text"  // ✅ 剪贴板写权限
+  ]
+}
+```
+
+**导出日志命令** ([commands.rs](file:///e:/study/php-stack/src-tauri/src/commands.rs)):
+```rust
+#[tauri::command]
+pub fn export_logs() -> Result<String, String> {
+    // 获取项目根目录（与 get_project_root 逻辑一致）
+    let log_dir = if cfg!(debug_assertions) {
+        std::env::current_exe()
+            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .ok_or("无法获取项目根目录")?
+            .to_path_buf()
+    } else {
+        std::env::current_exe()
+            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .parent()
+            .ok_or("无法获取程序所在目录")?
+            .to_path_buf()
+    };
+    
+    let log_path = log_dir.join("php-stack.log");
+    
+    if !log_path.exists() {
+        return Err("日志文件不存在，请先执行一些操作".to_string());
+    }
+    
+    std::fs::read_to_string(&log_path)
+        .map_err(|e| format!("读取日志失败: {}", e))
+}
+```
+
+**前端调用** ([App.vue](file:///e:/study/php-stack/src/App.vue)):
+```typescript
+async function copyLogs() {
+  try {
+    const logs = await invoke('export_logs');
+    await writeText(logs as string);
+    showToast('日志已复制到剪贴板', 'success');
+  } catch (e) {
+    showToast(`复制失败: ${e}`, 'error');
+  }
+}
+```
+
+#### 7. 关键技术决策
+
+##### 7.1 为什么每次启动覆盖日志文件？
+
+**优势**:
+- ✅ **文件大小可控**：避免日志文件无限增长
+- ✅ **聚焦当前会话**：便于排查最近的问题
+- ✅ **简化维护**：无需实现日志轮转逻辑
+
+**劣势**:
+- ❌ 历史日志丢失
+
+**权衡**：对于开发工具，当前会话日志足够，如需长期保存可使用系统日志工具。
+
+##### 7.2 为什么使用 Tauri 事件而非 WebSocket？
+
+**优势**:
+- ✅ **零配置**：Tauri 内置事件系统，无需额外依赖
+- ✅ **类型安全**：Rust 和 TypeScript 双向类型检查
+- ✅ **轻量级**：无网络开销，IPC 直接通信
+
+**适用场景**：桌面应用内部通信
+
+##### 7.3 为什么限制日志数量为 50 条？
+
+**考虑因素**:
+- **内存占用**：每条日志约 100 字节，50 条约 5KB
+- **渲染性能**：DOM 节点过多会影响滚动流畅度
+- **用户体验**：用户通常只关注最近的日志
+
+**可扩展性**：如需查看完整日志，使用"复制"功能获取文件日志。
+
+##### 7.4 为什么手动滚动后 1 秒恢复？
+
+**设计原则**:
+- **不打扰阅读**：给用户足够时间查看历史日志
+- **及时恢复**：1 秒后大概率用户已完成阅读
+- **平衡体验**：既不过于激进也不过于保守
+
+**对比方案**:
+- 3 秒：太长，可能错过重要日志
+- 0.5 秒：太短，用户还在阅读就被打断
+- 1 秒：经验值，符合大多数用户习惯
+
+#### 8. 相关文件清单
+
+| 文件 | 职责 |
+|------|------|
+| `src-tauri/src/logging.rs` | 日志基础设施（tracing 配置、宏定义） |
+| `src-tauri/src/lib.rs` | 日志系统初始化 |
+| `src-tauri/src/commands.rs` | 导出日志命令 |
+| `src/composables/useToast.ts` | 前端日志状态管理 |
+| `src/App.vue` | 日志面板 UI、事件监听、自动滚动 |
+| `src-tauri/capabilities/default.json` | 剪贴板权限配置 |
+
+#### 9. 测试建议
+
+**手动测试场景**:
+1. **启动应用**：检查 `php-stack.log` 是否生成
+2. **执行操作**：点击"一键启动"，观察日志面板实时更新
+3. **手动滚动**：向上滚动查看历史日志，等待 1 秒后新增日志应自动滚动
+4. **显示/隐藏**：切换日志面板，打开时应自动滚动到底部
+5. **复制日志**：点击"📋 复制"，粘贴到文本编辑器验证完整性
+6. **长时间运行**：连续操作 50+ 次，确认日志数量不超过 50 条
+
+**自动化测试**（待实现）:
+```typescript
+// src/composables/__tests__/useToast.spec.ts
+describe('addLog', () => {
+  it('should add log with timestamp', () => {
+    addLog('Test message');
+    expect(logs.value[0]).toMatch(/\[\d+:\d+:\d+\] Test message/);
+  });
+  
+  it('should limit to 50 logs', () => {
+    for (let i = 0; i < 60; i++) {
+      addLog(`Log ${i}`);
+    }
+    expect(logs.value.length).toBe(50);
+    expect(logs.value[0]).toContain('Log 10'); // 最早的应该是第 11 条
+  });
+});
+```
+
+---
+
 ### 3.1 环境配置与启动流程（主要流程）
 
 ```mermaid

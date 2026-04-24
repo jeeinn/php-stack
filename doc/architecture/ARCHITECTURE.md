@@ -645,6 +645,8 @@ end
   - `.env` - 环境变量配置文件
   - `docker-compose.yml` - Docker Compose 配置文件
   - `services/` - 服务配置目录（递归包含所有子文件）
+  - `.user_mirror_config.json` - 用户镜像源配置（如果存在）
+  - `.user_version_overrides.json` - 用户版本覆盖配置（如果存在）
 
 **关键技术决策**：
 
@@ -715,6 +717,21 @@ fn execute_backup(state: BackupState, project_root: &Path) -> Result<Vec<String>
             zip.write_all(&content)?;
         } else if item_path.is_dir() {
             Self::add_dir_to_zip_recursive(&mut zip, &item_path, item, zip_options)?;
+        }
+    }
+    
+    // 添加用户配置文件（与 backup_engine.rs 逻辑一致）
+    let user_config_files = vec![
+        ".user_mirror_config.json",
+        ".user_version_overrides.json",
+    ];
+    
+    for config_file in &user_config_files {
+        let config_path = project_root.join(config_file);
+        if config_path.exists() {
+            let content = std::fs::read(&config_path)?;
+            zip.start_file(config_file, zip_options)?;
+            zip.write_all(&content)?;
         }
     }
     

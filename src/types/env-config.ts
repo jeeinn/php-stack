@@ -21,6 +21,7 @@ export interface EnvConfig {
   services: ServiceEntry[];
   source_dir: string;
   timezone: string;
+  mysql_root_password?: string;  // MySQL root密码（可选）
 }
 
 export interface MirrorSourceOption {

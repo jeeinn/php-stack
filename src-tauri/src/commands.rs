@@ -149,22 +149,19 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     // 查找所有 MYSQLxx_VERSION 或 MYSQL_VERSION 格式的键
     let mut mysql_index = 0;
     for (key, value) in &env_map {
-        if key.ends_with("_VERSION") && key.starts_with("MYSQL") && !key.contains("ROOT") {
+        if key.ends_with("_VERSION") && key.starts_with("MYSQL") && !key.contains("ROOT") && !key.contains("USER") && !key.contains("PASSWORD") {
             let version = value.clone();
             
-            // 提取索引部分，如 MYSQL1_VERSION -> 1, MYSQL_VERSION -> 0
+            // 提取索引部分，如 MYSQL84_VERSION -> 84, MYSQL_VERSION -> 空
             let index_part = &key[5..key.len() - 8]; // 去掉 "MYSQL" 和 "_VERSION"
-            let idx = if index_part.is_empty() {
-                0
-            } else {
-                index_part.parse::<usize>().unwrap_or(mysql_index)
-            };
             
-            let port_key = if idx == 0 {
-                "MYSQL_HOST_PORT".to_string()
-            } else {
-                format!("MYSQL{idx}_HOST_PORT")
-            };
+            if index_part.is_empty() {
+                continue; // 跳过无版本号的旧格式
+            }
+            
+            let idx = index_part.parse::<usize>().unwrap_or(mysql_index);
+            
+            let port_key = format!("MYSQL{index_part}_HOST_PORT");
             
             let host_port = env_map.get(&port_key)
                 .and_then(|p| p.parse::<u16>().ok())
@@ -254,11 +251,13 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     let timezone = env_map.get("TZ")
         .cloned()
         .unwrap_or_else(|| "Asia/Shanghai".to_string());
+    let mysql_root_password = env_map.get("MYSQL_ROOT_PASSWORD").cloned();
     
     Ok(Some(EnvConfig {
         services,
         source_dir,
         timezone,
+        mysql_root_password,
     }))
 }
 

@@ -30,6 +30,7 @@ pub struct EnvConfig {
     pub services: Vec<ServiceEntry>,
     pub source_dir: String,
     pub timezone: String,
+    pub mysql_root_password: Option<String>,  // MySQL root密码（可选）
 }
 
 pub struct ConfigGenerator;
@@ -174,7 +175,11 @@ impl ConfigGenerator {
                     
                     env.set(&format!("MYSQL{ver}_VERSION"), &image_tag);
                     env.set(&format!("MYSQL{ver}_HOST_PORT"), &service.host_port.to_string());
-                    env.set("MYSQL_ROOT_PASSWORD", "root");
+                    
+                    // 设置MySQL root密码（优先使用用户配置的密码）
+                    let root_password = config.mysql_root_password.as_deref().unwrap_or("root");
+                    env.set("MYSQL_ROOT_PASSWORD", root_password);
+                    
                     env.set(&format!("MYSQL{ver}_CONF_FILE"), &format!("./services/mysql{ver}/mysql.cnf"));
                     env.set(&format!("MYSQL{ver}_DATA_DIR"), &format!("./data/mysql{ver}"));
                     env.set(&format!("MYSQL{ver}_LOG_DIR"), &format!("./logs/mysql{ver}"));
@@ -856,6 +861,7 @@ impl ConfigGenerator {
         keys.insert("SOURCE_DIR".to_string());
         keys.insert("TZ".to_string());
         keys.insert("DATA_DIR".to_string());
+        keys.insert("MYSQL_ROOT_PASSWORD".to_string());
 
         for service in &config.services {
             match &service.service_type {
@@ -869,11 +875,17 @@ impl ConfigGenerator {
                     keys.insert(format!("PHP{ver}_LOG_DIR"));
                 }
                 ServiceType::MySQL => {
-                    keys.insert("MYSQL_VERSION".to_string());
-                    keys.insert("MYSQL_HOST_PORT".to_string());
-                    keys.insert("MYSQL_ROOT_PASSWORD".to_string());
-                    keys.insert("MYSQL_CONF_FILE".to_string());
-                    keys.insert("MYSQL_LOG_DIR".to_string());
+                    let version_parts: Vec<&str> = service.version.split('.').collect();
+                    let ver = if version_parts.len() >= 2 {
+                        format!("{}{}", version_parts[0], version_parts[1])
+                    } else {
+                        "80".to_string()
+                    };
+                    keys.insert(format!("MYSQL{ver}_VERSION"));
+                    keys.insert(format!("MYSQL{ver}_HOST_PORT"));
+                    keys.insert(format!("MYSQL{ver}_CONF_FILE"));
+                    keys.insert(format!("MYSQL{ver}_DATA_DIR"));
+                    keys.insert(format!("MYSQL{ver}_LOG_DIR"));
                 }
                 ServiceType::Redis => {
                     keys.insert("REDIS_VERSION".to_string());
@@ -928,6 +940,7 @@ mod tests {
             ],
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
         }
     }
 
@@ -956,6 +969,7 @@ mod tests {
             ],
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
         };
         let result = ConfigGenerator::validate(&config);
         assert!(result.is_err());
@@ -1013,6 +1027,7 @@ mod tests {
             }],
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
         };
 
         let env = ConfigGenerator::generate_env(&config, Some(&existing_env));
@@ -1045,6 +1060,7 @@ mod tests {
             ],
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
         };
 
         let env = ConfigGenerator::generate_env(&config, None);
@@ -1101,6 +1117,7 @@ mod tests {
             ],
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
         };
 
         let compose = ConfigGenerator::generate_compose(&config);
@@ -1116,5 +1133,47 @@ mod tests {
         // Each should reference its own variables
         assert!(compose.contains("${PHP74_EXTENSIONS}"));
         assert!(compose.contains("${PHP82_EXTENSIONS}"));
+    }
+
+    #[test]
+    fn test_generate_env_mysql_root_password() {
+        // 测试自定义MySQL root密码
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: ServiceType::MySQL,
+                version: "8.0".to_string(),
+                host_port: 3306,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: Some("mypassword123".to_string()),
+        };
+
+        let env = ConfigGenerator::generate_env(&config, None);
+        let map = env.to_map();
+
+        assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "mypassword123");
+    }
+
+    #[test]
+    fn test_generate_env_mysql_default_password() {
+        // 测试默认MySQL root密码（未设置时）
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: ServiceType::MySQL,
+                version: "8.0".to_string(),
+                host_port: 3306,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+        };
+
+        let env = ConfigGenerator::generate_env(&config, None);
+        let map = env.to_map();
+
+        assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "root");
     }
 }

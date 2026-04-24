@@ -370,7 +370,7 @@ async function copyLogs() {
           class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境配置' : ''"
         >
-          <span class="text-base sm:text-lg">🍳</span>
+          <span class="text-base sm:text-lg">🛠️</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境配置</span>
         </div>
         <div 

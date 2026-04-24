@@ -29,6 +29,7 @@ const nginxServices = ref<ServiceEntry[]>([]);
 
 const sourceDir = ref('./www');
 const timezone = ref('Asia/Shanghai');
+const mysqlRootPassword = ref('root');  // MySQL root密码
 const workspacePath = ref<string>('加载中...');
 
 const loading = ref(false);
@@ -254,6 +255,11 @@ async function loadExistingConfig() {
       sourceDir.value = config.source_dir;
       timezone.value = config.timezone;
       
+      // 加载MySQL root密码（如果有）
+      if (config.mysql_root_password) {
+        mysqlRootPassword.value = config.mysql_root_password;
+      }
+      
       console.log('[EnvConfig] 配置加载成功');
     } else {
       console.log('[EnvConfig] 未找到现有配置，使用默认值');
@@ -333,7 +339,12 @@ function buildConfig(): EnvConfig {
   nginxServices.value.forEach(s => {
     services.push({ ...s });
   });
-  return { services, source_dir: sourceDir.value, timezone: timezone.value };
+  return { 
+    services, 
+    source_dir: sourceDir.value, 
+    timezone: timezone.value,
+    mysql_root_password: mysqlRootPassword.value === 'root' ? undefined : mysqlRootPassword.value
+  };
 }
 
 // Add PHP version
@@ -718,6 +729,24 @@ const goToMirrorSettings = () => {
             <button v-if="mysqlServices.length > 1" @click="removeMysqlVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">删除</button>
           </div>
         </div>
+        
+        <!-- MySQL Root 密码配置 -->
+        <div class="mt-4 p-3 sm:p-4 bg-slate-800/30 border border-slate-700/50 rounded-lg">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+            <div class="flex-1 w-full sm:w-64">
+              <label class="block text-xs text-slate-400 mb-1">MySQL Root 密码</label>
+              <input 
+                v-model="mysqlRootPassword" 
+                type="password" 
+                placeholder="root"
+                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" 
+              />
+            </div>
+            <div class="flex-1">
+              <p class="text-xs text-slate-500">留空或输入 "root" 将使用默认密码</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Redis -->
@@ -790,7 +819,7 @@ const goToMirrorSettings = () => {
 
       <!-- General Settings -->
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
-        <h2 class="text-lg font-bold mb-4">⚙️ 通用设置</h2>
+        <h2 class="text-lg font-bold mb-4">🔧 通用设置</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs text-slate-400 mb-1">工作目录</label>

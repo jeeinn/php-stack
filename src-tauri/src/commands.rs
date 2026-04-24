@@ -603,6 +603,118 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     }
 }
 
+/// 一键重启环境（docker compose restart）
+#[tauri::command]
+pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use std::process::Command;
+    use tauri::Emitter;
+    use crate::ui_log;
+    
+    ui_log!(app_handle, info, "commands::restart_environment", "🔄 开始重启环境...");
+    
+    let project_root = get_project_root()?;
+    ui_log!(app_handle, info, "commands::restart_environment", "📁 项目根目录: {:?}", project_root);
+    
+    let compose_file = project_root.join("docker-compose.yml");
+    
+    if !compose_file.exists() {
+        ui_log!(app_handle, info, "commands::restart_environment", "❌ docker-compose.yml 文件不存在");
+        return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
+    }
+    
+    ui_log!(app_handle, info, "commands::restart_environment", "✅ docker-compose.yml 存在");
+    
+    // 使用 docker compose restart 重启所有容器
+    ui_log!(app_handle, info, "commands::restart_environment", "🔧 执行: docker compose restart");
+    
+    let output = Command::new("docker")
+        .args(&["compose", "restart"])
+        .current_dir(&project_root)
+        .output()
+        .map_err(|e| {
+            let err_msg = format!("执行 docker compose restart 失败: {}", e);
+            ui_log!(app_handle, info, "commands::restart_environment", "❌ {}", err_msg);
+            err_msg
+        })?;
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    
+    if !output.status.success() {
+        ui_log!(app_handle, info, "commands::restart_environment", "❌ 重启失败");
+        ui_log!(app_handle, info, "commands::restart_environment", "错误输出: {}", stderr);
+        return Err(format!("Docker Compose 重启失败: {}", stderr));
+    }
+    
+    // 记录重启结果
+    if !stdout.is_empty() {
+        for line in stdout.lines() {
+            if !line.is_empty() {
+                ui_log!(app_handle, info, "commands::restart_environment", "   {}", line);
+            }
+        }
+    }
+    
+    ui_log!(app_handle, info, "commands::restart_environment", "✅ 环境重启成功！");
+    Ok("环境重启成功".to_string())
+}
+
+/// 一键停止环境（docker compose down）
+#[tauri::command]
+pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use std::process::Command;
+    use tauri::Emitter;
+    use crate::ui_log;
+    
+    ui_log!(app_handle, info, "commands::stop_environment", "🛑 开始停止环境...");
+    
+    let project_root = get_project_root()?;
+    ui_log!(app_handle, info, "commands::stop_environment", "📁 项目根目录: {:?}", project_root);
+    
+    let compose_file = project_root.join("docker-compose.yml");
+    
+    if !compose_file.exists() {
+        ui_log!(app_handle, info, "commands::stop_environment", "❌ docker-compose.yml 文件不存在");
+        return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
+    }
+    
+    ui_log!(app_handle, info, "commands::stop_environment", "✅ docker-compose.yml 存在");
+    
+    // 使用 docker compose down 停止并删除容器
+    ui_log!(app_handle, info, "commands::stop_environment", "🔧 执行: docker compose down");
+    
+    let output = Command::new("docker")
+        .args(&["compose", "down"])
+        .current_dir(&project_root)
+        .output()
+        .map_err(|e| {
+            let err_msg = format!("执行 docker compose down 失败: {}", e);
+            ui_log!(app_handle, info, "commands::stop_environment", "❌ {}", err_msg);
+            err_msg
+        })?;
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    
+    if !output.status.success() {
+        ui_log!(app_handle, info, "commands::stop_environment", "❌ 停止失败");
+        ui_log!(app_handle, info, "commands::stop_environment", "错误输出: {}", stderr);
+        return Err(format!("Docker Compose 停止失败: {}", stderr));
+    }
+    
+    // 记录停止结果
+    if !stdout.is_empty() {
+        for line in stdout.lines() {
+            if !line.is_empty() {
+                ui_log!(app_handle, info, "commands::stop_environment", "   {}", line);
+            }
+        }
+    }
+    
+    ui_log!(app_handle, info, "commands::stop_environment", "✅ 环境停止成功！");
+    Ok("环境停止成功".to_string())
+}
+
 // ==================== 统一镜像源管理命令 ====================
 
 /// 标准化镜像源 URL（去除尾部斜杠）

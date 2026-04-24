@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, nextTick, watch, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -30,9 +30,40 @@ const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(window.innerWidth < 768); // 控制侧边栏展开/收缩（小屏幕默认收缩）
 const showStartConfirm = ref(false); // 控制启动确认弹窗
+const showRestartConfirm = ref(false); // 控制重启确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
+
+// 判断是否有运行中的 ps- 容器
+const hasRunningContainers = computed(() => {
+  return containers.value.some(c => isRunning(String(c.state)));
+});
+
+// 判断是否有任何 ps- 容器（不管状态）
+const hasAnyContainers = computed(() => {
+  return containers.value.length > 0;
+});
+
+// 判断是否有任何停止的 ps- 容器
+const hasStoppedContainers = computed(() => {
+  return containers.value.some(c => !isRunning(String(c.state)));
+});
+
+// 判断是否可以启动（没有任何容器或所有容器都已停止）
+const canStart = computed(() => {
+  return !hasRunningContainers.value;
+});
+
+// 判断是否可以重启（有运行中的容器）
+const canRestart = computed(() => {
+  return hasRunningContainers.value;
+});
+
+// 判断是否可以停止（有运行中的容器）
+const canStop = computed(() => {
+  return hasRunningContainers.value;
+});
 
 // 判断容器是否运行中（兼容多种格式）
 const isRunning = (state: string): boolean => {
@@ -142,6 +173,28 @@ const handleStartEnvironment = () => {
   showStartConfirm.value = true;
 };
 
+const handleRestartEnvironment = () => {
+  showRestartConfirm.value = true;
+};
+
+const handleStopEnvironment = async () => {
+  // 自动打开日志面板
+  showLogs.value = true;
+  
+  starting.value = true;
+  addLog('🛑 开始一键停止环境...');
+  
+  try {
+    await invoke('stop_environment');
+    addLog('✅ 环境停止成功！');
+    await refreshContainers();
+  } catch (e: any) {
+    addLog(`❌ 停止失败: ${e}`);
+  } finally {
+    starting.value = false;
+  }
+};
+
 const confirmStart = async () => {
   showStartConfirm.value = false;
   
@@ -189,6 +242,26 @@ const confirmStart = async () => {
     } else {
       addLog(`❌ 启动失败: ${e}`);
     }
+  } finally {
+    starting.value = false;
+  }
+};
+
+const confirmRestart = async () => {
+  showRestartConfirm.value = false;
+  
+  // 自动打开日志面板
+  showLogs.value = true;
+  
+  starting.value = true;
+  addLog('🔄 开始一键重启环境...');
+  
+  try {
+    await invoke('restart_environment');
+    addLog('✅ 环境重启成功！');
+    await refreshContainers();
+  } catch (e: any) {
+    addLog(`❌ 重启失败: ${e}`);
   } finally {
     starting.value = false;
   }
@@ -359,14 +432,35 @@ async function copyLogs() {
             >
               {{ loading ? '刷新中...' : '手动刷新' }}
             </button>
-            <button 
-              @click="handleStartEnvironment"
-              :disabled="loading || starting"
-              class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              {{ starting ? '启动中...' : '一键启动' }}
-            </button>
+            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <button 
+                @click="handleStartEnvironment"
+                :disabled="!canStart || starting"
+                class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                :title="!canStart ? '有容器正在运行，请使用一键重启' : ''"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                {{ starting ? '启动中...' : '一键启动' }}
+              </button>
+              <button 
+                @click="handleRestartEnvironment"
+                :disabled="!canRestart || starting"
+                class="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                :title="!canRestart ? '没有运行中的容器，请使用一键启动' : ''"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                {{ starting ? '重启中...' : '一键重启' }}
+              </button>
+              <button 
+                @click="handleStopEnvironment"
+                :disabled="!canStop || starting"
+                class="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                :title="!canStop ? '没有运行中的容器' : ''"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                {{ starting ? '停止中...' : '一键停止' }}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -541,6 +635,31 @@ async function copyLogs() {
             class="w-full px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
           >
             直接启动
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restart Environment Confirmation Dialog -->
+    <div v-if="showRestartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-white mb-4">⚠️ 重启环境提示</h2>
+        <p class="text-slate-400 mb-6">
+          重启环境将重新启动所有运行中的容器。
+          <strong class="text-amber-400">请注意保存当前数据</strong>，避免数据丢失。
+        </p>
+        <div class="space-y-4">
+          <button 
+            @click="showRestartConfirm = false"
+            class="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+          >
+            取消
+          </button>
+          <button 
+            @click="confirmRestart"
+            class="w-full px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold transition shadow-lg shadow-amber-600/20"
+          >
+            确认重启
           </button>
         </div>
       </div>

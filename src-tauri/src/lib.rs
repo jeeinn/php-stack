@@ -52,6 +52,8 @@ pub fn run() {
       commands::check_config_files_exist,
       commands::apply_env_config,
       commands::start_environment,
+      commands::restart_environment,
+      commands::stop_environment,
       // 统一镜像源管理
       commands::get_mirror_presets,
       commands::apply_mirror_preset,

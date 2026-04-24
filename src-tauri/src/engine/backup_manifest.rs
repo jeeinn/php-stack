@@ -39,11 +39,17 @@ pub struct BackupManifest {
     pub errors: Vec<String>,
 }
 
+impl Default for BackupManifest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BackupManifest {
     /// 序列化为格式化的 JSON 字符串（缩进 2 空格）
     pub fn serialize(&self) -> Result<String, String> {
         serde_json::to_string_pretty(self)
-            .map_err(|e| format!("序列化 manifest 失败: {}", e))
+            .map_err(|e| format!("序列化 manifest 失败: {e}"))
     }
 
     /// 从 JSON 字符串反序列化，缺少必需字段时返回描述性错误
@@ -65,7 +71,7 @@ impl BackupManifest {
                     return format!("缺少必需字段: {}", missing.join(", "));
                 }
             }
-            format!("反序列化 manifest 失败: {}", e)
+            format!("反序列化 manifest 失败: {e}")
         })
     }
 
@@ -166,8 +172,7 @@ mod tests {
         let err = result.unwrap_err();
         assert!(
             err.contains("version"),
-            "Error should mention 'version', got: {}",
-            err
+            "Error should mention 'version', got: {err}"
         );
     }
 
@@ -191,8 +196,7 @@ mod tests {
         let err = result.unwrap_err();
         assert!(
             err.contains("timestamp"),
-            "Error should mention 'timestamp', got: {}",
-            err
+            "Error should mention 'timestamp', got: {err}"
         );
     }
 
@@ -216,8 +220,7 @@ mod tests {
         let err = result.unwrap_err();
         assert!(
             err.contains("services"),
-            "Error should mention 'services', got: {}",
-            err
+            "Error should mention 'services', got: {err}"
         );
     }
 

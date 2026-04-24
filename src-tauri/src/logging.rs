@@ -11,7 +11,7 @@ static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 pub fn init_logging(app_data_dir: &PathBuf) -> Result<(), String> {
     // 确保目录存在
     std::fs::create_dir_all(app_data_dir)
-        .map_err(|e| format!("无法创建应用数据目录 {:?}: {}", app_data_dir, e))?;
+        .map_err(|e| format!("无法创建应用数据目录 {}: {}", app_data_dir.display(), e))?;
     
     let log_path = app_data_dir.join("php-stack.log");
     
@@ -21,7 +21,7 @@ pub fn init_logging(app_data_dir: &PathBuf) -> Result<(), String> {
         .write(true)
         .truncate(true)  // 关键：覆盖旧日志
         .open(&log_path)
-        .map_err(|e| format!("无法创建日志文件 {:?}: {}", log_path, e))?;
+        .map_err(|e| format!("无法创建日志文件 {}: {}", log_path.display(), e))?;
     
     // 保存文件句柄到全局变量
     *LOG_FILE.lock().unwrap() = Some(file);
@@ -62,7 +62,7 @@ pub fn write_to_log_file(level: &str, module: &str, message: &str) {
     if let Some(file) = LOG_FILE.lock().unwrap().as_mut() {
         let now = chrono::Local::now();
         let timestamp = now.format("[%H:%M:%S%.3f]").to_string();
-        let log_line = format!("{} {} [{}] {}\n", timestamp, level, module, message);
+        let log_line = format!("{timestamp} {level} [{module}] {message}\n");
         let _ = file.write_all(log_line.as_bytes());
         let _ = file.flush();
     }

@@ -41,11 +41,13 @@ const hasRunningContainers = computed(() => {
 });
 
 // 判断是否有任何 ps- 容器（不管状态）
+// @ts-ignore - 用于后续功能扩展，暂时未使用
 const hasAnyContainers = computed(() => {
   return containers.value.length > 0;
 });
 
 // 判断是否有任何停止的 ps- 容器
+// @ts-ignore - 用于后续功能扩展，暂时未使用
 const hasStoppedContainers = computed(() => {
   return containers.value.some(c => !isRunning(String(c.state)));
 });

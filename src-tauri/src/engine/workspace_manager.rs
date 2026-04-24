@@ -15,7 +15,7 @@ impl WorkspaceManager {
     /// 获取 workspace.json 的路径（位于可执行文件同级）
     fn get_config_path() -> Result<PathBuf, String> {
         let exe_path = std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {}", e))?;
+            .map_err(|e| format!("获取程序路径失败: {e}"))?;
         
         let config_dir = if cfg!(debug_assertions) {
             // 开发模式：workspace.json 放在项目根目录 (src-tauri 的父目录)
@@ -43,10 +43,10 @@ impl WorkspaceManager {
         }
 
         let content = fs::read_to_string(&config_path)
-            .map_err(|e| format!("读取 workspace.json 失败: {}", e))?;
+            .map_err(|e| format!("读取 workspace.json 失败: {e}"))?;
         
         let config: WorkspaceConfig = serde_json::from_str(&content)
-            .map_err(|e| format!("解析 workspace.json 失败: {}", e))?;
+            .map_err(|e| format!("解析 workspace.json 失败: {e}"))?;
 
         Ok(Some(config))
     }
@@ -60,10 +60,10 @@ impl WorkspaceManager {
         };
 
         let json = serde_json::to_string_pretty(&config)
-            .map_err(|e| format!("序列化配置失败: {}", e))?;
+            .map_err(|e| format!("序列化配置失败: {e}"))?;
 
         fs::write(&config_path, json)
-            .map_err(|e| format!("写入 workspace.json 失败: {}", e))?;
+            .map_err(|e| format!("写入 workspace.json 失败: {e}"))?;
 
         Ok(())
     }

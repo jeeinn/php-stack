@@ -26,7 +26,7 @@ pub fn run() {
             
             // 初始化日志系统
             if let Err(e) = logging::init_logging(&log_dir) {
-                eprintln!("Failed to initialize logging: {}", e);
+                eprintln!("Failed to initialize logging: {e}");
             }
             
             app_log!(info, "app", "PHP-Stack 启动，日志文件位于: {:?}", log_dir.join("php-stack.log"));

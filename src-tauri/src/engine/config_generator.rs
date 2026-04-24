@@ -74,7 +74,7 @@ impl ConfigGenerator {
             let name = match &service.service_type {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "-");
-                    format!("PHP-{}", ver)
+                    format!("PHP-{ver}")
                 }
                 ServiceType::MySQL => "MySQL".to_string(),
                 ServiceType::Redis => "Redis".to_string(),
@@ -122,30 +122,30 @@ impl ConfigGenerator {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "");
                     env.set(
-                        &format!("PHP{}_VERSION", ver),
+                        &format!("PHP{ver}_VERSION"),
                         &service.version,
                     );
                     env.set(
-                        &format!("PHP{}_HOST_PORT", ver),
+                        &format!("PHP{ver}_HOST_PORT"),
                         &service.host_port.to_string(),
                     );
                     if let Some(exts) = &service.extensions {
                         env.set(
-                            &format!("PHP{}_EXTENSIONS", ver),
+                            &format!("PHP{ver}_EXTENSIONS"),
                             &exts.join(","),
                         );
                     }
                     env.set(
-                        &format!("PHP{}_PHP_CONF_FILE", ver),
-                        &format!("./services/php{}/php.ini", ver),
+                        &format!("PHP{ver}_PHP_CONF_FILE"),
+                        &format!("./services/php{ver}/php.ini"),
                     );
                     env.set(
-                        &format!("PHP{}_FPM_CONF_FILE", ver),
-                        &format!("./services/php{}/php-fpm.conf", ver),
+                        &format!("PHP{ver}_FPM_CONF_FILE"),
+                        &format!("./services/php{ver}/php-fpm.conf"),
                     );
                     env.set(
-                        &format!("PHP{}_LOG_DIR", ver),
-                        &format!("./logs/php{}", ver),
+                        &format!("PHP{ver}_LOG_DIR"),
+                        &format!("./logs/php{ver}"),
                     );
                 }
                 ServiceType::MySQL => {
@@ -172,12 +172,12 @@ impl ConfigGenerator {
                                 .unwrap_or(service.version.clone())
                         });
                     
-                    env.set(&format!("MYSQL{}_VERSION", ver), &image_tag);
-                    env.set(&format!("MYSQL{}_HOST_PORT", ver), &service.host_port.to_string());
+                    env.set(&format!("MYSQL{ver}_VERSION"), &image_tag);
+                    env.set(&format!("MYSQL{ver}_HOST_PORT"), &service.host_port.to_string());
                     env.set("MYSQL_ROOT_PASSWORD", "root");
-                    env.set(&format!("MYSQL{}_CONF_FILE", ver), &format!("./services/mysql{}/mysql.cnf", ver));
-                    env.set(&format!("MYSQL{}_DATA_DIR", ver), &format!("./data/mysql{}", ver));
-                    env.set(&format!("MYSQL{}_LOG_DIR", ver), &format!("./logs/mysql{}", ver));
+                    env.set(&format!("MYSQL{ver}_CONF_FILE"), &format!("./services/mysql{ver}/mysql.cnf"));
+                    env.set(&format!("MYSQL{ver}_DATA_DIR"), &format!("./data/mysql{ver}"));
+                    env.set(&format!("MYSQL{ver}_LOG_DIR"), &format!("./logs/mysql{ver}"));
                 }
                 ServiceType::Redis => {
                     let manifest = VersionManifest::new();
@@ -205,10 +205,10 @@ impl ConfigGenerator {
                                 .unwrap_or(service.version.clone())
                         });
                     
-                    env.set(&format!("REDIS{}_VERSION", ver), &image_tag);
-                    env.set(&format!("REDIS{}_HOST_PORT", ver), &service.host_port.to_string());
-                    env.set(&format!("REDIS{}_CONF_FILE", ver), &format!("./services/redis{}/redis.conf", ver));
-                    env.set(&format!("REDIS{}_DATA_DIR", ver), &format!("./data/redis{}", ver));
+                    env.set(&format!("REDIS{ver}_VERSION"), &image_tag);
+                    env.set(&format!("REDIS{ver}_HOST_PORT"), &service.host_port.to_string());
+                    env.set(&format!("REDIS{ver}_CONF_FILE"), &format!("./services/redis{ver}/redis.conf"));
+                    env.set(&format!("REDIS{ver}_DATA_DIR"), &format!("./data/redis{ver}"));
                 }
                 ServiceType::Nginx => {
                     let manifest = VersionManifest::new();
@@ -236,11 +236,11 @@ impl ConfigGenerator {
                                 .unwrap_or(service.version.clone())
                         });
                     
-                    env.set(&format!("NGINX{}_VERSION", ver), &image_tag);
-                    env.set(&format!("NGINX{}_HTTP_HOST_PORT", ver), &service.host_port.to_string());
-                    env.set(&format!("NGINX{}_BUILD_CONTEXT", ver), &format!("./services/nginx{}", ver));
-                    env.set(&format!("NGINX{}_CONF_FILE", ver), &format!("./services/nginx{}/nginx.conf", ver));
-                    env.set(&format!("NGINX{}_CONFD_DIR", ver), &format!("./services/nginx{}/conf.d", ver));
+                    env.set(&format!("NGINX{ver}_VERSION"), &image_tag);
+                    env.set(&format!("NGINX{ver}_HTTP_HOST_PORT"), &service.host_port.to_string());
+                    env.set(&format!("NGINX{ver}_BUILD_CONTEXT"), &format!("./services/nginx{ver}"));
+                    env.set(&format!("NGINX{ver}_CONF_FILE"), &format!("./services/nginx{ver}/nginx.conf"));
+                    env.set(&format!("NGINX{ver}_CONFD_DIR"), &format!("./services/nginx{ver}/conf.d"));
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
                 }
             }
@@ -296,36 +296,33 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "");
-                    lines.push(format!("  php{}:", ver));
-                    lines.push(format!("    build:"));
-                    lines.push(format!("      context: ./services/php{}", ver));
-                    lines.push(format!("      args:"));
-                    lines.push(format!("        PHP_EXTENSIONS: \"${{PHP{}_EXTENSIONS}}\"", ver));
-                    lines.push(format!("        TZ: \"${{TZ}}\""));
+                    lines.push(format!("  php{ver}:"));
+                    lines.push("    build:".to_string());
+                    lines.push(format!("      context: ./services/php{ver}"));
+                    lines.push("      args:".to_string());
+                    lines.push(format!("        PHP_EXTENSIONS: \"${{PHP{ver}_EXTENSIONS}}\""));
+                    lines.push("        TZ: \"${TZ}\"".to_string());
                     // 镜像源配置（仅容器内依赖）
-                    lines.push(format!("        DEBIAN_MIRROR_DOMAIN: \"${{APT_MIRROR:-deb.debian.org}}\""));
-                    lines.push(format!("        COMPOSER_MIRROR: \"${{COMPOSER_MIRROR:-https://packagist.org}}\""));
-                    lines.push(format!("        GITHUB_PROXY: \"${{GITHUB_PROXY:-}}\""));
-                    lines.push(format!("    container_name: ps-php{}", ver));
-                    lines.push(format!("    expose:"));
-                    lines.push(format!("      - 9000"));
-                    lines.push(format!("    volumes:"));
-                    lines.push(format!("      - ${{SOURCE_DIR}}:/www/:rw"));
+                    lines.push("        DEBIAN_MIRROR_DOMAIN: \"${APT_MIRROR:-deb.debian.org}\"".to_string());
+                    lines.push("        COMPOSER_MIRROR: \"${COMPOSER_MIRROR:-https://packagist.org}\"".to_string());
+                    lines.push("        GITHUB_PROXY: \"${GITHUB_PROXY:-}\"".to_string());
+                    lines.push(format!("    container_name: ps-php{ver}"));
+                    lines.push("    expose:".to_string());
+                    lines.push("      - 9000".to_string());
+                    lines.push("    volumes:".to_string());
+                    lines.push("      - ${SOURCE_DIR}:/www/:rw".to_string());
                     lines.push(format!(
-                        "      - ${{PHP{}_PHP_CONF_FILE}}:/usr/local/etc/php/php.ini",
-                        ver
+                        "      - ${{PHP{ver}_PHP_CONF_FILE}}:/usr/local/etc/php/php.ini"
                     ));
                     lines.push(format!(
-                        "      - ${{PHP{}_FPM_CONF_FILE}}:/usr/local/etc/php-fpm.d/www.conf",
-                        ver
+                        "      - ${{PHP{ver}_FPM_CONF_FILE}}:/usr/local/etc/php-fpm.d/www.conf"
                     ));
                     lines.push(format!(
-                        "      - ${{PHP{}_LOG_DIR}}:/var/log/php",
-                        ver
+                        "      - ${{PHP{ver}_LOG_DIR}}:/var/log/php"
                     ));
-                    lines.push(format!("    restart: always"));
-                    lines.push(format!("    networks:"));
-                    lines.push(format!("      - php-stack-network"));
+                    lines.push("    restart: always".to_string());
+                    lines.push("    networks:".to_string());
+                    lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
                 }
                 ServiceType::MySQL => {
@@ -336,29 +333,27 @@ impl ConfigGenerator {
                         "80".to_string()
                     };
                     
-                    lines.push(format!("  mysql{}:", ver));
-                    lines.push(format!("    image: mysql:${{MYSQL{}_VERSION}}", ver));
-                    lines.push(format!("    container_name: ps-mysql{}", ver));
-                    lines.push(format!("    ports:"));
-                    lines.push(format!("      - \"${{MYSQL{}_HOST_PORT}}:3306\"", ver));
-                    lines.push(format!("    volumes:"));
+                    lines.push(format!("  mysql{ver}:"));
+                    lines.push(format!("    image: mysql:${{MYSQL{ver}_VERSION}}"));
+                    lines.push(format!("    container_name: ps-mysql{ver}"));
+                    lines.push("    ports:".to_string());
+                    lines.push(format!("      - \"${{MYSQL{ver}_HOST_PORT}}:3306\""));
+                    lines.push("    volumes:".to_string());
                     lines.push(format!(
-                        "      - ${{MYSQL{}_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro", ver
+                        "      - ${{MYSQL{ver}_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro"
                     ));
                     lines.push(format!(
-                        "      - ${{MYSQL{}_DATA_DIR}}:/var/lib/mysql/:rw", ver
+                        "      - ${{MYSQL{ver}_DATA_DIR}}:/var/lib/mysql/:rw"
                     ));
                     lines.push(format!(
-                        "      - ${{MYSQL{}_LOG_DIR}}:/var/log/mysql/:rw", ver
+                        "      - ${{MYSQL{ver}_LOG_DIR}}:/var/log/mysql/:rw"
                     ));
-                    lines.push(format!("    restart: always"));
-                    lines.push(format!("    environment:"));
-                    lines.push(format!(
-                        "      MYSQL_ROOT_PASSWORD: \"${{MYSQL_ROOT_PASSWORD}}\""
-                    ));
-                    lines.push(format!("      TZ: \"${{TZ}}\""));
-                    lines.push(format!("    networks:"));
-                    lines.push(format!("      - php-stack-network"));
+                    lines.push("    restart: always".to_string());
+                    lines.push("    environment:".to_string());
+                    lines.push("      MYSQL_ROOT_PASSWORD: \"${MYSQL_ROOT_PASSWORD}\"".to_string());
+                    lines.push("      TZ: \"${TZ}\"".to_string());
+                    lines.push("    networks:".to_string());
+                    lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
                 }
                 ServiceType::Redis => {
@@ -370,22 +365,22 @@ impl ConfigGenerator {
                         "72".to_string()
                     };
                     
-                    lines.push(format!("  redis{}:", ver));
-                    lines.push(format!("    image: redis:${{REDIS{}_VERSION}}", ver));
-                    lines.push(format!("    container_name: ps-redis{}", ver));
-                    lines.push(format!("    ports:"));
-                    lines.push(format!("      - \"${{REDIS{}_HOST_PORT}}:6379\"", ver));
-                    lines.push(format!("    volumes:"));
+                    lines.push(format!("  redis{ver}:"));
+                    lines.push(format!("    image: redis:${{REDIS{ver}_VERSION}}"));
+                    lines.push(format!("    container_name: ps-redis{ver}"));
+                    lines.push("    ports:".to_string());
+                    lines.push(format!("      - \"${{REDIS{ver}_HOST_PORT}}:6379\""));
+                    lines.push("    volumes:".to_string());
                     lines.push(format!(
-                        "      - ${{REDIS{}_CONF_FILE}}:/etc/redis.conf:ro", ver
+                        "      - ${{REDIS{ver}_CONF_FILE}}:/etc/redis.conf:ro"
                     ));
                     lines.push(format!(
-                        "      - ${{REDIS{}_DATA_DIR}}:/data/:rw", ver
+                        "      - ${{REDIS{ver}_DATA_DIR}}:/data/:rw"
                     ));
-                    lines.push(format!("    restart: always"));
-                    lines.push(format!("    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]"));
-                    lines.push(format!("    networks:"));
-                    lines.push(format!("      - php-stack-network"));
+                    lines.push("    restart: always".to_string());
+                    lines.push("    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]".to_string());
+                    lines.push("    networks:".to_string());
+                    lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
                 }
                 ServiceType::Nginx => {
@@ -397,26 +392,24 @@ impl ConfigGenerator {
                         "127".to_string()
                     };
                     
-                    lines.push(format!("  nginx{}:", ver));
-                    lines.push(format!("    build:"));
-                    lines.push(format!("      context: ${{NGINX{}_BUILD_CONTEXT}}", ver));
-                    lines.push(format!("    container_name: ps-nginx{}", ver));
-                    lines.push(format!("    ports:"));
-                    lines.push(format!("      - \"${{NGINX{}_HTTP_HOST_PORT}}:80\"", ver));
-                    lines.push(format!("    volumes:"));
-                    lines.push(format!("      - ${{SOURCE_DIR}}:/www/:rw"));
+                    lines.push(format!("  nginx{ver}:"));
+                    lines.push("    build:".to_string());
+                    lines.push(format!("      context: ${{NGINX{ver}_BUILD_CONTEXT}}"));
+                    lines.push(format!("    container_name: ps-nginx{ver}"));
+                    lines.push("    ports:".to_string());
+                    lines.push(format!("      - \"${{NGINX{ver}_HTTP_HOST_PORT}}:80\""));
+                    lines.push("    volumes:".to_string());
+                    lines.push("      - ${SOURCE_DIR}:/www/:rw".to_string());
                     lines.push(format!(
-                        "      - ${{NGINX{}_CONF_FILE}}:/etc/nginx/nginx.conf", ver
+                        "      - ${{NGINX{ver}_CONF_FILE}}:/etc/nginx/nginx.conf"
                     ));
                     lines.push(format!(
-                        "      - ${{NGINX{}_CONFD_DIR}}:/etc/nginx/conf.d", ver
+                        "      - ${{NGINX{ver}_CONFD_DIR}}:/etc/nginx/conf.d"
                     ));
-                    lines.push(format!(
-                        "      - ${{NGINX_LOG_DIR}}:/var/log/nginx"
-                    ));
-                    lines.push(format!("    restart: always"));
-                    lines.push(format!("    networks:"));
-                    lines.push(format!("      - php-stack-network"));
+                    lines.push("      - ${NGINX_LOG_DIR}:/var/log/nginx".to_string());
+                    lines.push("    restart: always".to_string());
+                    lines.push("    networks:".to_string());
+                    lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
                 }
             }
@@ -433,7 +426,7 @@ impl ConfigGenerator {
     fn copy_template_file(template_name: &str, dest_path: &Path) -> Result<(), String> {
         // Get the executable directory
         let exe_dir = std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .map_err(|e| format!("获取程序路径失败: {e}"))?
             .parent()
             .ok_or("无法获取程序所在目录")?
             .to_path_buf();
@@ -455,30 +448,30 @@ impl ConfigGenerator {
             .ok_or("无法定位模板目录")?;
         
         if !template_path.exists() {
-            return Err(format!("模板文件不存在: {:?}", template_path));
+            return Err(format!("模板文件不存在: {}", template_path.display()));
         }
         
         // Create destination directory if needed
         if let Some(parent) = dest_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| format!("创建目录失败: {}", e))?;
+                .map_err(|e| format!("创建目录失败: {e}"))?;
         }
         
         // Skip if destination exists and is identical to template
         if dest_path.exists() {
             use std::io::Read;
             let mut template_file = std::fs::File::open(&template_path)
-                .map_err(|e| format!("打开模板文件失败: {}", e))?;
+                .map_err(|e| format!("打开模板文件失败: {e}"))?;
             let mut dest_file = std::fs::File::open(dest_path)
-                .map_err(|e| format!("打开目标文件失败: {}", e))?;
+                .map_err(|e| format!("打开目标文件失败: {e}"))?;
             
             let mut template_buf = Vec::new();
             let mut dest_buf = Vec::new();
             
             template_file.read_to_end(&mut template_buf)
-                .map_err(|e| format!("读取模板文件失败: {}", e))?;
+                .map_err(|e| format!("读取模板文件失败: {e}"))?;
             dest_file.read_to_end(&mut dest_buf)
-                .map_err(|e| format!("读取目标文件失败: {}", e))?;
+                .map_err(|e| format!("读取目标文件失败: {e}"))?;
             
             if template_buf == dest_buf {
                 // Files are identical, skip copy
@@ -488,7 +481,7 @@ impl ConfigGenerator {
         
         // Copy file (will overwrite if different)
         std::fs::copy(&template_path, dest_path)
-            .map_err(|e| format!("复制文件 {:?} 到 {:?} 失败: {}", template_path, dest_path, e))?;
+            .map_err(|e| format!("复制文件 {} 到 {} 失败: {e}", template_path.display(), dest_path.display()))?;
         
         Ok(())
     }
@@ -497,19 +490,19 @@ impl ConfigGenerator {
     pub fn generate_service_dirs(config: &EnvConfig, root: &Path) -> Result<(), String> {
         // Create top-level directories
         std::fs::create_dir_all(root.join("services"))
-            .map_err(|e| format!("创建 services/ 目录失败: {}", e))?;
+            .map_err(|e| format!("创建 services/ 目录失败: {e}"))?;
         std::fs::create_dir_all(root.join("data"))
-            .map_err(|e| format!("创建 data/ 目录失败: {}", e))?;
+            .map_err(|e| format!("创建 data/ 目录失败: {e}"))?;
         std::fs::create_dir_all(root.join("logs"))
-            .map_err(|e| format!("创建 logs/ 目录失败: {}", e))?;
+            .map_err(|e| format!("创建 logs/ 目录失败: {e}"))?;
 
         for service in &config.services {
             match &service.service_type {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "");
-                    let service_dir = root.join(format!("services/php{}", ver));
+                    let service_dir = root.join(format!("services/php{ver}"));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/php{}/ 目录失败: {}", ver, e))?;
+                        .map_err(|e| format!("创建 services/php{ver}/ 目录失败: {e}"))?;
 
                     // Copy Dockerfile from template
                     let dockerfile_template = if service.version.starts_with("5.") {
@@ -526,10 +519,8 @@ impl ConfigGenerator {
                         "php83/Dockerfile"
                     } else if service.version.starts_with("8.4") {
                         "php84/Dockerfile"
-                    } else if service.version.starts_with("8.5") {
-                        "php85/Dockerfile"
                     } else {
-                        "php85/Dockerfile"  // Default to latest for unknown versions
+                        "php85/Dockerfile"  // Default to latest for unknown versions (including 8.5+)
                     };
                     Self::copy_template_file(
                         dockerfile_template,
@@ -551,10 +542,8 @@ impl ConfigGenerator {
                         "php83/php.ini"
                     } else if service.version.starts_with("8.4") {
                         "php84/php.ini"
-                    } else if service.version.starts_with("8.5") {
-                        "php85/php.ini"
                     } else {
-                        "php85/php.ini"
+                        "php85/php.ini"  // Default to latest for unknown versions (including 8.5+)
                     };
                     Self::copy_template_file(
                         php_ini_template,
@@ -576,10 +565,8 @@ impl ConfigGenerator {
                         "php83/php-fpm.conf"
                     } else if service.version.starts_with("8.4") {
                         "php84/php-fpm.conf"
-                    } else if service.version.starts_with("8.5") {
-                        "php85/php-fpm.conf"
                     } else {
-                        "php85/php-fpm.conf"
+                        "php85/php-fpm.conf"  // Default to latest for unknown versions (including 8.5+)
                     };
                     Self::copy_template_file(
                         fpm_conf_template,
@@ -587,8 +574,8 @@ impl ConfigGenerator {
                     )?;
 
                     // Create log directory
-                    std::fs::create_dir_all(root.join(format!("logs/php{}", ver)))
-                        .map_err(|e| format!("创建 logs/php{}/ 目录失败: {}", ver, e))?;
+                    std::fs::create_dir_all(root.join(format!("logs/php{ver}")))
+                        .map_err(|e| format!("创建 logs/php{ver}/ 目录失败: {e}"))?;
                 }
                 ServiceType::MySQL => {
                     // Generate service directory name: mysql{major}{minor}
@@ -599,9 +586,9 @@ impl ConfigGenerator {
                         "mysql80".to_string()
                     };
                     
-                    let service_dir = root.join(format!("services/{}", service_dir_name));
+                    let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{}/ 目录失败: {}", service_dir_name, e))?;
+                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
 
                     // Copy mysql.cnf from template
                     // For now, use mysql80 as base template for all versions
@@ -617,10 +604,10 @@ impl ConfigGenerator {
                     )?;
 
                     // Create data and log directories
-                    std::fs::create_dir_all(root.join(format!("data/{}", service_dir_name)))
-                        .map_err(|e| format!("创建 data/{}/ 目录失败: {}", service_dir_name, e))?;
-                    std::fs::create_dir_all(root.join(format!("logs/{}", service_dir_name)))
-                        .map_err(|e| format!("创建 logs/{}/ 目录失败: {}", service_dir_name, e))?;
+                    std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
+                        .map_err(|e| format!("创建 data/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
+                        .map_err(|e| format!("创建 logs/{service_dir_name}/ 目录失败: {e}"))?;
                 }
                 ServiceType::Redis => {
                     // Generate service directory name: redis{major}{minor}
@@ -632,9 +619,9 @@ impl ConfigGenerator {
                         "redis72".to_string()
                     };
                     
-                    let service_dir = root.join(format!("services/{}", service_dir_name));
+                    let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{}/ 目录失败: {}", service_dir_name, e))?;
+                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
 
                     // Copy redis.conf from template
                     // Use redis72 as base template for all versions
@@ -644,8 +631,8 @@ impl ConfigGenerator {
                     )?;
 
                     // Create data directory
-                    std::fs::create_dir_all(root.join(format!("data/{}", service_dir_name)))
-                        .map_err(|e| format!("创建 data/{}/ 目录失败: {}", service_dir_name, e))?;
+                    std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
+                        .map_err(|e| format!("创建 data/{service_dir_name}/ 目录失败: {e}"))?;
                 }
                 ServiceType::Nginx => {
                     // Generate service directory name: nginx{major}{minor}
@@ -657,11 +644,11 @@ impl ConfigGenerator {
                         "nginx127".to_string()
                     };
                     
-                    let service_dir = root.join(format!("services/{}", service_dir_name));
+                    let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{}/ 目录失败: {}", service_dir_name, e))?;
-                    std::fs::create_dir_all(root.join(format!("services/{}/conf.d", service_dir_name)))
-                        .map_err(|e| format!("创建 services/{}/conf.d/ 目录失败: {}", service_dir_name, e))?;
+                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(root.join(format!("services/{service_dir_name}/conf.d")))
+                        .map_err(|e| format!("创建 services/{service_dir_name}/conf.d/ 目录失败: {e}"))?;
 
                     // Copy Dockerfile from template
                     Self::copy_template_file(
@@ -683,7 +670,7 @@ impl ConfigGenerator {
 
                     // Create log directory
                     std::fs::create_dir_all(root.join("logs/nginx"))
-                        .map_err(|e| format!("创建 logs/nginx/ 目录失败: {}", e))?;
+                        .map_err(|e| format!("创建 logs/nginx/ 目录失败: {e}"))?;
                 }
             }
         }
@@ -704,7 +691,7 @@ impl ConfigGenerator {
         for item in &items_to_backup {
             let path = project_root.join(item);
             if path.exists() {
-                existing_items.push(item.to_string());
+                existing_items.push((*item).to_string());
             }
         }
         
@@ -714,11 +701,11 @@ impl ConfigGenerator {
         
         // Pre-check: verify all backup target paths don't exist (avoid overwriting old backups)
         for item in &existing_items {
-            let backup_name = format!("{}_{}", item, timestamp);
+            let backup_name = format!("{item}_{timestamp}");
             let backup_path = project_root.join(&backup_name);
             
             if backup_path.exists() {
-                return Err(format!("备份文件已存在，请删除后重试: {}", backup_name));
+                return Err(format!("备份文件已存在，请删除后重试: {backup_name}"));
             }
         }
         
@@ -734,7 +721,7 @@ impl ConfigGenerator {
         for (backup_path, original_path) in rollback_list.iter().rev() {
             if let Err(e) = std::fs::rename(backup_path, original_path) {
                 app_log!(warn, "engine::config_generator", "回滚失败 {:?} -> {:?}: {}", backup_path, original_path, e);
-                return Err(format!("回滚失败: {}", e));
+                return Err(format!("回滚失败: {e}"));
             }
         }
         Ok(())
@@ -752,7 +739,7 @@ impl ConfigGenerator {
                 // Try to backup each item
                 for item in &items {
                     let item_path = project_root.join(item);
-                    let backup_name = format!("{}_{}", item, timestamp);
+                    let backup_name = format!("{item}_{timestamp}");
                     let backup_path = project_root.join(&backup_name);
                     
                     match std::fs::rename(&item_path, &backup_path) {
@@ -770,16 +757,14 @@ impl ConfigGenerator {
                                 if let Err(rollback_err) = Self::rollback_all(&rollback_list) {
                                     app_log!(error, "engine::config_generator", "严重错误：回滚也失败: {}", rollback_err);
                                     return Err(format!(
-                                        "备份 {} 失败，且回滚操作也失败（请手动恢复）: {}\n回滚错误: {}",
-                                        item, e, rollback_err
+                                        "备份 {item} 失败，且回滚操作也失败（请手动恢复）: {e}\n回滚错误: {rollback_err}"
                                     ));
                                 }
                                 app_log!(info, "engine::config_generator", "回滚成功，所有文件已恢复原状");
                             }
                             
                             return Err(format!(
-                                "备份 {} 失败，已自动回滚之前的操作 {} ",
-                                item, e
+                                "备份 {item} 失败，已自动回滚之前的操作 {e} "
                             ));
                         }
                     }
@@ -822,10 +807,10 @@ impl ConfigGenerator {
         let env_path = project_root.join(".env");
         let existing_env = if env_path.exists() {
             let content = std::fs::read_to_string(&env_path)
-                .map_err(|e| format!("读取 .env 文件失败: {}", e))?;
+                .map_err(|e| format!("读取 .env 文件失败: {e}"))?;
             Some(
                 EnvFile::parse(&content)
-                    .map_err(|e| format!("解析 .env 文件失败: {}", e))?,
+                    .map_err(|e| format!("解析 .env 文件失败: {e}"))?,
             )
         } else {
             None
@@ -834,12 +819,12 @@ impl ConfigGenerator {
         // Generate and write .env
         let env_file = Self::generate_env(config, existing_env.as_ref());
         std::fs::write(&env_path, env_file.format())
-            .map_err(|e| format!("写入 .env 文件失败: {}", e))?;
+            .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
 
         // Generate and write docker-compose.yml
         let compose = Self::generate_compose(config);
         std::fs::write(project_root.join("docker-compose.yml"), compose)
-            .map_err(|e| format!("写入 docker-compose.yml 失败: {}", e))?;
+            .map_err(|e| format!("写入 docker-compose.yml 失败: {e}"))?;
 
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
@@ -855,10 +840,10 @@ impl ConfigGenerator {
                 project_root.to_path_buf()
             };
             
-            let npmrc_content = format!("registry={}\n", npm_mirror);
+            let npmrc_content = format!("registry={npm_mirror}\n");
             let npmrc_path = workspace_path.join(".npmrc");
             std::fs::write(&npmrc_path, npmrc_content)
-                .map_err(|e| format!("写入 .npmrc 文件失败: {}", e))?;
+                .map_err(|e| format!("写入 .npmrc 文件失败: {e}"))?;
         }
 
         Ok(backed_up_files)
@@ -876,12 +861,12 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     let ver = service.version.replace('.', "");
-                    keys.insert(format!("PHP{}_VERSION", ver));
-                    keys.insert(format!("PHP{}_HOST_PORT", ver));
-                    keys.insert(format!("PHP{}_EXTENSIONS", ver));
-                    keys.insert(format!("PHP{}_PHP_CONF_FILE", ver));
-                    keys.insert(format!("PHP{}_FPM_CONF_FILE", ver));
-                    keys.insert(format!("PHP{}_LOG_DIR", ver));
+                    keys.insert(format!("PHP{ver}_VERSION"));
+                    keys.insert(format!("PHP{ver}_HOST_PORT"));
+                    keys.insert(format!("PHP{ver}_EXTENSIONS"));
+                    keys.insert(format!("PHP{ver}_PHP_CONF_FILE"));
+                    keys.insert(format!("PHP{ver}_FPM_CONF_FILE"));
+                    keys.insert(format!("PHP{ver}_LOG_DIR"));
                 }
                 ServiceType::MySQL => {
                     keys.insert("MYSQL_VERSION".to_string());

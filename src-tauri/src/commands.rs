@@ -24,7 +24,7 @@ fn get_project_root() -> Result<std::path::PathBuf, String> {
     if cfg!(debug_assertions) {
         // 开发模式：使用项目根目录（src-tauri 的父目录）
         Ok(std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .map_err(|e| format!("获取程序路径失败: {e}"))?
             .parent() // target/debug/
             .and_then(|p| p.parent()) // target/
             .and_then(|p| p.parent()) // src-tauri/
@@ -34,7 +34,7 @@ fn get_project_root() -> Result<std::path::PathBuf, String> {
     } else {
         // 生产模式：使用可执行文件所在目录
         Ok(std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .map_err(|e| format!("获取程序路径失败: {e}"))?
             .parent()
             .ok_or("无法获取程序所在目录")?
             .to_path_buf())
@@ -43,7 +43,7 @@ fn get_project_root() -> Result<std::path::PathBuf, String> {
 
 #[tauri::command]
 pub async fn check_docker() -> Result<(), String> {
-    let manager = DockerManager::new().map_err(|e| format!("未找到 Docker 安装: {}", e))?;
+    let manager = DockerManager::new().map_err(|e| format!("未找到 Docker 安装: {e}"))?;
     manager.check_docker_availability().await
 }
 
@@ -105,9 +105,9 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     
     // 读取 .env 文件
     let env_content = std::fs::read_to_string(&env_path)
-        .map_err(|e| format!("读取 .env 文件失败: {}", e))?;
+        .map_err(|e| format!("读取 .env 文件失败: {e}"))?;
     let env_file = super::engine::env_parser::EnvFile::parse(&env_content)
-        .map_err(|e| format!("解析 .env 文件失败: {}", e))?;
+        .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
     let env_map = env_file.to_map();
     
     // 解析服务配置
@@ -126,8 +126,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             }
             
             let version = value.clone();
-            let port_key = format!("PHP{}_HOST_PORT", ver_part);
-            let ext_key = format!("PHP{}_EXTENSIONS", ver_part);
+            let port_key = format!("PHP{ver_part}_HOST_PORT");
+            let ext_key = format!("PHP{ver_part}_EXTENSIONS");
             
             let host_port = env_map.get(&port_key)
                 .and_then(|p| p.parse::<u16>().ok())
@@ -163,7 +163,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             let port_key = if idx == 0 {
                 "MYSQL_HOST_PORT".to_string()
             } else {
-                format!("MYSQL{}_HOST_PORT", idx)
+                format!("MYSQL{idx}_HOST_PORT")
             };
             
             let host_port = env_map.get(&port_key)
@@ -197,7 +197,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             // 将完整标签转换为纯版本号（如 "6.2-alpine" -> "6.2"）
             let version = full_tag.split('-').next().unwrap_or(&full_tag).to_string();
             
-            let port_key = format!("REDIS{}_HOST_PORT", index_part);
+            let port_key = format!("REDIS{index_part}_HOST_PORT");
             
             let host_port = env_map.get(&port_key)
                 .and_then(|p| p.parse::<u16>().ok())
@@ -228,7 +228,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             // 将完整标签转换为纯版本号（如 "1.27-alpine" -> "1.27"）
             let version = full_tag.split('-').next().unwrap_or(&full_tag).to_string();
             
-            let port_key = format!("NGINX{}_HTTP_HOST_PORT", index_part);
+            let port_key = format!("NGINX{index_part}_HTTP_HOST_PORT");
             
             let host_port = env_map.get(&port_key)
                 .and_then(|p| p.parse::<u16>().ok())
@@ -291,7 +291,7 @@ pub fn check_config_files_exist() -> Result<Vec<String>, String> {
     for (filename, description) in &files_to_check {
         let file_path = project_root.join(filename);
         if file_path.exists() {
-            existing_files.push(format!("{} ({})", filename, description));
+            existing_files.push(format!("{filename} ({description})"));
         }
     }
     
@@ -371,11 +371,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     // 第一步：清理旧容器（避免名称冲突）
     ui_log!(app_handle, info, "commands::start_environment", "🧹 清理旧容器...");
     let down_output = Command::new("docker")
-        .args(&["compose", "down", "--remove-orphans"])
+        .args(["compose", "down", "--remove-orphans"])
         .current_dir(&project_root)
         .output()
         .map_err(|e| {
-            let err_msg = format!("清理旧容器失败: {}", e);
+            let err_msg = format!("清理旧容器失败: {e}");
             ui_log!(app_handle, info, "commands::start_environment", "⚠️ {}", err_msg);
             err_msg
         })?;
@@ -390,14 +390,14 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     // 等待 ps- 前缀的容器完全停止（最多等待 10 秒）
     ui_log!(app_handle, info, "commands::start_environment", "⏳ 等待容器完全停止...");
     let manager = DockerManager::new().map_err(|e| {
-        let err_msg = format!("创建 Docker 管理器失败: {}", e);
+        let err_msg = format!("创建 Docker 管理器失败: {e}");
         ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
         err_msg
     })?;
     
     for attempt in 1..=10 {
         let ps_containers = manager.list_ps_containers().await.map_err(|e| {
-            let err_msg = format!("检查容器状态失败: {}", e);
+            let err_msg = format!("检查容器状态失败: {e}");
             ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
             err_msg
         })?;
@@ -429,13 +429,13 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     
     // 获取所有运行中的容器
     let manager = DockerManager::new().map_err(|e| {
-        let err_msg = format!("创建 Docker 管理器失败: {}", e);
+        let err_msg = format!("创建 Docker 管理器失败: {e}");
         ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
         err_msg
     })?;
     
     let all_containers = manager.list_all_running_containers().await.map_err(|e| {
-        let err_msg = format!("获取容器列表失败: {}", e);
+        let err_msg = format!("获取容器列表失败: {e}");
         ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
         err_msg
     })?;
@@ -451,7 +451,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             
             // 检查是否有容器占用了这个端口
             for container in &all_containers {
-                if container.ports.iter().any(|&p| p == port as i32) {
+                if container.ports.contains(&(port as i32)) {
                     conflicts.push((
                         container.name.clone(),
                         port,
@@ -480,7 +480,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             
             // 返回错误，终止后续流程
             let conflict_details: Vec<String> = conflicts.iter()
-                .map(|(name, port, service)| format!("端口 {} ({}) 被容器 {} 占用", port, service, name))
+                .map(|(name, port, service)| format!("端口 {port} ({service}) 被容器 {name} 占用"))
                 .collect();
             
             return Err(format!("PORT_CONFLICT:{}", conflict_details.join("; ")));
@@ -497,13 +497,13 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     ui_log!(app_handle, info, "commands::start_environment", "⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");
         
     let mut child = Command::new("docker")
-        .args(&["compose", "--progress", "plain", "up", "-d"])
+        .args(["compose", "--progress", "plain", "up", "-d"])
         .current_dir(&project_root)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| {
-            let err_msg = format!("执行 docker compose 失败: {}", e);
+            let err_msg = format!("执行 docker compose 失败: {e}");
             ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
             err_msg
         })?;
@@ -547,7 +547,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     let stderr_content = stderr_lines.join("\n");
     
     let status = child.wait().map_err(|e| {
-        let err_msg = format!("等待 docker compose 完成失败: {}", e);
+        let err_msg = format!("等待 docker compose 完成失败: {e}");
         ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
         err_msg
     })?;
@@ -628,11 +628,11 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     ui_log!(app_handle, info, "commands::restart_environment", "🔧 执行: docker compose restart");
     
     let output = Command::new("docker")
-        .args(&["compose", "restart"])
+        .args(["compose", "restart"])
         .current_dir(&project_root)
         .output()
         .map_err(|e| {
-            let err_msg = format!("执行 docker compose restart 失败: {}", e);
+            let err_msg = format!("执行 docker compose restart 失败: {e}");
             ui_log!(app_handle, info, "commands::restart_environment", "❌ {}", err_msg);
             err_msg
         })?;
@@ -643,7 +643,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     if !output.status.success() {
         ui_log!(app_handle, info, "commands::restart_environment", "❌ 重启失败");
         ui_log!(app_handle, info, "commands::restart_environment", "错误输出: {}", stderr);
-        return Err(format!("Docker Compose 重启失败: {}", stderr));
+        return Err(format!("Docker Compose 重启失败: {stderr}"));
     }
     
     // 记录重启结果
@@ -684,11 +684,11 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     ui_log!(app_handle, info, "commands::stop_environment", "🔧 执行: docker compose down");
     
     let output = Command::new("docker")
-        .args(&["compose", "down"])
+        .args(["compose", "down"])
         .current_dir(&project_root)
         .output()
         .map_err(|e| {
-            let err_msg = format!("执行 docker compose down 失败: {}", e);
+            let err_msg = format!("执行 docker compose down 失败: {e}");
             ui_log!(app_handle, info, "commands::stop_environment", "❌ {}", err_msg);
             err_msg
         })?;
@@ -699,7 +699,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     if !output.status.success() {
         ui_log!(app_handle, info, "commands::stop_environment", "❌ 停止失败");
         ui_log!(app_handle, info, "commands::stop_environment", "错误输出: {}", stderr);
-        return Err(format!("Docker Compose 停止失败: {}", stderr));
+        return Err(format!("Docker Compose 停止失败: {stderr}"));
     }
     
     // 记录停止结果
@@ -766,7 +766,7 @@ pub fn get_mirror_status() -> Result<serde_json::Value, String> {
     let env_path = project_root.join(".env");
     let status = UnifiedMirrorManager::get_current_status(&env_path)?;
     serde_json::to_value(&status)
-        .map_err(|e| format!("序列化镜像源状态失败: {}", e))
+        .map_err(|e| format!("序列化镜像源状态失败: {e}"))
 }
 
 /// 获取当前匹配的预设名称
@@ -827,7 +827,7 @@ pub fn remove_user_mirror_category(category_id: String) -> Result<(), String> {
         "composer" => "https://packagist.org",
         "npm" => "https://registry.npmjs.org",
         "github_proxy" => "",
-        _ => return Err(format!("未知的镜像源类别: {}", category_id)),
+        _ => return Err(format!("未知的镜像源类别: {category_id}")),
     };
     
     UnifiedMirrorManager::update_single(&category_id, default_value, &env_path)
@@ -869,7 +869,7 @@ pub async fn create_backup(
         })
     });
 
-    handle.await.map_err(|e| format!("备份任务执行失败: {}", e))?
+    handle.await.map_err(|e| format!("备份任务执行失败: {e}"))?
 }
 
 // ==================== 恢复命令 ====================
@@ -926,7 +926,7 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(service_dir)
             .spawn()
-            .map_err(|e| format!("无法打开目录: {}", e))?;
+            .map_err(|e| format!("无法打开目录: {e}"))?;
     }
     
     // 在 macOS 上使用 open 命令
@@ -1003,7 +1003,7 @@ pub fn convert_to_relative_path(absolute_path: String, is_directory: bool) -> Re
             // 统一转换为正斜杠
             let normalized = rel_str.replace('\\', "/");
             if is_directory {
-                Ok(format!("{}/**", normalized))
+                Ok(format!("{normalized}/**"))
             } else {
                 Ok(normalized)
             }
@@ -1140,7 +1140,7 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     }
     result.insert("nginx".to_string(), serde_json::Value::Array(nginx_versions));
     
-    Ok(serde_json::to_value(result).map_err(|e| format!("序列化失败: {}", e))?)
+    serde_json::to_value(result).map_err(|e| format!("序列化失败: {e}"))
 }
 
 /// 验证指定的版本是否存在
@@ -1152,7 +1152,7 @@ pub fn validate_version(service_type: String, version: String) -> Result<bool, S
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+        _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
     Ok(manifest.is_version_valid(&vm_service_type, &version))
@@ -1167,7 +1167,7 @@ pub fn get_recommended_version(service_type: String) -> Result<Option<String>, S
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+        _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
     Ok(manifest.get_recommended_version(&vm_service_type).map(|s| s.to_string()))
@@ -1189,7 +1189,7 @@ pub fn save_user_override(
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+        _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
     let override_config = UserVersionOverride {
@@ -1211,7 +1211,7 @@ pub fn remove_user_override(service_type: String, version: String) -> Result<(),
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {}", service_type)),
+        _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
     manager.remove_user_override(&project_root, &vm_service_type, &version)
@@ -1310,7 +1310,7 @@ pub fn export_logs() -> Result<String, String> {
     let log_dir = if cfg!(debug_assertions) {
         // 开发模式：使用项目根目录
         std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .map_err(|e| format!("获取程序路径失败: {e}"))?
             .parent()
             .and_then(|p| p.parent())
             .and_then(|p| p.parent())
@@ -1320,7 +1320,7 @@ pub fn export_logs() -> Result<String, String> {
     } else {
         // 生产模式：使用可执行文件所在目录
         std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {}", e))?
+            .map_err(|e| format!("获取程序路径失败: {e}"))?
             .parent()
             .ok_or("无法获取程序所在目录")?
             .to_path_buf()
@@ -1333,5 +1333,5 @@ pub fn export_logs() -> Result<String, String> {
     }
     
     std::fs::read_to_string(&log_path)
-        .map_err(|e| format!("读取日志失败: {}", e))
+        .map_err(|e| format!("读取日志失败: {e}"))
 }

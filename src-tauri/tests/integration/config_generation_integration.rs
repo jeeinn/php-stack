@@ -9,6 +9,7 @@ mod integration_tests_placeholder {
     fn test_integration_tests_setup() {
         // Placeholder test to verify integration test setup works
         // Actual config generation is tested in unit tests
-        assert!(true);
+        // This test ensures the integration test module compiles and runs correctly
+        assert!(true, "Integration test setup is working");
     }
 }

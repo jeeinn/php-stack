@@ -27,7 +27,7 @@ impl BackupEngine {
         app_handle: Option<&tauri::AppHandle>,
     ) -> Result<(), String> {
         let file = fs::File::create(save_path)
-            .map_err(|e| format!("创建备份文件失败: {}", e))?;
+            .map_err(|e| format!("创建备份文件失败: {e}"))?;
         let mut zip = zip::ZipWriter::new(file);
         let mut manifest = BackupManifest::new();
         manifest.options = options.clone();
@@ -37,7 +37,7 @@ impl BackupEngine {
         let env_path = project_root.join(".env");
         if env_path.exists() {
             let content = fs::read(&env_path)
-                .map_err(|e| format!("读取 .env 失败: {}", e))?;
+                .map_err(|e| format!("读取 .env 失败: {e}"))?;
             Self::add_file_to_zip(&mut zip, ".env", &content, &mut manifest)?;
         }
 
@@ -46,7 +46,7 @@ impl BackupEngine {
         let compose_path = project_root.join("docker-compose.yml");
         if compose_path.exists() {
             let content = fs::read(&compose_path)
-                .map_err(|e| format!("读取 docker-compose.yml 失败: {}", e))?;
+                .map_err(|e| format!("读取 docker-compose.yml 失败: {e}"))?;
             Self::add_file_to_zip(
                 &mut zip,
                 "docker-compose.yml",
@@ -69,7 +69,7 @@ impl BackupEngine {
         let user_mirror_config_path = project_root.join(".user_mirror_config.json");
         if user_mirror_config_path.exists() {
             let content = fs::read(&user_mirror_config_path)
-                .map_err(|e| format!("读取 .user_mirror_config.json 失败: {}", e))?;
+                .map_err(|e| format!("读取 .user_mirror_config.json 失败: {e}"))?;
             Self::add_file_to_zip(
                 &mut zip,
                 ".user_mirror_config.json",
@@ -82,7 +82,7 @@ impl BackupEngine {
         let user_version_overrides_path = project_root.join(".user_version_overrides.json");
         if user_version_overrides_path.exists() {
             let content = fs::read(&user_version_overrides_path)
-                .map_err(|e| format!("读取 .user_version_overrides.json 失败: {}", e))?;
+                .map_err(|e| format!("读取 .user_version_overrides.json 失败: {e}"))?;
             Self::add_file_to_zip(
                 &mut zip,
                 ".user_version_overrides.json",
@@ -126,7 +126,7 @@ impl BackupEngine {
                                             let relative_path = pathdiff::diff_paths(&path, project_root)
                                                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                                                 .unwrap_or_else(|| path.display().to_string());
-                                            let zip_path = format!("projects/{}", relative_path);
+                                            let zip_path = format!("projects/{relative_path}");
                                             app_log!(debug, "engine::backup", "添加文件: {}", zip_path);
                                             Self::add_file_to_zip(
                                                 &mut zip,
@@ -149,7 +149,7 @@ impl BackupEngine {
                                     app_log!(debug, "engine::backup", "跳过目录: {:?}", path);
                                 }
                                 Err(e) => {
-                                    manifest.errors.push(format!("Glob 匹配错误: {}", e));
+                                    manifest.errors.push(format!("Glob 匹配错误: {e}"));
                                     app_log!(warn, "engine::backup", "Glob 匹配错误: {}", e);
                                 }
                             }
@@ -157,7 +157,7 @@ impl BackupEngine {
                         app_log!(info, "engine::backup", "模式 '{}' 匹配到 {} 个文件", pattern, matched_count);
                     }
                     Err(e) => {
-                        let error_msg = format!("Glob 模式错误 '{}': {}", pattern, e);
+                        let error_msg = format!("Glob 模式错误 '{pattern}': {e}");
                         manifest.errors.push(error_msg.clone());
                         app_log!(error, "engine::backup", "{}", error_msg);
                     }
@@ -181,12 +181,12 @@ impl BackupEngine {
         let zip_options = FileOptions::<()>::default()
             .compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("manifest.json", zip_options)
-            .map_err(|e| format!("创建 manifest 条目失败: {}", e))?;
+            .map_err(|e| format!("创建 manifest 条目失败: {e}"))?;
         zip.write_all(manifest_json.as_bytes())
-            .map_err(|e| format!("写入 manifest 失败: {}", e))?;
+            .map_err(|e| format!("写入 manifest 失败: {e}"))?;
 
         // Finish ZIP
-        zip.finish().map_err(|e| format!("完成 ZIP 文件失败: {}", e))?;
+        zip.finish().map_err(|e| format!("完成 ZIP 文件失败: {e}"))?;
 
         Self::emit_progress(app_handle, "备份完成", 100);
         Ok(())
@@ -223,9 +223,9 @@ impl BackupEngine {
         let zip_options = FileOptions::<()>::default()
             .compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(zip_path, zip_options)
-            .map_err(|e| format!("创建 ZIP 条目失败: {}", e))?;
+            .map_err(|e| format!("创建 ZIP 条目失败: {e}"))?;
         zip.write_all(content)
-            .map_err(|e| format!("写入 ZIP 内容失败: {}", e))?;
+            .map_err(|e| format!("写入 ZIP 内容失败: {e}"))?;
 
         let sha256 = Self::compute_sha256(content);
         manifest.files.insert(zip_path.to_string(), sha256);
@@ -243,12 +243,12 @@ impl BackupEngine {
             return Ok(());
         }
         for entry in
-            fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {}", e))?
+            fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {e}"))?
         {
-            let entry = entry.map_err(|e| format!("读取目录条目失败: {}", e))?;
+            let entry = entry.map_err(|e| format!("读取目录条目失败: {e}"))?;
             let path = entry.path();
             let name = path.file_name().unwrap().to_string_lossy();
-            let zip_path = format!("{}/{}", zip_prefix, name);
+            let zip_path = format!("{zip_prefix}/{name}");
 
             if path.is_dir() {
                 Self::add_dir_to_zip(zip, &path, &zip_path, manifest)?;
@@ -347,33 +347,27 @@ mod tests {
 
         assert!(
             file_names.contains(&".env".to_string()),
-            "ZIP 应包含 .env，实际: {:?}",
-            file_names
+            "ZIP 应包含 .env，实际: {file_names:?}"
         );
         assert!(
             file_names.contains(&"docker-compose.yml".to_string()),
-            "ZIP 应包含 docker-compose.yml，实际: {:?}",
-            file_names
+            "ZIP 应包含 docker-compose.yml，实际: {file_names:?}"
         );
         assert!(
             file_names.contains(&"services/php82/php.ini".to_string()),
-            "ZIP 应包含 services/php82/php.ini，实际: {:?}",
-            file_names
+            "ZIP 应包含 services/php82/php.ini，实际: {file_names:?}"
         );
         assert!(
             file_names.contains(&".user_mirror_config.json".to_string()),
-            "ZIP 应包含 .user_mirror_config.json，实际: {:?}",
-            file_names
+            "ZIP 应包含 .user_mirror_config.json，实际: {file_names:?}"
         );
         assert!(
             file_names.contains(&".user_version_overrides.json".to_string()),
-            "ZIP 应包含 .user_version_overrides.json，实际: {:?}",
-            file_names
+            "ZIP 应包含 .user_version_overrides.json，实际: {file_names:?}"
         );
         assert!(
             file_names.contains(&"manifest.json".to_string()),
-            "ZIP 应包含 manifest.json，实际: {:?}",
-            file_names
+            "ZIP 应包含 manifest.json，实际: {file_names:?}"
         );
 
         // Verify manifest.json content

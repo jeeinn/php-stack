@@ -28,7 +28,7 @@ impl DockerManager {
     pub async fn check_docker_availability(&self) -> Result<(), String> {
         match self.docker.ping().await {
             Ok(_) => Ok(()),
-            Err(e) => Err(format!("Docker 服务不可用或未启动: {}", e)),
+            Err(e) => Err(format!("Docker 服务不可用或未启动: {e}")),
         }
     }
 
@@ -45,7 +45,7 @@ impl DockerManager {
         let containers = self.docker.list_containers(options).await?;
         
         let ps_containers = containers.into_iter().map(|c| {
-            let name = c.names.clone().unwrap_or_default().get(0)
+            let name = c.names.clone().unwrap_or_default().first()
                 .map(|n| n.trim_start_matches('/').to_string())
                 .unwrap_or_else(|| "unknown".to_string());
 
@@ -74,7 +74,7 @@ impl DockerManager {
         let containers = self.docker.list_containers(options).await?;
         
         let all_containers = containers.into_iter().map(|c| {
-            let name = c.names.clone().unwrap_or_default().get(0)
+            let name = c.names.clone().unwrap_or_default().first()
                 .map(|n| n.trim_start_matches('/').to_string())
                 .unwrap_or_else(|| "unknown".to_string());
 

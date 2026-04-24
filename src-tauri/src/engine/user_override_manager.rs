@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::version_manifest::{ImageInfo, ServiceType, VersionManifest};
+use crate::app_log;
 
 /// 用户自定义的版本覆盖配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,11 +43,11 @@ impl UserOverrideManager {
         let overrides_path = project_root.join(".user_version_overrides.json");
         
         if !overrides_path.exists() {
-            eprintln!("ℹ️  [UserOverride] 未找到用户覆盖配置文件，使用默认配置");
+            app_log!(info, "engine::user_override", "未找到用户覆盖配置文件，使用默认配置");
             return HashMap::new();
         }
 
-        eprintln!("📝 [UserOverride] 加载用户覆盖配置: {:?}", overrides_path);
+        app_log!(info, "engine::user_override", "加载用户覆盖配置: {:?}", overrides_path);
 
         match std::fs::read_to_string(&overrides_path) {
             Ok(content) => {
@@ -64,21 +65,21 @@ impl UserOverrideManager {
                                 _ => continue,
                             };
                             override_count += versions.len();
-                            eprintln!("   ✅ {}: {} 个版本覆盖", service_key, versions.len());
+                            app_log!(info, "engine::user_override", "{}: {} 个版本覆盖", service_key, versions.len());
                             result.insert(service_type, versions);
                         }
                         
-                        eprintln!("✅ [UserOverride] 加载成功，共 {} 个服务类型，{} 个版本覆盖", result.len(), override_count);
+                        app_log!(info, "engine::user_override", "加载成功，共 {} 个服务类型，{} 个版本覆盖", result.len(), override_count);
                         result
                     }
                     Err(e) => {
-                        eprintln!("⚠️  [UserOverride] 解析配置文件失败: {}", e);
+                        app_log!(warn, "engine::user_override", "解析配置文件失败: {}", e);
                         HashMap::new()
                     }
                 }
             }
             Err(e) => {
-                eprintln!("❌ [UserOverride] 读取配置文件失败: {}", e);
+                app_log!(error, "engine::user_override", "读取配置文件失败: {}", e);
                 HashMap::new()
             }
         }
@@ -96,8 +97,8 @@ impl UserOverrideManager {
             .get(service_type)
             .and_then(|versions| versions.get(version))
         {
-            eprintln!("🔧 [UserOverride] {} {} 使用自定义标签: {}", 
-                format!("{:?}", service_type).to_lowercase(), 
+            app_log!(info, "engine::user_override", "{} {} 使用自定义标签: {}",
+                format!("{:?}", service_type).to_lowercase(),
                 version, 
                 user_override.tag);
             

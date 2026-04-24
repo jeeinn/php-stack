@@ -2,7 +2,7 @@
 name = "app"
 version = "0.1.0"
 description = "PHP-Stack - PHP Development Environment Manager"
-authors = ["you"]
+authors = ["jeeinn"]
 license = ""
 repository = ""
 edition = "2021"
@@ -22,6 +22,8 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 log = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
 bollard = "0.20"
@@ -32,6 +34,7 @@ glob = "0.3"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
 reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
 pathdiff = "0.2"

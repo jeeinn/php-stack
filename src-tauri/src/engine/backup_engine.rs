@@ -6,6 +6,7 @@ use sha2::{Sha256, Digest};
 use glob::glob;
 
 use super::backup_manifest::{BackupManifest, BackupOptions};
+use crate::app_log;
 
 /// 备份进度事件
 #[derive(Debug, Clone, serde::Serialize)]
@@ -110,7 +111,7 @@ impl BackupEngine {
                 };
                 
                 // 记录尝试的模式（用于调试）
-                eprintln!("[Backup] 尝试匹配模式: {} -> {}", pattern, abs_pattern);
+                app_log!(debug, "engine::backup", "尝试匹配模式: {} -> {}", pattern, abs_pattern);
                 
                 match glob(&abs_pattern) {
                     Ok(entries) => {
@@ -126,7 +127,7 @@ impl BackupEngine {
                                                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                                                 .unwrap_or_else(|| path.display().to_string());
                                             let zip_path = format!("projects/{}", relative_path);
-                                            eprintln!("[Backup] 添加文件: {}", zip_path);
+                                            app_log!(debug, "engine::backup", "添加文件: {}", zip_path);
                                             Self::add_file_to_zip(
                                                 &mut zip,
                                                 &zip_path,
@@ -145,20 +146,20 @@ impl BackupEngine {
                                 }
                                 Ok(path) => {
                                     // 跳过目录
-                                    eprintln!("[Backup] 跳过目录: {:?}", path);
+                                    app_log!(debug, "engine::backup", "跳过目录: {:?}", path);
                                 }
                                 Err(e) => {
                                     manifest.errors.push(format!("Glob 匹配错误: {}", e));
-                                    eprintln!("[Backup] Glob 匹配错误: {}", e);
+                                    app_log!(warn, "engine::backup", "Glob 匹配错误: {}", e);
                                 }
                             }
                         }
-                        eprintln!("[Backup] 模式 '{}' 匹配到 {} 个文件", pattern, matched_count);
+                        app_log!(info, "engine::backup", "模式 '{}' 匹配到 {} 个文件", pattern, matched_count);
                     }
                     Err(e) => {
                         let error_msg = format!("Glob 模式错误 '{}': {}", pattern, e);
                         manifest.errors.push(error_msg.clone());
-                        eprintln!("[Backup] {}", error_msg);
+                        app_log!(error, "engine::backup", "{}", error_msg);
                     }
                 }
             }

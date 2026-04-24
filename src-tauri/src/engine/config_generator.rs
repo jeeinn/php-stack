@@ -7,6 +7,7 @@ use super::env_parser::EnvFile;
 use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
 use super::user_override_manager::UserOverrideManager;
 use super::mirror_config_manager::UserMirrorConfig;
+use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ServiceType {
@@ -732,7 +733,7 @@ impl ConfigGenerator {
         // Reverse order to ensure dependencies are restored correctly
         for (backup_path, original_path) in rollback_list.iter().rev() {
             if let Err(e) = std::fs::rename(backup_path, original_path) {
-                eprintln!("⚠️  回滚失败 {:?} -> {:?}: {}", backup_path, original_path, e);
+                app_log!(warn, "engine::config_generator", "回滚失败 {:?} -> {:?}: {}", backup_path, original_path, e);
                 return Err(format!("回滚失败: {}", e));
             }
         }
@@ -756,24 +757,24 @@ impl ConfigGenerator {
                     
                     match std::fs::rename(&item_path, &backup_path) {
                         Ok(()) => {
-                            eprintln!("✅ 已备份: {} -> {}", item, backup_name);
+                            app_log!(info, "engine::config_generator", "已备份: {} -> {}", item, backup_name);
                             backed_up.push(backup_name.clone());
                             rollback_list.push((backup_path, item_path.clone()));
                         }
                         Err(e) => {
-                            eprintln!("❌ 备份 {} 失败: {}", item, e);
+                            app_log!(error, "engine::config_generator", "备份 {} 失败: {}", item, e);
                             
                             // Immediate rollback on failure
                             if !rollback_list.is_empty() {
-                                eprintln!("🔄 正在回滚已备份的 {} 项...", rollback_list.len());
+                                app_log!(warn, "engine::config_generator", "正在回滚已备份的 {} 项...", rollback_list.len());
                                 if let Err(rollback_err) = Self::rollback_all(&rollback_list) {
-                                    eprintln!("⚠️  严重错误：回滚也失败: {}", rollback_err);
+                                    app_log!(error, "engine::config_generator", "严重错误：回滚也失败: {}", rollback_err);
                                     return Err(format!(
                                         "备份 {} 失败，且回滚操作也失败（请手动恢复）: {}\n回滚错误: {}",
                                         item, e, rollback_err
                                     ));
                                 }
-                                eprintln!("✅ 回滚成功，所有文件已恢复原状");
+                                app_log!(info, "engine::config_generator", "回滚成功，所有文件已恢复原状");
                             }
                             
                             return Err(format!(
@@ -784,7 +785,7 @@ impl ConfigGenerator {
                     }
                 }
                 
-                eprintln!("✅ 备份完成，共 {} 项", backed_up.len());
+                app_log!(info, "engine::config_generator", "备份完成，共 {} 项", backed_up.len());
                 Ok(backed_up)
             }
         }
@@ -795,13 +796,13 @@ impl ConfigGenerator {
     /// Format: .env -> .env_YYYYMMDD_HHMMSS
     ///         services/ -> services_YYYYMMDD_HHMMSS/
     pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
-        eprintln!("🔍 开始预检查备份...");
+        app_log!(info, "engine::config_generator", "开始预检查备份...");
         
         // Phase 1: Pre-check
         let backup_state = Self::precheck_backup(project_root)?;
         
         // Phase 2: Execute with rollback
-        eprintln!("📦 执行备份...");
+        app_log!(info, "engine::config_generator", "执行备份...");
         Self::execute_backup(backup_state, project_root)
     }
 

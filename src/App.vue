@@ -2,13 +2,14 @@
 import { ref, onMounted, nextTick, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
 import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
-import { getLogs, addLog } from './composables/useToast';
+import { getLogs, addLog, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 
 interface Container {
@@ -30,6 +31,8 @@ const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(true); // 控制侧边栏展开/收缩（默认收缩）
 const showStartConfirm = ref(false); // 控制启动确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
+const isUserScrolling = ref(false); // 用户是否正在手动滚动
+let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
 
 // 判断容器是否运行中（兼容多种格式）
 const isRunning = (state: string): boolean => {
@@ -208,13 +211,39 @@ onMounted(() => {
   });
 });
 
-// 监听日志变化，自动滚动到底部
+// 监听日志变化，自动滚动到底部（用户未手动滚动时）
 watch(logs, async () => {
   await nextTick();
-  if (logPanelRef.value) {
+  if (logPanelRef.value && !isUserScrolling.value) {
     logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
   }
 }, { deep: true });
+
+// 处理用户手动滚动
+const handleLogScroll = () => {
+  isUserScrolling.value = true;
+  
+  // 清除之前的定时器
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout);
+  }
+  
+  // 3秒后恢复自动滚动
+  scrollTimeout = setTimeout(() => {
+    isUserScrolling.value = false;
+  }, 3000);
+};
+
+// 复制日志到剪贴板
+async function copyLogs() {
+  try {
+    const logs = await invoke('export_logs');
+    await writeText(logs as string);
+    showToast('日志已复制到剪贴板', 'success');
+  } catch (e) {
+    showToast(`复制失败: ${e}`, 'error');
+  }
+}
 </script>
 
 <template>
@@ -412,21 +441,31 @@ watch(logs, async () => {
             <span class="w-2 h-2 bg-blue-500 rounded-full" :class="{ 'animate-pulse': loading }"></span> 
             实时日志
           </h2>
-          <button 
-            @click="showLogs = !showLogs"
-            class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
-          >
-            {{ showLogs ? '隐藏' : '显示' }}
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path v-if="showLogs" d="m6 9 6 6 6-6"/><path v-else d="m18 15-6-6-6 6"/>
-            </svg>
-          </button>
+          <div class="flex gap-2">
+            <button 
+              @click="copyLogs"
+              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              title="复制日志到剪贴板"
+            >
+              📋 复制
+            </button>
+            <button 
+              @click="showLogs = !showLogs"
+              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+            >
+              {{ showLogs ? '隐藏' : '显示' }}
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path v-if="showLogs" d="m6 9 6 6 6-6"/><path v-else d="m18 15-6-6-6 6"/>
+              </svg>
+            </button>
+          </div>
         </div>
         
         <transition name="fade">
           <div 
             v-show="showLogs" 
             ref="logPanelRef"
+            @scroll="handleLogScroll"
             class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
           >
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">

@@ -155,8 +155,7 @@ onMounted(() => {
   <div class="flex-1 flex flex-col overflow-hidden">
     <header class="mb-6 flex justify-between items-start">
       <div>
-        <h1 class="text-3xl font-bold">软件设置</h1>
-        <p class="text-slate-400 text-sm mt-1">管理 Docker 镜像版本映射配置</p>
+        <p class="text-slate-400 text-sm">管理 Docker 镜像版本映射配置</p>
       </div>
       <button
         @click="resetAllOverrides"
@@ -183,7 +182,7 @@ onMounted(() => {
           :key="service"
           @click="selectedService = service as ServiceType"
           :class="[
-            'px-4 py-2 rounded-lg font-medium transition',
+            'px-4 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm',
             selectedService === service
               ? 'bg-blue-600 text-white'
               : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -195,17 +194,17 @@ onMounted(() => {
 
       <!-- Version Table -->
       <div class="flex-1 overflow-auto min-h-0">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse min-w-[700px]">
+        <div class="overflow-x-auto -mx-3 sm:mx-0">
+          <table class="w-full text-left border-collapse min-w-[900px]">
             <thead class="sticky top-0 bg-slate-900 z-10">
               <tr class="border-b border-slate-700">
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">应用名称</th>
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">版本号</th>
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">Docker 镜像标签</th>
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">完整镜像名</th>
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">状态</th>
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">备注</th>
-                <th class="pb-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm">操作</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">应用名称</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[100px]">版本号</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">Docker 镜像标签</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[250px]">完整镜像名</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">状态</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[150px]">备注</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm sticky right-0 bg-slate-900 z-20 w-auto">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -223,7 +222,13 @@ onMounted(() => {
                   <span v-if="version.has_user_override" class="ml-1 text-xs text-yellow-400">(自定义)</span>
                 </td>
                 <td class="py-3 px-3">
-                  <code class="bg-slate-800 px-2 py-1 rounded text-xs break-all">{{ version.full_name }}</code>
+                  <code 
+                    @click="copyImageName(version.full_name)"
+                    class="bg-slate-800 px-2 py-1 rounded text-xs block cursor-pointer hover:bg-slate-700 transition truncate"
+                    :title="version.full_name || ''"
+                  >
+                    {{ version.full_name }}
+                  </code>
                 </td>
                 <td class="py-3 px-3">
                   <span 
@@ -233,21 +238,14 @@ onMounted(() => {
                     {{ version.eol ? '⚠️ EOL' : '✅ 活跃' }}
                   </span>
                 </td>
-                <td class="py-3 px-3 text-slate-400 text-xs max-w-[150px] truncate" :title="version.description || ''">
+                <td class="py-3 px-3 text-slate-400 text-sm truncate" :title="version.description || ''">
                   {{ version.description || '-' }}
                 </td>
-                <td class="py-3 px-3">
-                  <div class="flex gap-1.5">
-                    <button
-                      @click="copyImageName(version.full_name)"
-                      class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition whitespace-nowrap"
-                      title="复制镜像名"
-                    >
-                      复制
-                    </button>
+                <td class="py-3 px-3 sticky right-0 bg-slate-900 z-10 whitespace-nowrap">
+                  <div class="flex items-center gap-2">
                     <button
                       @click="openEditDialog(version)"
-                      class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition whitespace-nowrap"
+                      class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition"
                       title="编辑"
                     >
                       编辑
@@ -255,7 +253,7 @@ onMounted(() => {
                     <button
                       v-if="version.has_user_override"
                       @click="removeOverride(version)"
-                      class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition whitespace-nowrap"
+                      class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition"
                       title="删除自定义"
                     >
                       删除

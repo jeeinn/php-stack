@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 
 use super::version_manifest::{ImageInfo, ServiceType, VersionManifest};
+use crate::app_log;
 
 /// 用户自定义的版本覆盖配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +25,7 @@ pub struct UserOverrideManager {
 
 impl UserOverrideManager {
     /// 创建新的覆盖管理器
-    pub fn new(project_root: &PathBuf) -> Self {
+    pub fn new(project_root: &Path) -> Self {
         let default_manifest = VersionManifest::new();
         let user_overrides = Self::load_user_overrides(project_root);
         
@@ -36,17 +37,17 @@ impl UserOverrideManager {
 
     /// 从文件加载用户覆盖配置
     fn load_user_overrides(
-        project_root: &PathBuf,
+        project_root: &Path,
     ) -> HashMap<ServiceType, HashMap<String, UserVersionOverride>> {
         // 使用 project_root 作为配置文件存放位置（与 .env 同级）
         let overrides_path = project_root.join(".user_version_overrides.json");
         
         if !overrides_path.exists() {
-            eprintln!("ℹ️  [UserOverride] 未找到用户覆盖配置文件，使用默认配置");
+            app_log!(info, "engine::user_override", "未找到用户覆盖配置文件，使用默认配置");
             return HashMap::new();
         }
 
-        eprintln!("📝 [UserOverride] 加载用户覆盖配置: {:?}", overrides_path);
+        app_log!(info, "engine::user_override", "加载用户覆盖配置: {:?}", overrides_path);
 
         match std::fs::read_to_string(&overrides_path) {
             Ok(content) => {
@@ -64,21 +65,21 @@ impl UserOverrideManager {
                                 _ => continue,
                             };
                             override_count += versions.len();
-                            eprintln!("   ✅ {}: {} 个版本覆盖", service_key, versions.len());
+                            app_log!(info, "engine::user_override", "{service_key}: {} 个版本覆盖", versions.len());
                             result.insert(service_type, versions);
                         }
                         
-                        eprintln!("✅ [UserOverride] 加载成功，共 {} 个服务类型，{} 个版本覆盖", result.len(), override_count);
+                        app_log!(info, "engine::user_override", "加载成功，共 {} 个服务类型，{override_count} 个版本覆盖", result.len());
                         result
                     }
                     Err(e) => {
-                        eprintln!("⚠️  [UserOverride] 解析配置文件失败: {}", e);
+                        app_log!(warn, "engine::user_override", "解析配置文件失败: {e}");
                         HashMap::new()
                     }
                 }
             }
             Err(e) => {
-                eprintln!("❌ [UserOverride] 读取配置文件失败: {}", e);
+                app_log!(error, "engine::user_override", "读取配置文件失败: {e}");
                 HashMap::new()
             }
         }
@@ -96,8 +97,8 @@ impl UserOverrideManager {
             .get(service_type)
             .and_then(|versions| versions.get(version))
         {
-            eprintln!("🔧 [UserOverride] {} {} 使用自定义标签: {}", 
-                format!("{:?}", service_type).to_lowercase(), 
+            app_log!(info, "engine::user_override", "{} {} 使用自定义标签: {}",
+                format!("{service_type:?}").to_lowercase(),
                 version, 
                 user_override.tag);
             
@@ -120,7 +121,7 @@ impl UserOverrideManager {
     /// 保存用户覆盖配置到文件
     pub fn save_user_override(
         &mut self,
-        project_root: &PathBuf,
+        project_root: &Path,
         service_type: ServiceType,
         version: String,
         override_config: UserVersionOverride,
@@ -128,16 +129,16 @@ impl UserOverrideManager {
         // 更新内存中的配置
         self.user_overrides
             .entry(service_type)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(version, override_config);
 
         // 序列化并保存到文件（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         let json = serde_json::to_string_pretty(&self.user_overrides)
-            .map_err(|e| format!("序列化失败: {}", e))?;
+            .map_err(|e| format!("序列化失败: {e}"))?;
 
         std::fs::write(&overrides_path, json)
-            .map_err(|e| format!("写入文件失败: {}", e))?;
+            .map_err(|e| format!("写入文件失败: {e}"))?;
 
         Ok(())
     }
@@ -145,7 +146,7 @@ impl UserOverrideManager {
     /// 删除用户覆盖配置
     pub fn remove_user_override(
         &mut self,
-        project_root: &PathBuf,
+        project_root: &Path,
         service_type: &ServiceType,
         version: &str,
     ) -> Result<(), String> {
@@ -156,23 +157,23 @@ impl UserOverrideManager {
         // 重新保存（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         let json = serde_json::to_string_pretty(&self.user_overrides)
-            .map_err(|e| format!("序列化失败: {}", e))?;
+            .map_err(|e| format!("序列化失败: {e}"))?;
 
         std::fs::write(&overrides_path, json)
-            .map_err(|e| format!("写入文件失败: {}", e))?;
+            .map_err(|e| format!("写入文件失败: {e}"))?;
 
         Ok(())
     }
 
     /// 重置所有用户覆盖（恢复到默认配置）
-    pub fn reset_all_overrides(&mut self, project_root: &PathBuf) -> Result<(), String> {
+    pub fn reset_all_overrides(&mut self, project_root: &Path) -> Result<(), String> {
         self.user_overrides.clear();
         
         // 删除配置文件（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         if overrides_path.exists() {
             std::fs::remove_file(&overrides_path)
-                .map_err(|e| format!("删除文件失败: {}", e))?;
+                .map_err(|e| format!("删除文件失败: {e}"))?;
         }
 
         Ok(())

@@ -1,21 +1,40 @@
 pub mod docker;
 pub mod commands;
 pub mod engine;
+pub mod logging;
+#[macro_use]
+pub mod macros;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      app.handle().plugin(tauri_plugin_dialog::init())?;
-      Ok(())
-    })
+    tauri::Builder::default()
+        .setup(|app| {
+            // 获取项目根目录（优先 workspace.json，否则 exe 同级目录）
+            let log_dir = if cfg!(debug_assertions) {
+                // 开发模式：使用项目根目录
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            } else {
+                // 生产模式：使用可执行文件所在目录
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            };
+            
+            // 初始化日志系统
+            if let Err(e) = logging::init_logging(&log_dir) {
+                eprintln!("Failed to initialize logging: {e}");
+            }
+            
+            app_log!(info, "app", "PHP-Stack 启动，日志文件位于: {:?}", log_dir.join("php-stack.log"));
+            
+            app.handle().plugin(tauri_plugin_dialog::init())?;
+            app.handle().plugin(tauri_plugin_clipboard_manager::init())?;
+            Ok(())
+        })
     .invoke_handler(tauri::generate_handler![
       // Dashboard
       commands::check_docker,
@@ -33,6 +52,8 @@ pub fn run() {
       commands::check_config_files_exist,
       commands::apply_env_config,
       commands::start_environment,
+      commands::restart_environment,
+      commands::stop_environment,
       // 统一镜像源管理
       commands::get_mirror_presets,
       commands::apply_mirror_preset,
@@ -65,6 +86,8 @@ pub fn run() {
       commands::save_user_override,
       commands::remove_user_override,
       commands::reset_all_overrides,
+      // 日志导出
+      commands::export_logs,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

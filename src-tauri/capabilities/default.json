@@ -9,6 +9,7 @@
     "core:default",
     "dialog:default",
     "dialog:allow-save",
-    "log:default"
+    "log:default",
+    "clipboard-manager:allow-write-text"
   ]
 }

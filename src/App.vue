@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, nextTick, watch, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
 import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
-import { getLogs, addLog } from './composables/useToast';
+import { getLogs, addLog, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 
 interface Container {
@@ -27,9 +28,44 @@ const logs = getLogs(); // 使用 composable 中的全局日志
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
-const sidebarCollapsed = ref(true); // 控制侧边栏展开/收缩（默认收缩）
+const sidebarCollapsed = ref(window.innerWidth < 768); // 控制侧边栏展开/收缩（小屏幕默认收缩）
 const showStartConfirm = ref(false); // 控制启动确认弹窗
+const showRestartConfirm = ref(false); // 控制重启确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
+const isUserScrolling = ref(false); // 用户是否正在手动滚动
+let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
+
+// 判断是否有运行中的 ps- 容器
+const hasRunningContainers = computed(() => {
+  return containers.value.some(c => isRunning(String(c.state)));
+});
+
+// 判断是否有任何 ps- 容器（不管状态）
+// @ts-ignore - 用于后续功能扩展，暂时未使用
+const hasAnyContainers = computed(() => {
+  return containers.value.length > 0;
+});
+
+// 判断是否有任何停止的 ps- 容器
+// @ts-ignore - 用于后续功能扩展，暂时未使用
+const hasStoppedContainers = computed(() => {
+  return containers.value.some(c => !isRunning(String(c.state)));
+});
+
+// 判断是否可以启动（没有任何容器或所有容器都已停止）
+const canStart = computed(() => {
+  return !hasRunningContainers.value;
+});
+
+// 判断是否可以重启（有运行中的容器）
+const canRestart = computed(() => {
+  return hasRunningContainers.value;
+});
+
+// 判断是否可以停止（有运行中的容器）
+const canStop = computed(() => {
+  return hasRunningContainers.value;
+});
 
 // 判断容器是否运行中（兼容多种格式）
 const isRunning = (state: string): boolean => {
@@ -139,6 +175,28 @@ const handleStartEnvironment = () => {
   showStartConfirm.value = true;
 };
 
+const handleRestartEnvironment = () => {
+  showRestartConfirm.value = true;
+};
+
+const handleStopEnvironment = async () => {
+  // 自动打开日志面板
+  showLogs.value = true;
+  
+  starting.value = true;
+  addLog('🛑 开始一键停止环境...');
+  
+  try {
+    await invoke('stop_environment');
+    addLog('✅ 环境停止成功！');
+    await refreshContainers();
+  } catch (e: any) {
+    addLog(`❌ 停止失败: ${e}`);
+  } finally {
+    starting.value = false;
+  }
+};
+
 const confirmStart = async () => {
   showStartConfirm.value = false;
   
@@ -191,6 +249,26 @@ const confirmStart = async () => {
   }
 };
 
+const confirmRestart = async () => {
+  showRestartConfirm.value = false;
+  
+  // 自动打开日志面板
+  showLogs.value = true;
+  
+  starting.value = true;
+  addLog('🔄 开始一键重启环境...');
+  
+  try {
+    await invoke('restart_environment');
+    addLog('✅ 环境重启成功！');
+    await refreshContainers();
+  } catch (e: any) {
+    addLog(`❌ 重启失败: ${e}`);
+  } finally {
+    starting.value = false;
+  }
+};
+
 const goToMirrorSettings = () => {
   showStartConfirm.value = false;
   activeTab.value = 'mirrors-unified';
@@ -208,13 +286,58 @@ onMounted(() => {
   });
 });
 
-// 监听日志变化，自动滚动到底部
+// 监听日志变化，自动滚动到底部（用户未手动滚动时）
 watch(logs, async () => {
   await nextTick();
-  if (logPanelRef.value) {
+  if (logPanelRef.value && !isUserScrolling.value) {
     logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
   }
 }, { deep: true });
+
+// 监听日志面板显示状态，显示时自动滚动到底部
+watch(showLogs, async (newValue) => {
+  if (newValue) {
+    await nextTick();
+    if (logPanelRef.value) {
+      logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+    }
+  }
+});
+
+// 处理用户手动滚动
+const handleLogScroll = () => {
+  isUserScrolling.value = true;
+  
+  // 清除之前的定时器
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout);
+  }
+  
+  // 1秒后恢复自动滚动（缩短等待时间）
+  scrollTimeout = setTimeout(() => {
+    isUserScrolling.value = false;
+  }, 1000);
+};
+
+// 手动滚动到底部
+const scrollToBottom = async () => {
+  await nextTick();
+  if (logPanelRef.value) {
+    logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+    isUserScrolling.value = false; // 重置手动滚动状态
+  }
+};
+
+// 复制日志到剪贴板
+async function copyLogs() {
+  try {
+    const logs = await invoke('export_logs');
+    await writeText(logs as string);
+    showToast('日志已复制到剪贴板', 'success');
+  } catch (e) {
+    showToast(`复制失败: ${e}`, 'error');
+  }
+}
 </script>
 
 <template>
@@ -222,12 +345,12 @@ watch(logs, async () => {
     <!-- Sidebar -->
     <div 
       class="bg-slate-900 flex flex-col border-r border-slate-800 overflow-y-auto transition-all duration-300 ease-in-out"
-      :class="sidebarCollapsed ? 'w-20 p-3' : 'w-52 p-4'"
+      :class="sidebarCollapsed ? 'w-16 sm:w-20 p-2 sm:p-3' : 'w-48 sm:w-52 p-3 sm:p-4'"
     >
       <!-- Logo -->
-      <div class="mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
-        <span class="bg-blue-500 text-white p-1 rounded font-bold">PS</span>
-        <span v-if="!sidebarCollapsed" class="text-2xl font-bold text-blue-400">PHP-Stack</span>
+      <div class="mb-4 sm:mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
+        <span class="bg-blue-500 text-white p-1 rounded font-bold text-sm sm:text-base">PS</span>
+        <span v-if="!sidebarCollapsed" class="text-xl sm:text-2xl font-bold text-blue-400 hidden sm:inline">PHP-Stack</span>
       </div>
       
       <!-- Menu Items -->
@@ -235,44 +358,44 @@ watch(logs, async () => {
         <div 
           @click="activeTab = 'dashboard'"
           :class="{ 'active': activeTab === 'dashboard' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境管理' : ''"
         >
-          <span class="text-lg">🏠</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">环境管理</span>
+          <span class="text-base sm:text-lg">🏠</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境管理</span>
         </div>
         <div 
           @click="activeTab = 'env-config'"
           :class="{ 'active': activeTab === 'env-config' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境配置' : ''"
         >
-          <span class="text-lg">🍳</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">环境配置</span>
+          <span class="text-base sm:text-lg">🛠️</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境配置</span>
         </div>
         <div 
           @click="activeTab = 'mirrors-unified'"
           :class="{ 'active': activeTab === 'mirrors-unified' }" 
-          class="sidebar-item"
-          :title="sidebarCollapsed ? '设置项' : ''"
+          class="sidebar-item text-sm sm:text-base"
+          :title="sidebarCollapsed ? '其他设置' : ''"
         >
-          <span class="text-lg">⚙️</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">设置项</span>
+          <span class="text-base sm:text-lg">⚙️</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">其他设置</span>
         </div>
         <div 
           @click="activeTab = 'migration'"
           :class="{ 'active': activeTab === 'migration' }" 
-          class="sidebar-item"
+          class="sidebar-item text-sm sm:text-base"
           :title="sidebarCollapsed ? '环境迁移' : ''"
         >
-          <span class="text-lg">📦</span>
-          <span v-if="!sidebarCollapsed" class="ml-2">环境迁移</span>
+          <span class="text-base sm:text-lg">📦</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">环境迁移</span>
         </div>
       </div>
       
       <!-- Version & Toggle Button -->
-      <div class="mt-auto pt-4 border-t border-slate-800">
-        <div v-if="!sidebarCollapsed" class="text-sm text-slate-500 text-center mb-3">
+      <div class="mt-auto pt-3 sm:pt-4 border-t border-slate-800">
+        <div v-if="!sidebarCollapsed" class="text-xs sm:text-sm text-slate-500 text-center mb-2 sm:mb-3 hidden sm:block">
           v0.1.0
         </div>
         
@@ -298,27 +421,48 @@ watch(logs, async () => {
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden p-4 md:p-6">
+    <div class="flex-1 flex flex-col overflow-hidden p-3 sm:p-4 md:p-5 lg:p-6">
       <!-- 1. 环境管理 (Dashboard) -->
       <div v-if="activeTab === 'dashboard'" class="flex-1 flex flex-col overflow-hidden">
-        <header class="flex justify-between items-center mb-8">
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
           <h1 class="text-3xl font-bold">运行状态</h1>
-          <div class="flex gap-4">
+          <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <button 
               @click="() => refreshContainers()" 
               :disabled="loading"
-              class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
+              class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
             >
               {{ loading ? '刷新中...' : '手动刷新' }}
             </button>
-            <button 
-              @click="handleStartEnvironment"
-              :disabled="loading || starting"
-              class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              {{ starting ? '启动中...' : '一键启动' }}
-            </button>
+            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <button 
+                @click="handleStartEnvironment"
+                :disabled="!canStart || starting"
+                class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                :title="!canStart ? '有容器正在运行，请使用一键重启' : ''"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                {{ starting ? '启动中...' : '一键启动' }}
+              </button>
+              <button 
+                @click="handleRestartEnvironment"
+                :disabled="!canRestart || starting"
+                class="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                :title="!canRestart ? '没有运行中的容器，请使用一键启动' : ''"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                {{ starting ? '重启中...' : '一键重启' }}
+              </button>
+              <button 
+                @click="handleStopEnvironment"
+                :disabled="!canStop || starting"
+                class="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                :title="!canStop ? '没有运行中的容器' : ''"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                {{ starting ? '停止中...' : '一键停止' }}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -340,7 +484,7 @@ watch(logs, async () => {
         </div>
 
         <!-- Container Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto mb-8 pr-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 overflow-y-auto mb-8 pr-2">
           <div v-for="c in containers" :key="String(c.id)" class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-blue-500/50 transition-colors shadow-lg">
             <div class="flex justify-between items-start mb-4">
               <span class="text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
@@ -406,28 +550,45 @@ watch(logs, async () => {
       </div>
 
       <!-- Log Panel (Global) -->
-      <div class="mt-auto border-t border-slate-800 pt-4 bg-slate-950/50 backdrop-blur-md">
-        <div class="flex justify-between items-center mb-3">
+      <div class="mt-auto border-t border-slate-800 pt-3 sm:pt-4 bg-slate-950/50 backdrop-blur-md">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
           <h2 class="text-lg font-bold flex items-center gap-2 text-slate-400">
             <span class="w-2 h-2 bg-blue-500 rounded-full" :class="{ 'animate-pulse': loading }"></span> 
             实时日志
           </h2>
-          <button 
-            @click="showLogs = !showLogs"
-            class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
-          >
-            {{ showLogs ? '隐藏' : '显示' }}
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path v-if="showLogs" d="m6 9 6 6 6-6"/><path v-else d="m18 15-6-6-6 6"/>
-            </svg>
-          </button>
+          <div class="flex flex-wrap gap-2">
+            <button 
+              @click="copyLogs"
+              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              title="复制日志到剪贴板"
+            >
+              📋 复制
+            </button>
+            <button 
+              @click="scrollToBottom"
+              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              title="滚动到底部"
+            >
+              ⬇️ 底部
+            </button>
+            <button 
+              @click="showLogs = !showLogs"
+              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+            >
+              {{ showLogs ? '隐藏' : '显示' }}
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path v-if="showLogs" d="m6 9 6 6 6-6"/><path v-else d="m18 15-6-6-6 6"/>
+              </svg>
+            </button>
+          </div>
         </div>
         
         <transition name="fade">
           <div 
             v-show="showLogs" 
             ref="logPanelRef"
-            class="bg-black/40 p-4 rounded-xl font-mono text-sm text-blue-300/80 border border-slate-800 h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
+            @scroll="handleLogScroll"
+            class="bg-black/40 p-3 sm:p-4 rounded-xl font-mono text-xs sm:text-sm text-blue-300/80 border border-slate-800 h-32 sm:h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
           >
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
               {{ log }}
@@ -476,6 +637,31 @@ watch(logs, async () => {
             class="w-full px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
           >
             直接启动
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restart Environment Confirmation Dialog -->
+    <div v-if="showRestartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-white mb-4">⚠️ 重启环境提示</h2>
+        <p class="text-slate-400 mb-6">
+          重启环境将重新启动所有运行中的容器。
+          <strong class="text-amber-400">请注意保存当前数据</strong>，避免数据丢失。
+        </p>
+        <div class="space-y-4">
+          <button 
+            @click="showRestartConfirm = false"
+            class="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+          >
+            取消
+          </button>
+          <button 
+            @click="confirmRestart"
+            class="w-full px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold transition shadow-lg shadow-amber-600/20"
+          >
+            确认重启
           </button>
         </div>
       </div>

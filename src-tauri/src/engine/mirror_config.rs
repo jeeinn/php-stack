@@ -127,7 +127,7 @@ impl MirrorConfig {
         }
         
         let env_content = fs::read_to_string(env_path)
-            .map_err(|e| format!("读取 .env 文件失败: {}", e))?;
+            .map_err(|e| format!("读取 .env 文件失败: {e}"))?;
         
         let env_map = Self::parse_env_file(&env_content);
         
@@ -178,7 +178,7 @@ impl MirrorConfig {
         let env_path = Path::new(".env");
         let mut env_content = if env_path.exists() {
             fs::read_to_string(env_path)
-                .map_err(|e| format!("读取 .env 文件失败: {}", e))?
+                .map_err(|e| format!("读取 .env 文件失败: {e}"))?
         } else {
             String::new()
         };
@@ -197,7 +197,7 @@ impl MirrorConfig {
         }
         
         fs::write(env_path, env_content)
-            .map_err(|e| format!("写入 .env 文件失败: {}", e))?;
+            .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
         log::info!("✅ 容器内镜像源配置已保存到 .env");
         Ok(())
     }
@@ -209,8 +209,8 @@ impl MirrorConfig {
         let mut found = false;
         
         for line in lines {
-            if line.trim().starts_with(&format!("{}=", key)) {
-                new_lines.push(format!("{}={}", key, value));
+            if line.trim().starts_with(&format!("{key}=")) {
+                new_lines.push(format!("{key}={value}"));
                 found = true;
             } else {
                 new_lines.push(line.to_string());
@@ -218,7 +218,7 @@ impl MirrorConfig {
         }
         
         if !found {
-            new_lines.push(format!("{}={}", key, value));
+            new_lines.push(format!("{key}={value}"));
         }
         
         new_lines.join("\n")
@@ -230,13 +230,13 @@ impl MirrorConfig {
         
         // 添加代理配置
         if let Some(proxy) = &self.http_proxy {
-            args.push(format!("HTTP_PROXY={}", proxy));
+            args.push(format!("HTTP_PROXY={proxy}"));
         }
         if let Some(proxy) = &self.https_proxy {
-            args.push(format!("HTTPS_PROXY={}", proxy));
+            args.push(format!("HTTPS_PROXY={proxy}"));
         }
         if let Some(no_proxy) = &self.no_proxy {
-            args.push(format!("NO_PROXY={}", no_proxy));
+            args.push(format!("NO_PROXY={no_proxy}"));
         }
         
         args
@@ -250,11 +250,11 @@ impl MirrorConfig {
         if self.apt_mirror != MirrorSource::Default {
             let apt_url = self.apt_mirror.get_url("apt");
             snippet.push_str(&format!(
-                r#"# 配置 APT 镜像源
+                r"# 配置 APT 镜像源
 RUN sed -i 's|deb.debian.org/debian|{}|g' /etc/apt/sources.list && \
     sed -i 's|security.debian.org|{}|g' /etc/apt/sources.list
 
-"#,
+",
                 apt_url.trim_end_matches('/'),
                 apt_url.replace("debian", "debian-security").trim_end_matches('/')
             ));
@@ -264,11 +264,11 @@ RUN sed -i 's|deb.debian.org/debian|{}|g' /etc/apt/sources.list && \
         if self.composer_mirror != MirrorSource::Default {
             let composer_url = self.composer_mirror.get_url("composer");
             snippet.push_str(&format!(
-                r#"# 安装并配置 Composer 镜像源
+                r"# 安装并配置 Composer 镜像源
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
     composer config -g repo.packagist composer {}
 
-"#,
+",
                 composer_url.trim_end_matches('/')
             ));
         }

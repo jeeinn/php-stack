@@ -118,9 +118,9 @@ impl VersionManifest {
         let available = self.get_available_versions(service_type);
         let best_match = available
             .iter()
-            .find(|v| v.starts_with(&format!("{}.", version)) || version.starts_with(&format!("{}.", v)));
+            .find(|v| v.starts_with(&format!("{version}.")) || version.starts_with(&format!("{v}.")));
 
-        best_match.map(|v| v.to_string())
+        best_match.map(|v| (*v).to_string())
     }
 
     /// 获取版本警告信息（如果是 EOL 版本）
@@ -129,7 +129,7 @@ impl VersionManifest {
             .filter(|info| info.eol)
             .and_then(|info| {
                 info.description.as_ref().map(|desc| {
-                    format!("⚠️ {} - 建议使用更新版本", desc)
+                    format!("⚠️ {desc} - 建议使用更新版本")
                 })
             })
     }

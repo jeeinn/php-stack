@@ -114,8 +114,8 @@ impl EnvFile {
                     inline_comment,
                 } => {
                     let formatted = match inline_comment {
-                        Some(comment) => format!("{}={} {}", key, value, comment),
-                        None => format!("{}={}", key, value),
+                        Some(comment) => format!("{key}={value} {comment}"),
+                        None => format!("{key}={value}"),
                     };
                     output.push(formatted);
                 }
@@ -204,7 +204,7 @@ fn parse_value(raw: &str) -> (String, Option<String>) {
         let quote = first_char;
         // Find the closing quote
         if let Some(close_pos) = trimmed[1..].find(quote) {
-            let inner = &trimmed[1..1 + close_pos];
+            let inner = &trimmed[1..=close_pos];
             let after_quote = &trimmed[1 + close_pos + 1..];
 
             // Check for inline comment after the closing quote

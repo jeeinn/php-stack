@@ -1,9 +1,9 @@
-# MySQL 5.7 配置文件
+# MySQL 8.4 LTS 配置文件
 # 基于官方默认配置 + dnmp 优化
 # 生成时间: 2026-04-25
 # 参考来源: 
-#   - 官方: https://dev.mysql.com/doc/refman/5.7/en/server-configuration-defaults.html
-#   - dnmp: services/mysql/mysql-5.7.cnf
+#   - 官方: https://dev.mysql.com/doc/refman/8.4/en/server-configuration-defaults.html
+#   - dnmp: services/mysql/mysql-8.4.cnf
 
 [client]
 port                    = 3306
@@ -14,14 +14,15 @@ default-character-set   = utf8mb4
 user                    = mysql
 port                    = 3306
 
-# SQL 模式（MySQL 5.7 默认为空，更宽松）
-sql_mode                = ""
+# SQL 模式
+sql_mode                = NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES
 
 # 存储引擎
 default-storage-engine  = InnoDB
 
-# 认证插件（MySQL 5.7 使用 mysql_native_password）
-default-authentication-plugin   = mysql_native_password
+# 认证插件（MySQL 8.4 默认 caching_sha2_password）
+# 为了兼容性，保留 mysql_native_password 支持
+default-authentication-plugin   = caching_sha2_password
 
 # 字符集配置
 character-set-server    = utf8mb4
@@ -48,13 +49,23 @@ log-error               = /var/log/mysql/mysql.error.log
 # 时区设置
 default-time-zone       = '+8:00'
 
-# InnoDB 性能优化
+# InnoDB 性能优化（MySQL 8.4 优化值）
 innodb_buffer_pool_size = 128M
-innodb_log_buffer_size  = 16M
-innodb_io_capacity      = 2000
+innodb_log_buffer_size  = 64M
+innodb_io_capacity      = 10000
+innodb_flush_method     = O_DIRECT
+
+# 自适应哈希索引（MySQL 8.4 默认关闭以提高性能）
+innodb_adaptive_hash_index = OFF
+
+# 变更缓冲（MySQL 8.4 默认 none）
+innodb_change_buffering = none
 
 # 连接数限制
 max_connections         = 151
+
+# 表名大小写敏感（Linux 默认 0，Windows 默认 1）
+# lower_case_table_names = 1
 
 # 跳过名称解析（提高性能）
 skip-name-resolve       = 1

@@ -1,0 +1,27 @@
+server {
+    listen 80;
+    server_name localhost;
+
+    root /www;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        # ⚠️ 重要：将下方的 PHP_CONTAINER_NAME 替换为实际的 PHP 容器名称
+        # 容器名称格式: ps-php-X-X (例如: ps-php-8-5, ps-php-7-4)
+        # 
+        # 如何查看当前 PHP 容器名称：
+        # docker ps --format "{{.Names}}" | grep ps-php
+        #
+        # 示例：
+        # fastcgi_pass ps-php-8-5:9000;
+        fastcgi_pass PHP_CONTAINER_NAME:9000;
+        
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}

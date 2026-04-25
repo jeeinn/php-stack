@@ -96,23 +96,35 @@
     }
   },
   "nginx": {
+    "1.28": {
+      "image": "nginx",
+      "tag": "1.28-alpine",
+      "eol": false,
+      "description": "Nginx 1.28 (最新版)"
+    },
     "1.27": {
       "image": "nginx",
       "tag": "1.27-alpine",
       "eol": false,
-      "description": "Nginx 1.27 (最新版)"
+      "description": "Nginx 1.27 (稳定版)"
+    },
+    "1.26": {
+      "image": "nginx",
+      "tag": "1.26-alpine",
+      "eol": false,
+      "description": "Nginx 1.26 (长期支持版)"
     },
     "1.25": {
       "image": "nginx",
       "tag": "1.25-alpine",
       "eol": false,
-      "description": "Nginx 1.25 (稳定版)"
+      "description": "Nginx 1.25 (旧稳定版)"
     },
     "1.24": {
       "image": "nginx",
       "tag": "1.24-alpine",
       "eol": true,
-      "description": "Nginx 1.24 (旧稳定版)"
+      "description": "Nginx 1.24 (已停止维护)"
     }
   }
 }

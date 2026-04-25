@@ -1,7 +1,7 @@
 # PHP-Stack 文档中心
 
 > **版本**: v0.1.0  
-> **最后更新**: 2026-04-23
+> **最后更新**: 2026-04-25
 
 本文档中心整理了 PHP-Stack 项目的所有技术文档，按类别组织以便于查找和维护。
 
@@ -98,6 +98,7 @@
 - VERSION_*.md - 版本相关文档
 
 #### AI 辅助开发文档（按日期归档）
+- [2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md](history/2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md) - Docker Compose 跨平台兼容性修复
 - [2026-04-16_Docker_Compose_集成实施.md](history/2026-04-16_Docker_Compose_集成实施.md) - Docker Compose 集成实施方案
 - [2026-04-17_requirements.md](history/2026-04-17_requirements.md) - 环境配置与备份需求文档
 - [2026-04-17_design.md](history/2026-04-17_design.md) - 系统设计方案

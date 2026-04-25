@@ -53,6 +53,38 @@ fn get_project_root() -> Result<std::path::PathBuf, String> {
     }
 }
 
+/// 检测 Docker Compose 版本，判断是否支持 --progress 参数
+/// 返回 true 表示支持 --progress 参数（V2.20+）
+fn check_compose_progress_support() -> bool {
+    use std::process::Command;
+    
+    // 执行 docker compose version
+    let output = Command::new("docker")
+        .args(["compose", "version"])
+        .output();
+    
+    match output {
+        Ok(output) => {
+            let version_str = String::from_utf8_lossy(&output.stdout);
+            // 解析版本号，例如："Docker Compose version v2.17.3"
+            if let Some(version_part) = version_str.split_whitespace().last() {
+                // 去掉 'v' 前缀
+                let version = version_part.trim_start_matches('v');
+                // 解析主版本号和次版本号
+                let parts: Vec<&str> = version.split('.').collect();
+                if parts.len() >= 2 {
+                    if let (Ok(major), Ok(minor)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                        // V2.20+ 才支持 --progress 参数
+                        return major > 2 || (major == 2 && minor >= 20);
+                    }
+                }
+            }
+            false
+        }
+        Err(_) => false,
+    }
+}
+
 #[tauri::command]
 pub async fn check_docker() -> Result<(), String> {
     let manager = DockerManager::new().map_err(|e| format!("未找到 Docker 安装: {e}"))?;
@@ -518,11 +550,19 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     ui_log!(app_handle, info, "commands::start_environment", "");
     
     // 第二步:启动新容器(流式输出)
-    ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose --progress plain up -d");
+    // 根据 Docker Compose 版本决定是否使用 --progress 参数
+    let supports_progress = check_compose_progress_support();
+    let compose_args = if supports_progress {
+        ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose --progress plain up -d");
+        vec!["compose", "--progress", "plain", "up", "-d"]
+    } else {
+        ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose up -d");
+        vec!["compose", "up", "-d"]
+    };
     ui_log!(app_handle, info, "commands::start_environment", "⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");
         
     let mut compose_cmd = Command::new("docker");
-    compose_cmd.args(["compose", "--progress", "plain", "up", "-d"])
+    compose_cmd.args(&compose_args)
         .current_dir(&project_root)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -1343,6 +1383,15 @@ NGINX127_HTTP_HOST_PORT=80
         fs::write(temp_dir.join("docker-compose.yml"), "version: '3'\nservices: {}\n").unwrap();
         
         fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    /// 测试 Docker Compose 版本检测功能
+    #[test]
+    fn test_check_compose_progress_support() {
+        // 这个测试会实际调用 docker compose version，所以只在有 Docker 的环境中运行
+        let result = check_compose_progress_support();
+        println!("Docker Compose supports --progress: {}", result);
+        // 不 assert，因为结果取决于实际环境
     }
 }
 

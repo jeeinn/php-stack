@@ -98,6 +98,7 @@
 - VERSION_*.md - 版本相关文档
 
 #### AI 辅助开发文档（按日期归档）
+- [2026-04-25_REALTIME_LOG_DISPLAY_OPTIMIZATION.md](history/2026-04-25_REALTIME_LOG_DISPLAY_OPTIMIZATION.md) - Docker Compose 实时日志显示优化
 - [2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md](history/2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md) - Docker Compose 跨平台兼容性修复
 - [2026-04-16_Docker_Compose_集成实施.md](history/2026-04-16_Docker_Compose_集成实施.md) - Docker Compose 集成实施方案
 - [2026-04-17_requirements.md](history/2026-04-17_requirements.md) - 环境配置与备份需求文档

@@ -66,7 +66,7 @@ fn check_compose_progress_support() -> bool {
     match output {
         Ok(output) => {
             let version_str = String::from_utf8_lossy(&output.stdout);
-            // 解析版本号，例如："Docker Compose version v2.17.3"
+            // 解析版本号，例如：“Docker Compose version v2.17.3”
             if let Some(version_part) = version_str.split_whitespace().last() {
                 // 去掉 'v' 前缀
                 let version = version_part.trim_start_matches('v');
@@ -83,6 +83,68 @@ fn check_compose_progress_support() -> bool {
         }
         Err(_) => false,
     }
+}
+
+/// 解析 Docker Compose 输出，提取关键进度信息
+/// 返回格式化后的进度消息，如果不是进度相关的行则返回 None
+fn parse_docker_progress(line: &str) -> Option<String> {
+    // 拉取镜像: Pulling php ...
+    if line.contains("Pulling") {
+        if let Some(service) = extract_service_name(line, "Pulling") {
+            return Some(format!("正在拉取镜像: {}", service));
+        }
+    }
+    
+    // 下载进度: php Pulled
+    if line.contains("Pulled") {
+        if let Some(service) = extract_service_name(line, "Pulled") {
+            return Some(format!("✅ 镜像拉取完成: {}", service));
+        }
+    }
+    
+    // 构建镜像: Building php
+    if line.contains("Building") {
+        if let Some(service) = extract_service_name(line, "Building") {
+            return Some(format!("🔨 正在构建镜像: {}", service));
+        }
+    }
+    
+    // 创建容器: Creating ps-php-1 ... done
+    if line.contains("Creating") {
+        if let Some(service) = extract_service_name(line, "Creating") {
+            return Some(format!("📦 正在创建容器: {}", service));
+        }
+    }
+    
+    // 启动容器: Starting ps-php-1 ... done
+    if line.contains("Starting") {
+        if let Some(service) = extract_service_name(line, "Starting") {
+            return Some(format!("🚀 正在启动服务: {}", service));
+        }
+    }
+    
+    // 容器已存在: Container ps-php-1 is running
+    if line.contains("is running") || line.contains("Up to date") {
+        return Some("⚡ 服务已在运行".to_string());
+    }
+    
+    None
+}
+
+/// 从 Docker Compose 输出行中提取服务名称
+fn extract_service_name(line: &str, keyword: &str) -> Option<String> {
+    // 查找关键词后的服务名
+    if let Some(pos) = line.find(keyword) {
+        let after_keyword = &line[pos + keyword.len()..];
+        // 提取第一个单词作为服务名
+        let service = after_keyword.trim().split_whitespace().next()?;
+        // 去除可能的特殊字符
+        let clean_service = service.trim_end_matches(|c| c == '.' || c == ':' || c == ' ');
+        if !clean_service.is_empty() {
+            return Some(clean_service.to_string());
+        }
+    }
+    None
 }
 
 #[tauri::command]
@@ -552,125 +614,227 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     // 第二步:启动新容器(流式输出)
     // 根据 Docker Compose 版本决定是否使用 --progress 参数
     let supports_progress = check_compose_progress_support();
-    let compose_args = if supports_progress {
+    
+    if supports_progress {
+        // V2.20+ 支持 --progress plain，使用 -d 模式 + 流式输出
         ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose --progress plain up -d");
-        vec!["compose", "--progress", "plain", "up", "-d"]
-    } else {
-        ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose up -d");
-        vec!["compose", "up", "-d"]
-    };
-    ui_log!(app_handle, info, "commands::start_environment", "⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");
+        ui_log!(app_handle, info, "commands::start_environment", "⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)...");
         
-    let mut compose_cmd = Command::new("docker");
-    compose_cmd.args(&compose_args)
-        .current_dir(&project_root)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
-    
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-    
-    let mut child = compose_cmd.spawn().map_err(|e| {
-            let err_msg = format!("执行 docker compose 失败: {e}");
+        let mut compose_cmd = Command::new("docker");
+        compose_cmd.args(&["compose", "--progress", "plain", "up", "-d"])
+            .current_dir(&project_root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        
+        let mut child = compose_cmd.spawn().map_err(|e| {
+                let err_msg = format!("执行 docker compose 失败: {e}");
+                ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
+                err_msg
+            })?;
+        
+        // 读取 stdout（流式）
+        let mut stdout_lines = Vec::new();
+        if let Some(stdout) = child.stdout.take() {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if !line.is_empty() {
+                            ui_log!(app_handle, info, "commands::start_environment", "   {}", line);
+                            stdout_lines.push(line);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+        
+        // 读取 stderr（流式）并收集内容
+        let mut stderr_lines = Vec::new();
+        if let Some(stderr) = child.stderr.take() {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if !line.is_empty() {
+                            ui_log!(app_handle, info, "commands::start_environment", "   ⚠️ {}", line);
+                            stderr_lines.push(line);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+        
+        let stderr_content = stderr_lines.join("\n");
+        
+        let status = child.wait().map_err(|e| {
+            let err_msg = format!("等待 docker compose 完成失败: {e}");
             ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
             err_msg
         })?;
-    
-    // 读取 stdout（流式）
-    let mut stdout_lines = Vec::new();
-    if let Some(stdout) = child.stdout.take() {
-        use std::io::{BufRead, BufReader};
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    if !line.is_empty() {
-                        ui_log!(app_handle, info, "commands::start_environment", "   {}", line);
-                        stdout_lines.push(line);
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    }
-    
-    // 读取 stderr（流式）并收集内容
-    let mut stderr_lines = Vec::new();
-    if let Some(stderr) = child.stderr.take() {
-        use std::io::{BufRead, BufReader};
-        let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    if !line.is_empty() {
-                        ui_log!(app_handle, info, "commands::start_environment", "   ⚠️ {}", line);
-                        stderr_lines.push(line);
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    }
-    
-    let stderr_content = stderr_lines.join("\n");
-    
-    let status = child.wait().map_err(|e| {
-        let err_msg = format!("等待 docker compose 完成失败: {e}");
-        ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
-        err_msg
-    })?;
-    
-    if status.success() {
-        ui_log!(app_handle, info, "commands::start_environment", "✅ 环境启动成功！");
-        Ok("环境启动成功".to_string())
-    } else {
-        // 分析错误类型，提供更友好的提示
-        let exit_code = status.code();
         
-        // 检查是否是端口冲突错误
-        let is_port_conflict = stderr_content.contains("port is already allocated") 
-            || stderr_content.contains("Bind for") 
-            || stderr_content.contains("address already in use");
-        
-        if is_port_conflict {
-            ui_log!(app_handle, info, "commands::start_environment", "❌ 端口冲突 detected！");
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            ui_log!(app_handle, info, "commands::start_environment", "💡 可能的原因：");
-            ui_log!(app_handle, info, "commands::start_environment", "   1. 其他 Docker 容器占用了相同端口");
-            ui_log!(app_handle, info, "commands::start_environment", "   2. 本地服务（如 MySQL、Nginx）正在运行");
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            ui_log!(app_handle, info, "commands::start_environment", "🔧 解决方案：");
-            ui_log!(app_handle, info, "commands::start_environment", "   方案 1: 停止占用端口的容器");
-            ui_log!(app_handle, info, "commands::start_environment", "           docker ps  # 查看运行中的容器");
-            ui_log!(app_handle, info, "commands::start_environment", "           docker stop <容器名>");
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            ui_log!(app_handle, info, "commands::start_environment", "   方案 2: 修改 .env 文件中的端口配置");
-            ui_log!(app_handle, info, "commands::start_environment", "           例如：MYSQL_PORT=3307 (改为其他端口)");
-            ui_log!(app_handle, info, "commands::start_environment", "           然后重新应用配置");
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            ui_log!(app_handle, info, "commands::start_environment", "   方案 3: 停止本地服务");
-            ui_log!(app_handle, info, "commands::start_environment", "           检查是否有本地 MySQL/Nginx/Redis 在运行");
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            
-            // 提取具体冲突的端口信息
-            if let Some(line) = stderr_lines.iter().find(|l| l.contains("Bind for")) {
-                ui_log!(app_handle, info, "commands::start_environment", "📍 详细信息: {}", line.trim());
-            }
+        if status.success() {
+            ui_log!(app_handle, info, "commands::start_environment", "✅ 环境启动成功！");
+            Ok("环境启动成功".to_string())
         } else {
-            ui_log!(app_handle, info, "commands::start_environment", "❌ Docker Compose 启动失败，退出码: {:?}", exit_code);
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            ui_log!(app_handle, info, "commands::start_environment", "💡 建议检查：");
-            ui_log!(app_handle, info, "commands::start_environment", "   1. Docker Desktop 是否正常运行");
-            ui_log!(app_handle, info, "commands::start_environment", "   2. docker-compose.yml 文件格式是否正确");
-            ui_log!(app_handle, info, "commands::start_environment", "   3. 镜像是否存在或网络是否正常");
+            // 分析错误类型，提供更友好的提示
+            let exit_code = status.code();
+            
+            // 检查是否是端口冲突错误
+            let is_port_conflict = stderr_content.contains("port is already allocated") 
+                || stderr_content.contains("Bind for") 
+                || stderr_content.contains("address already in use");
+            
+            if is_port_conflict {
+                ui_log!(app_handle, info, "commands::start_environment", "❌ 端口冲突 detected！");
+                ui_log!(app_handle, info, "commands::start_environment", "");
+                ui_log!(app_handle, info, "commands::start_environment", "💡 可能的原因：");
+                ui_log!(app_handle, info, "commands::start_environment", "   1. 其他 Docker 容器占用了相同端口");
+                ui_log!(app_handle, info, "commands::start_environment", "   2. 本地服务（如 MySQL、Nginx）正在运行");
+                ui_log!(app_handle, info, "commands::start_environment", "");
+                ui_log!(app_handle, info, "commands::start_environment", "🔧 解决方案：");
+                ui_log!(app_handle, info, "commands::start_environment", "   方案 1: 停止占用端口的容器");
+                ui_log!(app_handle, info, "commands::start_environment", "           docker ps  # 查看运行中的容器");
+                ui_log!(app_handle, info, "commands::start_environment", "           docker stop <容器名>");
+                ui_log!(app_handle, info, "commands::start_environment", "");
+                ui_log!(app_handle, info, "commands::start_environment", "   方案 2: 修改 .env 文件中的端口配置");
+                ui_log!(app_handle, info, "commands::start_environment", "           例如：MYSQL_PORT=3307 (改为其他端口)");
+                ui_log!(app_handle, info, "commands::start_environment", "           然后重新应用配置");
+                ui_log!(app_handle, info, "commands::start_environment", "");
+                ui_log!(app_handle, info, "commands::start_environment", "   方案 3: 停止本地服务");
+                ui_log!(app_handle, info, "commands::start_environment", "           检查是否有本地 MySQL/Nginx/Redis 在运行");
+                ui_log!(app_handle, info, "commands::start_environment", "");
+                
+                // 提取具体冲突的端口信息
+                if let Some(line) = stderr_lines.iter().find(|l| l.contains("Bind for")) {
+                    ui_log!(app_handle, info, "commands::start_environment", "📍 详细信息: {}", line.trim());
+                }
+            } else {
+                ui_log!(app_handle, info, "commands::start_environment", "❌ Docker Compose 启动失败，退出码: {:?}", exit_code);
+                ui_log!(app_handle, info, "commands::start_environment", "");
+                ui_log!(app_handle, info, "commands::start_environment", "💡 建议检查：");
+                ui_log!(app_handle, info, "commands::start_environment", "   1. Docker Desktop 是否正常运行");
+                ui_log!(app_handle, info, "commands::start_environment", "   2. docker-compose.yml 文件格式是否正确");
+                ui_log!(app_handle, info, "commands::start_environment", "   3. 镜像是否存在或网络是否正常");
+            }
+            
+            let err_msg = format!("Docker Compose 启动失败: {}", 
+                if is_port_conflict { "端口冲突" } else { "未知错误" });
+            Err(err_msg)
+        }
+    } else {
+        // 旧版本不支持 --progress，使用前台模式实时显示进度
+        ui_log!(app_handle, info, "commands::start_environment", "🔧 执行: docker compose up (前台模式)");
+        ui_log!(app_handle, info, "commands::start_environment", "⏳ 正在启动服务，请稍候...");
+        ui_log!(app_handle, info, "commands::start_environment", "💡 提示：将实时显示拉取镜像和创建容器的进度");
+        ui_log!(app_handle, info, "commands::start_environment", "");
+        
+        // 不使用 -d 模式，让命令在前台运行以获取实时输出
+        let mut compose_cmd = Command::new("docker");
+        compose_cmd.args(&["compose", "up"])
+            .current_dir(&project_root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
         
-        let err_msg = format!("Docker Compose 启动失败: {}", 
-            if is_port_conflict { "端口冲突" } else { "未知错误" });
-        Err(err_msg)
+        let mut child = compose_cmd.spawn().map_err(|e| {
+                let err_msg = format!("执行 docker compose 失败: {e}");
+                ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
+                err_msg
+            })?;
+        
+        // 异步读取 stdout 和 stderr，实时推送日志到前端
+        let app_handle_clone = app_handle.clone();
+        let stderr_handle = app_handle.clone();
+        
+        // 先取出 stdout 和 stderr
+        let stdout_opt = child.stdout.take();
+        let stderr_opt = child.stderr.take();
+        
+        // 读取 stdout 线程
+        let stdout_thread = if let Some(stdout) = stdout_opt {
+            Some(std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stdout);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            if !line.is_empty() {
+                                // 解析关键进度信息
+                                let progress_msg = parse_docker_progress(&line);
+                                if let Some(msg) = progress_msg {
+                                    ui_log!(&app_handle_clone, info, "commands::start_environment", "📦 {}", msg);
+                                } else {
+                                    // 普通日志也显示
+                                    ui_log!(&app_handle_clone, info, "commands::start_environment", "   {}", line);
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+        
+        // 读取 stderr 线程
+        let stderr_thread = if let Some(stderr) = stderr_opt {
+            Some(std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            if !line.is_empty() {
+                                ui_log!(&stderr_handle, info, "commands::start_environment", "   ⚠️ {}", line);
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+        
+        // 等待线程完成
+        if let Some(thread) = stdout_thread {
+            thread.join().ok();
+        }
+        if let Some(thread) = stderr_thread {
+            thread.join().ok();
+        }
+        
+        let status = child.wait().map_err(|e| {
+            let err_msg = format!("等待 docker compose 完成失败: {e}");
+            ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
+            err_msg
+        })?;
+        
+        if status.success() {
+            ui_log!(app_handle, info, "commands::start_environment", "");
+            ui_log!(app_handle, info, "commands::start_environment", "✅ 所有服务启动成功！");
+            Ok("环境启动成功".to_string())
+        } else {
+            // 错误处理需要重新收集 stderr
+            ui_log!(app_handle, info, "commands::start_environment", "❌ Docker Compose 启动失败，退出码: {:?}", status.code());
+            Err(format!("Docker Compose 启动失败，退出码: {:?}", status.code()))
+        }
     }
 }
 

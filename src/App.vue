@@ -34,6 +34,7 @@ const showRestartConfirm = ref(false); // 控制重启确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
+const hasEnvFile = ref(false); // .env 文件是否存在
 
 // 判断是否有运行中的 ps- 容器
 const hasRunningContainers = computed(() => {
@@ -52,9 +53,9 @@ const hasStoppedContainers = computed(() => {
   return containers.value.some(c => !isRunning(String(c.state)));
 });
 
-// 判断是否可以启动（没有任何容器或所有容器都已停止）
+// 判断是否可以启动（没有任何容器或所有容器都已停止，且存在 .env 文件）
 const canStart = computed(() => {
-  return !hasRunningContainers.value;
+  return !hasRunningContainers.value && hasEnvFile.value;
 });
 
 // 判断是否可以重启（有运行中的容器）
@@ -274,8 +275,21 @@ const goToMirrorSettings = () => {
   activeTab.value = 'mirrors-unified';
 };
 
+// 检查 .env 文件是否存在
+const checkEnvFileExists = async () => {
+  try {
+    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
+    console.log('[App] .env 文件存在:', hasEnvFile.value);
+  } catch (e) {
+    console.error('[App] 检查配置文件失败:', e);
+    hasEnvFile.value = false;
+  }
+};
+
 onMounted(() => {
   refreshContainers();
+  checkEnvFileExists(); // 检查 .env 文件是否存在
   // 每 5 秒自动静默刷新一次
   setInterval(() => refreshContainers(true), 5000);
   
@@ -439,7 +453,7 @@ async function copyLogs() {
                 @click="handleStartEnvironment"
                 :disabled="!canStart || starting"
                 class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
-                :title="!canStart ? '有容器正在运行，请使用一键重启' : ''"
+                :title="!hasEnvFile ? '请先在环境配置页面进行配置' : (!canStart ? '有容器正在运行，请使用一键重启' : '')"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 {{ starting ? '启动中...' : '一键启动' }}
@@ -480,6 +494,23 @@ async function copyLogs() {
             class="px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-bold text-sm"
           >
             重试
+          </button>
+        </div>
+
+        <!-- No Env File Alert -->
+        <div v-if="!hasEnvFile" class="mb-8 p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-4 text-amber-400">
+          <div class="p-3 bg-amber-500/20 rounded-full text-amber-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div class="flex-1">
+            <h3 class="font-bold text-lg mb-1 text-amber-500">未检测到环境配置</h3>
+            <p class="text-sm opacity-90">首次使用需要先配置 PHP、MySQL、Nginx 等服务，然后才能启动环境。</p>
+          </div>
+          <button 
+            @click="activeTab = 'env-config'"
+            class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-bold text-sm whitespace-nowrap"
+          >
+            去配置环境
           </button>
         </div>
 

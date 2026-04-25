@@ -107,4 +107,24 @@ impl DockerManager {
         self.docker.restart_container(name, None::<RestartContainerOptions>).await?;
         Ok(())
     }
+
+    /// 检查所有 ps- 前缀的容器是否都处于 running 状态
+    pub async fn check_all_ps_containers_running(&self) -> Result<bool, String> {
+        let containers = self.list_ps_containers().await
+            .map_err(|e| format!("获取容器列表失败: {e}"))?;
+        
+        if containers.is_empty() {
+            return Ok(false);
+        }
+        
+        // 检查所有容器是否都是 running 状态
+        for container in &containers {
+            // state 字段是 "Some(RUNNING)" 或 "Some(EXITED)" 等格式
+            if !container.state.contains("RUNNING") {
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
+    }
 }

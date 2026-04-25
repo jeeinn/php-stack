@@ -24,6 +24,7 @@ interface Container {
 const containers = ref<Container[]>([]);
 const loading = ref(false);
 const starting = ref(false); // 启动环境时的加载状态
+const operationType = ref<'start' | 'restart' | 'stop' | null>(null); // 当前操作类型
 const logs = getLogs(); // 使用 composable 中的全局日志
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
@@ -102,6 +103,7 @@ const refreshContainers = async (silent = false) => {
   }
   try {
     const result = await invoke('list_containers') as Container[];
+    
     // 只有当内容真正改变时才更新，减少 DOM 抖动
     if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
       containers.value = result;
@@ -184,17 +186,23 @@ const handleStopEnvironment = async () => {
   // 自动打开日志面板
   showLogs.value = true;
   
+  operationType.value = 'stop';
   starting.value = true;
   addLog('🛑 开始一键停止环境...');
   
   try {
     await invoke('stop_environment');
     addLog('✅ 环境停止成功！');
+    
+    // 等待 1 秒让 Docker API 状态更新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     await refreshContainers();
   } catch (e: any) {
     addLog(`❌ 停止失败: ${e}`);
   } finally {
     starting.value = false;
+    operationType.value = null;
   }
 };
 
@@ -204,12 +212,17 @@ const confirmStart = async () => {
   // 自动打开日志面板
   showLogs.value = true;
   
+  operationType.value = 'start';
   starting.value = true;
   addLog('🚀 开始一键启动环境...');
   
   try {
     await invoke('start_environment');
     addLog('✅ 环境启动成功！');
+    
+    // 等待 1 秒让 Docker API 状态更新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     await refreshContainers();
   } catch (e: any) {
     const errorMsg = String(e);
@@ -234,6 +247,10 @@ const confirmStart = async () => {
         try {
           await invoke('start_environment');
           addLog('✅ 环境启动成功！');
+          
+          // 等待 1 秒让 Docker API 状态更新
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
           await refreshContainers();
         } catch (err) {
           addLog(`❌ 启动失败: ${err}`);
@@ -247,6 +264,7 @@ const confirmStart = async () => {
     }
   } finally {
     starting.value = false;
+    operationType.value = null;
   }
 };
 
@@ -256,17 +274,23 @@ const confirmRestart = async () => {
   // 自动打开日志面板
   showLogs.value = true;
   
+  operationType.value = 'restart';
   starting.value = true;
   addLog('🔄 开始一键重启环境...');
   
   try {
     await invoke('restart_environment');
     addLog('✅ 环境重启成功！');
+    
+    // 等待 1 秒让 Docker API 状态更新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     await refreshContainers();
   } catch (e: any) {
     addLog(`❌ 重启失败: ${e}`);
   } finally {
     starting.value = false;
+    operationType.value = null;
   }
 };
 
@@ -456,7 +480,7 @@ async function copyLogs() {
                 :title="!hasEnvFile ? '请先在环境配置页面进行配置' : (!canStart ? '有容器正在运行，请使用一键重启' : '')"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                {{ starting ? '启动中...' : '一键启动' }}
+                {{ operationType === 'start' ? '启动中...' : '一键启动' }}
               </button>
               <button 
                 @click="handleRestartEnvironment"
@@ -465,7 +489,7 @@ async function copyLogs() {
                 :title="!canRestart ? '没有运行中的容器，请使用一键启动' : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                {{ starting ? '重启中...' : '一键重启' }}
+                {{ operationType === 'restart' ? '重启中...' : '一键重启' }}
               </button>
               <button 
                 @click="handleStopEnvironment"
@@ -474,7 +498,7 @@ async function copyLogs() {
                 :title="!canStop ? '没有运行中的容器' : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
-                {{ starting ? '停止中...' : '一键停止' }}
+                {{ operationType === 'stop' ? '停止中...' : '一键停止' }}
               </button>
             </div>
           </div>

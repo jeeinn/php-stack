@@ -10,6 +10,18 @@ use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverr
 
 use crate::engine::workspace_manager::WorkspaceManager;
 
+/// 从完整镜像标签中提取 tag 部分
+/// 例如："php:8.2-fpm" -> "8.2-fpm", "mysql:8.0" -> "8.0", "redis:8.2-alpine" -> "8.2-alpine"
+fn extract_image_tag(full_tag: &str) -> String {
+    // 按 ':' 分割，取第二部分（tag）
+    if let Some(colon_pos) = full_tag.find(':') {
+        full_tag[colon_pos + 1..].to_string()
+    } else {
+        // 如果没有 ':'，直接返回原值
+        full_tag.to_string()
+    }
+}
+
 /// 获取项目根目录（优先读取 workspace.json）
 fn get_project_root() -> Result<std::path::PathBuf, String> {
     // 1. 尝试从 workspace.json 读取配置
@@ -117,15 +129,19 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     // 查找所有 PHPxx_VERSION 格式的键
     for (key, value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("PHP") {
-            // 提取版本号部分，如 PHP56_VERSION -> 56
+            // 提取索引部分，如 PHP56_VERSION -> 56
             let ver_part = &key[3..key.len() - 8]; // 去掉 "PHP" 和 "_VERSION"
             
-            // 跳过纯数字的（这些是版本号的一部分，如 PHP56）
             if ver_part.is_empty() {
                 continue;
             }
             
-            let version = value.clone();
+            // 存储完整标签（如 "php:8.2-fpm"）
+            let full_tag = value.clone();
+            
+            // 提取 tag 用于前端显示（如 "php:8.2-fpm" -> "8.2-fpm"）
+            let version = extract_image_tag(&full_tag);
+            
             let port_key = format!("PHP{ver_part}_HOST_PORT");
             let ext_key = format!("PHP{ver_part}_EXTENSIONS");
             
@@ -138,7 +154,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             services.push(crate::engine::config_generator::ServiceEntry {
                 service_type: crate::engine::config_generator::ServiceType::PHP,
-                version,
+                version,  // 纯版本号，用于前端匹配
                 host_port,
                 extensions,
             });
@@ -150,16 +166,20 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     let mut mysql_index = 0;
     for (key, value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("MYSQL") && !key.contains("ROOT") && !key.contains("USER") && !key.contains("PASSWORD") {
-            let version = value.clone();
+            // 存储完整标签（如 "mysql:8.0"）
+            let full_tag = value.clone();
             
-            // 提取索引部分，如 MYSQL84_VERSION -> 84, MYSQL_VERSION -> 空
+            // 提取索引部分，如 MYSQL84_VERSION -> 84
             let index_part = &key[5..key.len() - 8]; // 去掉 "MYSQL" 和 "_VERSION"
             
             if index_part.is_empty() {
-                continue; // 跳过无版本号的旧格式
+                continue;
             }
             
             let idx = index_part.parse::<usize>().unwrap_or(mysql_index);
+            
+            // 提取 tag 用于前端显示（如 "mysql:8.0" -> "8.0"）
+            let version = extract_image_tag(&full_tag);
             
             let port_key = format!("MYSQL{index_part}_HOST_PORT");
             
@@ -169,7 +189,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             services.push(crate::engine::config_generator::ServiceEntry {
                 service_type: crate::engine::config_generator::ServiceType::MySQL,
-                version,
+                version,  // 纯版本号，用于前端匹配
                 host_port,
                 extensions: None,
             });
@@ -191,8 +211,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
                 continue;
             }
             
-            // 将完整标签转换为纯版本号（如 "6.2-alpine" -> "6.2"）
-            let version = full_tag.split('-').next().unwrap_or(&full_tag).to_string();
+            // 提取 tag 用于前端显示（如 "redis:8.2-alpine" -> "8.2-alpine"）
+            let version = extract_image_tag(&full_tag);
             
             let port_key = format!("REDIS{index_part}_HOST_PORT");
             
@@ -222,8 +242,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
                 continue;
             }
             
-            // 将完整标签转换为纯版本号（如 "1.27-alpine" -> "1.27"）
-            let version = full_tag.split('-').next().unwrap_or(&full_tag).to_string();
+            // 提取 tag 用于前端显示（如 "nginx:1.28-alpine" -> "1.28-alpine"）
+            let version = extract_image_tag(&full_tag);
             
             let port_key = format!("NGINX{index_part}_HTTP_HOST_PORT");
             

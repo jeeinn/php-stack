@@ -1,3 +1,10 @@
+# MySQL 8.0 配置文件
+# 基于官方默认配置 + dnmp 优化
+# 生成时间: 2026-04-25
+# 参考来源: 
+#   - 官方: https://dev.mysql.com/doc/refman/8.0/en/server-configuration-defaults.html
+#   - dnmp: services/mysql/mysql-8.0.cnf
+
 [client]
 port                    = 3306
 default-character-set   = utf8mb4
@@ -6,24 +13,56 @@ default-character-set   = utf8mb4
 [mysqld]
 user                    = mysql
 port                    = 3306
+
+# SQL 模式
 sql_mode                = NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES
 
+# 存储引擎
 default-storage-engine  = InnoDB
+
+# 认证插件（MySQL 8.0 默认 caching_sha2_password）
+# 为了兼容性，保留 mysql_native_password 支持
 default-authentication-plugin   = mysql_native_password
+
+# 字符集配置
 character-set-server    = utf8mb4
 collation-server        = utf8mb4_unicode_ci
 init_connect            = 'SET NAMES utf8mb4'
 
+# 二进制日志（Docker 环境中通常禁用）
 disable-log-bin
+
+# 跳过字符集客户端握手
 skip-character-set-client-handshake
+
+# 显式时间戳默认值
 explicit_defaults_for_timestamp
 
-slow_query_log
+# 慢查询日志
+slow_query_log          = 1
 long_query_time         = 3
 slow-query-log-file     = /var/log/mysql/mysql.slow.log
+
+# 错误日志
 log-error               = /var/log/mysql/mysql.error.log
 
+# 时区设置
 default-time-zone       = '+8:00'
+
+# InnoDB 性能优化
+innodb_buffer_pool_size = 128M
+innodb_log_buffer_size  = 16M
+innodb_io_capacity      = 2000
+
+# 连接数限制
+max_connections         = 151
+
+# 跳过名称解析（提高性能）
+skip-name-resolve       = 1
+
+# 等待超时
+wait_timeout            = 28800
+interactive_timeout     = 28800
 
 [mysql]
 default-character-set   = utf8mb4

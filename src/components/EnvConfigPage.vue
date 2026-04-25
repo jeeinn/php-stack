@@ -43,6 +43,7 @@ const hasEnvFile = ref(false);  // .env 文件是否存在
 // Nginx 配置提示状态
 const showNginxHint = ref(false);
 const phpContainerNames = ref<string[]>([]);
+const nginxServicesList = ref<Array<{ name: string; version: string; port?: number }>>([]); // 存储所有 Nginx 服务信息
 const showStartConfirm = ref(false);
 
 // Load existing config on mount
@@ -133,16 +134,20 @@ async function loadVersionMappings() {
   }
 }
 
-// 辅助函数：确保版本在列表中，如果不存在则添加
-function ensureVersionInList(versions: VersionInfo[], version: string): void {
+// 辅助函数：确保版本在列表中，如果不存在则创建
+// version 参数是镜像 tag（如 "8.2-fpm", "8.0", "8.2-alpine"）
+function ensureVersionInList(versions: VersionInfo[], version: string, serviceType: string): void {
+  // 直接匹配 version 字段
   if (!versions.find(v => v.version === version)) {
-    // 从其他列表中查找或创建默认项
-    const existing = [...phpVersions.value, ...mysqlVersions.value, ...redisVersions.value, ...nginxVersions.value]
-      .find(v => v.version === version);
-    if (existing) {
-      versions.push(existing);
-      console.log(`[EnvConfig] 动态添加版本到列表: ${version}`);
-    }
+    // 如果不存在，创建一个新版本项
+    const newVersion: VersionInfo = {
+      version: version,
+      tag: version,
+      full_name: `${serviceType.toLowerCase()}:${version}`,
+      eol: false, // 默认标记为未停止维护
+    };
+    versions.push(newVersion);
+    console.log(`[EnvConfig] 动态添加版本: ${version} (${serviceType})`);
   }
 }
 
@@ -229,19 +234,19 @@ async function loadExistingConfig() {
         if (s.service_type === 'PHP') {
           phpSvcs.push({ ...s, extensions: s.extensions ? [...s.extensions] : [] });
           // 确保 PHP 版本在列表中
-          ensureVersionInList(phpVersions.value, s.version);
+          ensureVersionInList(phpVersions.value, s.version, 'PHP');
         } else if (s.service_type === 'MySQL') {
           mysqlSvcs.push({ ...s });
           // 确保 MySQL 版本在列表中
-          ensureVersionInList(mysqlVersions.value, s.version);
+          ensureVersionInList(mysqlVersions.value, s.version, 'MySQL');
         } else if (s.service_type === 'Redis') {
           redisSvcs.push({ ...s });
           // 确保 Redis 版本在列表中
-          ensureVersionInList(redisVersions.value, s.version);
+          ensureVersionInList(redisVersions.value, s.version, 'Redis');
         } else if (s.service_type === 'Nginx') {
           nginxSvcs.push({ ...s });
           // 确保 Nginx 版本在列表中
-          ensureVersionInList(nginxVersions.value, s.version);
+          ensureVersionInList(nginxVersions.value, s.version, 'Nginx');
         }
       });
       
@@ -534,6 +539,17 @@ async function handleApply() {
         const ver = service.version.replace(/\./g, '');
         return `ps-php${ver}:9000`;
       });
+      
+      // 获取所有 Nginx 服务的信息
+      nginxServicesList.value = nginxServices.value.map(service => {
+        const ver = service.version.replace(/\./g, '');
+        return {
+          name: `nginx${ver}`,
+          version: service.version,
+          port: service.port
+        };
+      });
+      
       showNginxHint.value = true;
     }
   } catch (e) {
@@ -544,13 +560,16 @@ async function handleApply() {
 }
 
 // 打开 Nginx 配置目录
-async function openNginxConfigDir() {
+async function openNginxConfigDir(serviceName?: string) {
   try {
-    await invoke('open_service_config', { serviceName: 'nginx127' });
-    showToast('已打开 Nginx 配置目录', 'success');
+    // 如果没有指定服务名，默认打开第一个 Nginx 的配置目录
+    const targetService = serviceName || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
+    await invoke('open_service_config', { serviceName: targetService });
+    showToast(`已打开 ${targetService} 配置目录`, 'success');
   } catch (e) {
     console.error('打开目录失败:', e);
-    showToast('打开目录失败，请手动打开 services/nginx127/conf.d/', 'error');
+    const targetService = serviceName || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
+    showToast(`打开目录失败，请手动打开 services/${targetService}/conf.d/`, 'error');
   }
 }
 
@@ -620,7 +639,7 @@ const goToMirrorSettings = () => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="text-base font-semibold text-blue-300 mb-2">⚙️ Nginx 配置提醒</h3>
+          <h3 class="text-base font-semibold text-blue-300 mb-2">Nginx 配置提醒</h3>
           <p class="text-sm text-slate-300 mb-3">
             检测到您同时启用了 PHP 和 Nginx 服务。Nginx 需要配置正确的 PHP-FPM 上游地址。
           </p>
@@ -635,18 +654,46 @@ const goToMirrorSettings = () => {
             </div>
           </div>
           
+          <!-- 多 Nginx 版本提示 -->
+          <div v-if="nginxServicesList.length > 1" class="bg-amber-900/20 rounded-lg p-3 mb-3 border border-amber-500/20">
+            <p class="text-xs text-amber-300 mb-2">⚠️ 检测到多个 Nginx 版本：</p>
+            <div class="space-y-2">
+              <div v-for="(nginx, index) in nginxServicesList" :key="index" class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-500 font-mono">{{ index + 1 }}.</span>
+                  <code class="text-sm text-blue-400 font-mono">{{ nginx.name }}</code>
+                  <span class="text-xs text-slate-500">(v{{ nginx.version }})</span>
+                  <span v-if="nginx.port" class="text-xs text-slate-500">- 端口 {{ nginx.port }}</span>
+                </div>
+                <button
+                  @click="openNginxConfigDir(nginx.name)"
+                  class="sm:ml-auto px-3 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs transition border border-blue-600/30 whitespace-nowrap"
+                >
+                  打开配置目录
+                </button>
+              </div>
+            </div>
+          </div>
+          
           <div class="space-y-2 text-sm text-slate-300">
             <p><strong class="text-blue-300">配置步骤：</strong></p>
             <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-400">
-              <li>编辑文件：<code class="text-xs bg-slate-800 px-1 rounded">services/nginx127/conf.d/default.conf</code></li>
-              <li>找到 <code class="text-xs bg-slate-800 px-1 rounded">fastcgi_pass</code> 行</li>
+              <li v-if="nginxServicesList.length === 1">
+                编辑文件：<code class="text-xs bg-slate-800 px-1 rounded">services/{{ nginxServicesList[0].name }}/conf.d/default.conf</code>
+              </li>
+              <li v-else>
+                为每个 Nginx 版本编辑对应的配置文件（见上方列表）
+              </li>
+              <li>找到 <code class="text-xs bg-slate-800 px-1 rounded">fastcgi_pass</code> 行（默认值为 <code class="text-xs bg-slate-800 px-1 rounded">php:9000</code>）</li>
               <li>修改为：<code class="text-xs bg-slate-800 px-1 rounded text-emerald-400">fastcgi_pass [容器地址];</code>（选择上面的某个容器地址，如 <code class="text-emerald-400">ps-php85:9000</code>）</li>
+              <li class="text-xs text-slate-500 mt-1">💡 提示：如果使用了多个 PHP 版本，可以为不同的 server 块配置不同的 fastcgi_pass 地址</li>
             </ol>
           </div>
           
           <div class="mt-4 flex flex-col sm:flex-row gap-2">
             <button
-              @click="openNginxConfigDir"
+              v-if="nginxServicesList.length === 1"
+              @click="openNginxConfigDir()"
               class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

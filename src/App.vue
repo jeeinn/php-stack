@@ -24,6 +24,7 @@ interface Container {
 const containers = ref<Container[]>([]);
 const loading = ref(false);
 const starting = ref(false); // 启动环境时的加载状态
+const operationType = ref<'start' | 'restart' | 'stop' | null>(null); // 当前操作类型
 const logs = getLogs(); // 使用 composable 中的全局日志
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
@@ -34,6 +35,7 @@ const showRestartConfirm = ref(false); // 控制重启确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
+const hasEnvFile = ref(false); // .env 文件是否存在
 
 // 判断是否有运行中的 ps- 容器
 const hasRunningContainers = computed(() => {
@@ -52,9 +54,9 @@ const hasStoppedContainers = computed(() => {
   return containers.value.some(c => !isRunning(String(c.state)));
 });
 
-// 判断是否可以启动（没有任何容器或所有容器都已停止）
+// 判断是否可以启动（没有任何容器或所有容器都已停止，且存在 .env 文件）
 const canStart = computed(() => {
-  return !hasRunningContainers.value;
+  return !hasRunningContainers.value && hasEnvFile.value;
 });
 
 // 判断是否可以重启（有运行中的容器）
@@ -101,6 +103,7 @@ const refreshContainers = async (silent = false) => {
   }
   try {
     const result = await invoke('list_containers') as Container[];
+    
     // 只有当内容真正改变时才更新，减少 DOM 抖动
     if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
       containers.value = result;
@@ -183,17 +186,23 @@ const handleStopEnvironment = async () => {
   // 自动打开日志面板
   showLogs.value = true;
   
+  operationType.value = 'stop';
   starting.value = true;
   addLog('🛑 开始一键停止环境...');
   
   try {
     await invoke('stop_environment');
     addLog('✅ 环境停止成功！');
+    
+    // 等待 1 秒让 Docker API 状态更新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     await refreshContainers();
   } catch (e: any) {
     addLog(`❌ 停止失败: ${e}`);
   } finally {
     starting.value = false;
+    operationType.value = null;
   }
 };
 
@@ -203,12 +212,17 @@ const confirmStart = async () => {
   // 自动打开日志面板
   showLogs.value = true;
   
+  operationType.value = 'start';
   starting.value = true;
   addLog('🚀 开始一键启动环境...');
   
   try {
     await invoke('start_environment');
     addLog('✅ 环境启动成功！');
+    
+    // 等待 1 秒让 Docker API 状态更新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     await refreshContainers();
   } catch (e: any) {
     const errorMsg = String(e);
@@ -233,6 +247,10 @@ const confirmStart = async () => {
         try {
           await invoke('start_environment');
           addLog('✅ 环境启动成功！');
+          
+          // 等待 1 秒让 Docker API 状态更新
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
           await refreshContainers();
         } catch (err) {
           addLog(`❌ 启动失败: ${err}`);
@@ -246,6 +264,7 @@ const confirmStart = async () => {
     }
   } finally {
     starting.value = false;
+    operationType.value = null;
   }
 };
 
@@ -255,17 +274,23 @@ const confirmRestart = async () => {
   // 自动打开日志面板
   showLogs.value = true;
   
+  operationType.value = 'restart';
   starting.value = true;
   addLog('🔄 开始一键重启环境...');
   
   try {
     await invoke('restart_environment');
     addLog('✅ 环境重启成功！');
+    
+    // 等待 1 秒让 Docker API 状态更新
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
     await refreshContainers();
   } catch (e: any) {
     addLog(`❌ 重启失败: ${e}`);
   } finally {
     starting.value = false;
+    operationType.value = null;
   }
 };
 
@@ -274,8 +299,21 @@ const goToMirrorSettings = () => {
   activeTab.value = 'mirrors-unified';
 };
 
+// 检查 .env 文件是否存在
+const checkEnvFileExists = async () => {
+  try {
+    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
+    console.log('[App] .env 文件存在:', hasEnvFile.value);
+  } catch (e) {
+    console.error('[App] 检查配置文件失败:', e);
+    hasEnvFile.value = false;
+  }
+};
+
 onMounted(() => {
   refreshContainers();
+  checkEnvFileExists(); // 检查 .env 文件是否存在
   // 每 5 秒自动静默刷新一次
   setInterval(() => refreshContainers(true), 5000);
   
@@ -439,10 +477,10 @@ async function copyLogs() {
                 @click="handleStartEnvironment"
                 :disabled="!canStart || starting"
                 class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
-                :title="!canStart ? '有容器正在运行，请使用一键重启' : ''"
+                :title="!hasEnvFile ? '请先在环境配置页面进行配置' : (!canStart ? '有容器正在运行，请使用一键重启' : '')"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                {{ starting ? '启动中...' : '一键启动' }}
+                {{ operationType === 'start' ? '启动中...' : '一键启动' }}
               </button>
               <button 
                 @click="handleRestartEnvironment"
@@ -451,7 +489,7 @@ async function copyLogs() {
                 :title="!canRestart ? '没有运行中的容器，请使用一键启动' : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                {{ starting ? '重启中...' : '一键重启' }}
+                {{ operationType === 'restart' ? '重启中...' : '一键重启' }}
               </button>
               <button 
                 @click="handleStopEnvironment"
@@ -460,7 +498,7 @@ async function copyLogs() {
                 :title="!canStop ? '没有运行中的容器' : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
-                {{ starting ? '停止中...' : '一键停止' }}
+                {{ operationType === 'stop' ? '停止中...' : '一键停止' }}
               </button>
             </div>
           </div>
@@ -480,6 +518,23 @@ async function copyLogs() {
             class="px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-bold text-sm"
           >
             重试
+          </button>
+        </div>
+
+        <!-- No Env File Alert -->
+        <div v-if="!hasEnvFile" class="mb-8 p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-4 text-amber-400">
+          <div class="p-3 bg-amber-500/20 rounded-full text-amber-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div class="flex-1">
+            <h3 class="font-bold text-lg mb-1 text-amber-500">未检测到环境配置</h3>
+            <p class="text-sm opacity-90">首次使用需要先配置 PHP、MySQL、Nginx 等服务，然后才能启动环境。</p>
+          </div>
+          <button 
+            @click="activeTab = 'env-config'"
+            class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-bold text-sm whitespace-nowrap"
+          >
+            去配置环境
           </button>
         </div>
 

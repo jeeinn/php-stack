@@ -570,6 +570,317 @@ describe('addLog', () => {
 
 ---
 
+### 3.0.6 容器启动智能等待机制 (Smart Container Startup Wait)
+
+**版本**: v0.1.1 (2026-04-25)  
+**问题**: 修复启动后按钮状态卡死问题  
+**影响模块**: `commands.rs`, `docker/manager.rs`
+
+#### 1. 问题背景
+
+**现象**:
+- 用户点击“一键启动”后，容器成功启动
+- 但前端按钮一直显示“启动中...”，无法恢复为“一键启动”
+- 即使手动刷新页面，按钮状态仍然卡死
+
+**根本原因**:
+```rust
+// ❌ 旧代码（前台模式）
+docker compose up  // 不带 -d，前台运行
+
+let mut child = Command::new("docker")
+    .args(&["compose", "up"])
+    .spawn()?;
+
+let status = child.wait()?;  // 💀 永久阻塞！
+```
+
+**问题分析**:
+1. `docker compose up` 不带 `-d` 会以前台模式运行
+2. 命令持续输出容器日志，永不退出
+3. `child.wait()` 永远等待，函数永不返回
+4. 前端的 `await invoke('start_environment')` 永远挂起
+5. `finally` 块永不执行 → **按钮状态卡死**
+
+#### 2. 解决方案架构
+
+**核心思路**: 将后台启动和日志流分离
+
+```mermaid
+sequenceDiagram
+    participant FE as 前端 (App.vue)
+    participant CMD as commands.rs
+    participant DM as DockerManager
+    participant DC as Docker Compose
+    participant LOGS as docker logs -f
+
+    FE->>CMD: invoke('start_environment')
+    CMD->>DC: docker compose up -d (后台启动)
+    DC-->>CMD: 立即返回
+    CMD->>CMD: ✅ 容器已在后台启动
+    
+    CMD->>LOGS: docker compose logs -f (流式日志)
+    LOGS-->>CMD: 开始输出日志
+    
+    Note over CMD,DM: 智能等待循环
+    loop 每 2 秒检查一次
+        CMD->>DM: check_all_ps_containers_running()
+        DM->>DC: list_ps_containers()
+        DC-->>DM: 返回容器状态
+        DM-->>CMD: 是否全部 running?
+        
+        alt 所有容器就绪
+            CMD->>CMD: ✅ 所有容器已就绪
+            CMD->>LOGS: kill() 终止日志进程
+            CMD-->>FE: return Ok("环境启动成功")
+            FE->>FE: finally 块执行
+            FE->>FE: 更新按钮状态 ✅
+        else logs 进程异常退出
+            CMD->>CMD: ❌ 检测到错误
+            CMD-->>FE: return Err("容器启动失败")
+            FE->>FE: catch 错误 + finally 执行
+            FE->>FE: 更新按钮状态 ✅
+        end
+    end
+```
+
+#### 3. 技术实现
+
+##### 3.1 新增容器状态检查方法
+
+**文件**: `src-tauri/src/docker/manager.rs`
+
+```rust
+/// 检查所有 ps- 前缀的容器是否都处于 running 状态
+pub async fn check_all_ps_containers_running(&self) -> Result<bool, String> {
+    let containers = self.list_ps_containers().await
+        .map_err(|e| format!("获取容器列表失败: {e}"))?;
+    
+    if containers.is_empty() {
+        return Ok(false);
+    }
+    
+    // 检查所有容器是否都是 running 状态
+    for container in &containers {
+        // state 字段是 "Some(RUNNING)" 或 "Some(EXITED)" 等格式
+        if !container.state.contains("RUNNING") {
+            return Ok(false);
+        }
+    }
+    
+    Ok(true)
+}
+```
+
+**设计要点**:
+- 复用现有的 `list_ps_containers()` 方法
+- 解析 `state` 字段（格式为 `"Some(RUNNING)"`）
+- 空容器列表返回 `false`（尚未创建）
+
+##### 3.2 智能等待循环（双重保险）
+
+**文件**: `src-tauri/src/commands.rs`
+
+```rust
+// 第三步：智能等待容器就绪
+ui_log!(app_handle, info, "commands::start_environment", "⏳ 等待容器就绪...");
+
+// 创建 DockerManager 实例
+let docker_manager = DockerManager::new()?;
+
+// 智能等待循环
+loop {
+    // ✅ 保险 1：检查所有容器是否就绪
+    match docker_manager.check_all_ps_containers_running().await {
+        Ok(true) => {
+            ui_log!(app_handle, info, "commands::start_environment", "✅ 所有容器已就绪");
+            break;
+        }
+        Ok(false) => {
+            // 继续等待
+        }
+        Err(e) => {
+            ui_log!(app_handle, warn, "commands::start_environment", "⚠️ 检查容器状态失败: {}", e);
+        }
+    }
+    
+    // ⚠️ 保险 2：检查 logs 进程是否还活着
+    if let Ok(Some(status)) = child.try_wait() {
+        if !status.success() {
+            ui_log!(app_handle, info, "commands::start_environment", "❌ 日志进程异常退出，启动可能失败");
+            return Err("容器启动失败".to_string());
+        }
+        // logs 正常退出（容器已停止）
+        ui_log!(app_handle, info, "commands::start_environment", "⚠️ 日志进程已退出，检查容器状态...");
+        break;
+    }
+    
+    // 每 2 秒检查一次
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+}
+
+// 终止日志输出进程
+let _ = child.kill();
+
+ui_log!(app_handle, info, "commands::start_environment", "✅ 环境启动成功！");
+Ok("环境启动成功".to_string())
+```
+
+**双重保险机制**:
+
+| 保险 | 检测目标 | 触发条件 | 处理方式 |
+|------|---------|---------|----------|
+| **保险 1** | 容器状态 | 所有 ps- 容器进入 `running` 状态 | `break` → 正常返回 ✅ |
+| **保险 2** | logs 进程 | `logs -f` 进程退出 | 检查退出码：<br>- 非零 → `return Err` ❌<br>- 零 → `break` ⚠️ |
+
+**为什么没有超时保护？**
+- ✅ 让 Docker 自然报错更合理
+- ✅ 用户能看到完整的启动过程（pull/build 可能需要几分钟）
+- ✅ 极端情况下用户会手动关闭软件
+- ✅ 简化逻辑，减少复杂度
+
+#### 4. 场景分析
+
+##### 场景 1：正常快速启动（几秒）
+```
+t=0s:   docker compose up -d          ← 立即返回
+t=0s:   docker compose logs -f        ← 开始输出日志
+t=2s:   check_all_ps_containers_running() → false
+t=4s:   check_all_ps_containers_running() → true ✅
+        break;
+        child.kill();
+        return Ok("环境启动成功");     ← 按钮更新 ✅
+```
+
+##### 场景 2：首次启动（pull/build，几分钟）
+```
+t=0s:   docker compose up -d          ← 立即返回
+t=0s:   docker compose logs -f        ← 显示 "Pulling mysql..."
+t=2s:   check_all_ps_containers_running() → false
+t=4s:   check_all_ps_containers_running() → false
+...     (持续显示 pull 进度)
+t=180s: check_all_ps_containers_running() → true ✅
+        break;
+        return Ok("环境启动成功");     ← 按钮更新 ✅
+```
+
+##### 场景 3：启动失败（Docker 报错）
+```
+t=0s:   docker compose up -d          ← 立即返回
+t=0s:   docker compose logs -f        ← 开始输出日志
+t=2s:   check_all_ps_containers_running() → false
+t=4s:   Docker 输出 "Error: port already allocated"
+t=4s:   logs -f 进程退出（非零退出码）
+t=6s:   child.try_wait() → Some(status)
+        status.success() == false ❌
+        return Err("容器启动失败");   ← 前端 catch 错误，finally 执行 ✅
+```
+
+#### 5. 关键技术决策
+
+##### 5.1 为什么采用后台启动 + 日志流分离？
+
+**对比分析**:
+
+| 方案 | 优点 | 缺点 |
+|------|------|------|
+| **前台模式** (`docker compose up`) | 简单直接 | ❌ `wait()` 永久阻塞<br>❌ 函数永不返回<br>❌ 按钮状态卡死 |
+| **后台模式** (`docker compose up -d`) | ✅ 立即返回<br>✅ 函数能完成 | ❌ 无实时日志反馈 |
+| **混合方案** (后台启动 + logs -f) | ✅ 立即返回<br>✅ 实时日志<br>✅ 可控时长 | 稍复杂 |
+
+**选择混合方案的原因**:
+1. **解决根本问题**：函数能正常返回，触发前端 finally 块
+2. **保留用户体验**：实时显示容器日志（满足用户需求）
+3. **灵活控制**：可以智能判断何时停止日志输出
+
+##### 5.2 为什么不设置硬超时？
+
+**考虑因素**:
+- **长时启动场景**：首次启动需要 pull 镜像、build 容器，可能需要 5-10 分钟
+- **用户体验**：用户希望看到完整的启动过程
+- **错误处理**：Docker 会在出错时自然退出，无需额外超时
+- **极端情况**：如果真的卡死，用户会手动关闭软件
+
+**权衡结果**:
+- ✅ 不设置硬超时，让 Docker 自然报错
+- ✅ 通过 logs 进程监控捕获错误
+- ✅ 简化逻辑，减少误判
+
+##### 5.3 为什么每 2 秒检查一次？
+
+**频率权衡**:
+
+| 间隔 | 优点 | 缺点 |
+|------|------|------|
+| 0.5 秒 | 响应快 | ❌ Docker API 调用频繁<br>❌ 性能开销大 |
+| **2 秒** | ✅ 平衡响应速度和性能<br>✅ 足够感知容器状态变化 | 轻微延迟 |
+| 5 秒 | 性能最优 | ❌ 响应慢<br>❌ 用户体验差 |
+
+**选择 2 秒的原因**:
+- 容器状态变化通常在几秒内完成
+- 对 Docker API 的压力适中
+- 用户体验流畅，无明显延迟感
+
+##### 5.4 为什么不等待日志线程结束？
+
+**旧代码的问题**:
+```rust
+// ❌ 错误做法
+if let Some(t) = stdout_thread {
+    t.join().ok();  // 💀 可能永久阻塞
+}
+```
+
+**问题分析**:
+- `join()` 会阻塞当前线程，等待子线程结束
+- 子线程在读取 `stdout/stderr`，等待 EOF
+- 如果 `logs -f` 进程被 kill，但管道未完全关闭，线程可能卡在 `read()` 上
+- 导致函数无法返回
+
+**正确做法**:
+```rust
+// ✅ 正确做法
+let _ = child.kill();  // 终止进程
+// 不等待线程 join，让它们自然退出
+return Ok("环境启动成功".to_string());
+```
+
+**原理**:
+- `child.kill()` 会关闭进程的 stdin/stdout/stderr
+- 子线程读到 EOF 后会自动退出
+- 不需要显式等待，避免阻塞
+
+#### 6. 相关文件清单
+
+| 文件 | 修改内容 |
+|------|----------|
+| `src-tauri/src/docker/manager.rs` | 新增 `check_all_ps_containers_running()` 方法 |
+| `src-tauri/src/commands.rs` | 重构前台模式启动逻辑，实现智能等待循环 |
+| `src/App.vue` | （之前的修改）按钮交互优化 |
+
+#### 7. 测试建议
+
+**手动测试场景**:
+1. **快速重启**：容器已存在，点击“一键重启”，观察按钮状态是否正确更新
+2. **首次启动**：删除所有容器后启动，观察 pull/build 过程中的日志输出和按钮状态
+3. **端口冲突**：故意制造端口冲突，观察错误提示和按钮状态
+4. **长时间运行**：连续启动/停止 10 次，确认无内存泄漏或状态异常
+
+**自动化测试**（待实现）:
+```rust
+#[tokio::test]
+async fn test_check_all_ps_containers_running() {
+    let manager = DockerManager::new().unwrap();
+    
+    // 测试空容器列表
+    assert_eq!(manager.check_all_ps_containers_running().await.unwrap(), false);
+    
+    // TODO: 创建测试容器后验证
+}
+```
+
+---
+
 ### 3.1 环境配置与启动流程（主要流程）
 
 #### 3.1.1 配置应用与备份机制

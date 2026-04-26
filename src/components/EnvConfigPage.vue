@@ -546,7 +546,7 @@ async function handleApply() {
         return {
           name: `nginx${ver}`,
           version: service.version,
-          port: service.port
+          port: service.host_port
         };
       });
       

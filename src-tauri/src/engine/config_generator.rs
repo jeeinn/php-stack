@@ -47,26 +47,6 @@ enum BackupState {
 }
 
 impl ConfigGenerator {
-    /// Get project root directory (parent of src-tauri)
-    fn get_project_root() -> std::path::PathBuf {
-        if cfg!(debug_assertions) {
-            // 开发模式：项目根目录（src-tauri 的父目录）
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // target/debug/
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // target/
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // src-tauri/
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // 项目根目录/
-                .unwrap_or(std::path::PathBuf::from("."))
-        } else {
-            // 生产模式：可执行文件所在目录
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .unwrap_or(std::path::PathBuf::from("."))
-        }
-    }
-
     /// Validate config: check for port conflicts.
     /// Returns Err with message containing conflicting port and service names.
     pub fn validate(config: &EnvConfig) -> Result<(), String> {
@@ -112,7 +92,8 @@ impl ConfigGenerator {
     /// Also merges mirror configuration from .user_mirror_config.json.
     ///
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql84").
-    pub fn generate_env(config: &EnvConfig, existing_env: Option<&EnvFile>) -> EnvFile {
+    /// `project_root` is the user's workspace directory where `.user_version_overrides.json` resides.
+    pub fn generate_env(config: &EnvConfig, existing_env: Option<&EnvFile>, project_root: &Path) -> EnvFile {
         // Collect all managed keys so we know what NOT to treat as custom
         let managed_keys = Self::managed_keys(config);
 
@@ -124,8 +105,7 @@ impl ConfigGenerator {
 
         // Create manifest and override manager ONCE at method start
         let manifest = VersionManifest::new();
-        let project_root = Self::get_project_root();
-        let override_manager = UserOverrideManager::new(&project_root);
+        let override_manager = UserOverrideManager::new(project_root);
 
         // Set global variables
         env.set("SOURCE_DIR", &config.source_dir);
@@ -877,7 +857,7 @@ impl ConfigGenerator {
         };
 
         // Generate and write .env
-        let env_file = Self::generate_env(config, existing_env.as_ref());
+        let env_file = Self::generate_env(config, existing_env.as_ref(), project_root);
         std::fs::write(&env_path, env_file.format())
             .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
 
@@ -1052,7 +1032,8 @@ mod tests {
     #[test]
     fn test_generate_env_basic() {
         let config = make_basic_config();
-        let env = ConfigGenerator::generate_env(&config, None);
+        let temp_dir = std::env::temp_dir();
+        let env = ConfigGenerator::generate_env(&config, None, &temp_dir);
         let map = env.to_map();
 
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
@@ -1100,7 +1081,7 @@ mod tests {
             mysql_root_password: None,
         };
 
-        let env = ConfigGenerator::generate_env(&config, Some(&existing_env));
+        let env = ConfigGenerator::generate_env(&config, Some(&existing_env), &std::env::temp_dir());
         let map = env.to_map();
 
         // Custom variable preserved
@@ -1133,7 +1114,7 @@ mod tests {
             mysql_root_password: None,
         };
 
-        let env = ConfigGenerator::generate_env(&config, None);
+        let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());
         let map = env.to_map();
 
         // PHP 7.4 vars (full image tag)
@@ -1220,7 +1201,7 @@ mod tests {
             mysql_root_password: Some("mypassword123".to_string()),
         };
 
-        let env = ConfigGenerator::generate_env(&config, None);
+        let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());
         let map = env.to_map();
 
         assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "mypassword123");
@@ -1241,7 +1222,7 @@ mod tests {
             mysql_root_password: None,
         };
 
-        let env = ConfigGenerator::generate_env(&config, None);
+        let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());
         let map = env.to_map();
 
         assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "root");

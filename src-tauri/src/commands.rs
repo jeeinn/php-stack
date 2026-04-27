@@ -371,7 +371,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
 /// 生成 .env 文件内容预览
 #[tauri::command]
 pub fn generate_env_config(config: EnvConfig) -> Result<String, String> {
-    let env_file = ConfigGenerator::generate_env(&config, None);
+    let project_root = get_project_root()?;
+    let env_file = ConfigGenerator::generate_env(&config, None, &project_root);
     Ok(env_file.format())
 }
 

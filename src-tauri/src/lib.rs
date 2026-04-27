@@ -33,6 +33,7 @@ pub fn run() {
             
             app.handle().plugin(tauri_plugin_dialog::init())?;
             app.handle().plugin(tauri_plugin_clipboard_manager::init())?;
+            app.handle().plugin(tauri_plugin_shell::init())?;
             Ok(())
         })
     .invoke_handler(tauri::generate_handler![

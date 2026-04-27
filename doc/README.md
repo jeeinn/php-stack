@@ -1,7 +1,7 @@
 # PHP-Stack 文档中心
 
-> **版本**: v0.1.0  
-> **最后更新**: 2026-04-25
+> **版本**: v0.2.0  
+> **最后更新**: 2026-04-27
 
 本文档中心整理了 PHP-Stack 项目的所有技术文档，按类别组织以便于查找和维护。
 
@@ -13,12 +13,33 @@
 
 系统设计和架构相关文档：
 
-- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) - 系统架构文档（核心）
+- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) - 系统架构文档（入口）
+  - 项目概述与技术栈
   - 系统架构图
-  - 核心工作流程
-  - 模块详细说明
-  - 数据流图
-  - 关键技术决策
+  - 模块概览与核心数据结构
+  - 数据流概览
+  - 文件结构
+
+- [WORKFLOWS.md](architecture/WORKFLOWS.md) - 核心工作流程
+  - 工作目录初始化
+  - 环境配置与启动流程
+  - 版本映射查询流程
+  - 备份与恢复流程
+
+- [LOGGING.md](architecture/LOGGING.md) - 日志与启动系统
+  - 三层日志架构
+  - 实时日志推送与自动滚动
+  - 容器启动智能等待机制
+
+- [DECISIONS.md](architecture/DECISIONS.md) - 关键技术决策 (ADR)
+  - 版本清单设计、用户覆盖机制
+  - ZIP 备份、动态镜像切换
+  - version_manifest.json 扁平化重构
+
+- [EXTENSION_GUIDE.md](architecture/EXTENSION_GUIDE.md) - 扩展指南
+  - 添加新服务版本
+  - 用户自定义标签
+  - 添加新 Command
 
 ### 💻 实现文档 (implementation/)
 

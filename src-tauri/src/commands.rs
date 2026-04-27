@@ -10,18 +10,6 @@ use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverr
 
 use crate::engine::workspace_manager::WorkspaceManager;
 
-/// 从完整镜像标签中提取 tag 部分
-/// 例如："php:8.2-fpm" -> "8.2-fpm", "mysql:8.0" -> "8.0", "redis:8.2-alpine" -> "8.2-alpine"
-fn extract_image_tag(full_tag: &str) -> String {
-    // 按 ':' 分割，取第二部分（tag）
-    if let Some(colon_pos) = full_tag.find(':') {
-        full_tag[colon_pos + 1..].to_string()
-    } else {
-        // 如果没有 ':'，直接返回原值
-        full_tag.to_string()
-    }
-}
-
 /// 获取项目根目录（优先读取 workspace.json）
 fn get_project_root() -> Result<std::path::PathBuf, String> {
     // 1. 尝试从 workspace.json 读取配置
@@ -219,22 +207,25 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     // 解析服务配置
     let mut services: Vec<crate::engine::config_generator::ServiceEntry> = Vec::new();
     
+    // 创建 VersionManifest 用于 env prefix 反查
+    let manifest = VersionManifest::new();
+    
     // 解析 PHP 服务（支持多版本）
     // 查找所有 PHPxx_VERSION 格式的键
-    for (key, value) in &env_map {
+    for (key, _value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("PHP") {
-            // 提取索引部分，如 PHP56_VERSION -> 56
+            // 提取前缀，如 PHP82_VERSION → PHP82
+            let prefix = &key[..key.len() - 8]; // 去掉 "_VERSION"
             let ver_part = &key[3..key.len() - 8]; // 去掉 "PHP" 和 "_VERSION"
             
             if ver_part.is_empty() {
                 continue;
             }
             
-            // 存储完整标签（如 "php:8.2-fpm"）
-            let full_tag = value.clone();
-            
-            // 提取 tag 用于前端显示（如 "php:8.2-fpm" -> "8.2-fpm"）
-            let version = extract_image_tag(&full_tag);
+            // 使用 manifest 反查 ID，如 "PHP82" → "php82"
+            let version = manifest.find_entry_by_env_prefix(&VmServiceType::Php, prefix)
+                .map(|(id, _)| id.clone())
+                .unwrap_or_else(|| prefix.to_lowercase());
             
             let port_key = format!("PHP{ver_part}_HOST_PORT");
             let ext_key = format!("PHP{ver_part}_EXTENSIONS");
@@ -248,7 +239,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             services.push(crate::engine::config_generator::ServiceEntry {
                 service_type: crate::engine::config_generator::ServiceType::PHP,
-                version,  // 纯版本号，用于前端匹配
+                version,  // manifest ID，如 "php82"
                 host_port,
                 extensions,
             });
@@ -256,14 +247,12 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     }
     
     // 解析 MySQL 服务（支持多版本）
-    // 查找所有 MYSQLxx_VERSION 或 MYSQL_VERSION 格式的键
+    // 查找所有 MYSQLxx_VERSION 格式的键
     let mut mysql_index = 0;
-    for (key, value) in &env_map {
+    for (key, _value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("MYSQL") && !key.contains("ROOT") && !key.contains("USER") && !key.contains("PASSWORD") {
-            // 存储完整标签（如 "mysql:8.0"）
-            let full_tag = value.clone();
-            
-            // 提取索引部分，如 MYSQL84_VERSION -> 84
+            // 提取前缀，如 MYSQL84_VERSION → MYSQL84
+            let prefix = &key[..key.len() - 8]; // 去掉 "_VERSION"
             let index_part = &key[5..key.len() - 8]; // 去掉 "MYSQL" 和 "_VERSION"
             
             if index_part.is_empty() {
@@ -272,8 +261,10 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             let idx = index_part.parse::<usize>().unwrap_or(mysql_index);
             
-            // 提取 tag 用于前端显示（如 "mysql:8.0" -> "8.0"）
-            let version = extract_image_tag(&full_tag);
+            // 使用 manifest 反查 ID，如 "MYSQL84" → "mysql84"
+            let version = manifest.find_entry_by_env_prefix(&VmServiceType::Mysql, prefix)
+                .map(|(id, _)| id.clone())
+                .unwrap_or_else(|| prefix.to_lowercase());
             
             let port_key = format!("MYSQL{index_part}_HOST_PORT");
             
@@ -283,7 +274,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             services.push(crate::engine::config_generator::ServiceEntry {
                 service_type: crate::engine::config_generator::ServiceType::MySQL,
-                version,  // 纯版本号，用于前端匹配
+                version,  // manifest ID，如 "mysql84"
                 host_port,
                 extensions: None,
             });
@@ -294,19 +285,20 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     
     // 解析 Redis 服务（支持多版本）
     // 查找所有 REDISxx_VERSION 格式的键
-    for (key, value) in &env_map {
+    for (key, _value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("REDIS") {
-            let full_tag = value.clone();
-            
-            // 提取索引部分，如 REDIS62_VERSION -> 62
+            // 提取前缀，如 REDIS72_VERSION → REDIS72
+            let prefix = &key[..key.len() - 8]; // 去掉 "_VERSION"
             let index_part = &key[5..key.len() - 8]; // 去掉 "REDIS" 和 "_VERSION"
             
             if index_part.is_empty() {
                 continue;
             }
             
-            // 提取 tag 用于前端显示（如 "redis:8.2-alpine" -> "8.2-alpine"）
-            let version = extract_image_tag(&full_tag);
+            // 使用 manifest 反查 ID，如 "REDIS72" → "redis72"
+            let version = manifest.find_entry_by_env_prefix(&VmServiceType::Redis, prefix)
+                .map(|(id, _)| id.clone())
+                .unwrap_or_else(|| prefix.to_lowercase());
             
             let port_key = format!("REDIS{index_part}_HOST_PORT");
             
@@ -316,7 +308,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             services.push(crate::engine::config_generator::ServiceEntry {
                 service_type: crate::engine::config_generator::ServiceType::Redis,
-                version,
+                version,  // manifest ID，如 "redis72"
                 host_port,
                 extensions: None,
             });
@@ -325,19 +317,20 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     
     // 解析 Nginx 服务（支持多版本）
     // 查找所有 NGINXxx_VERSION 格式的键
-    for (key, value) in &env_map {
+    for (key, _value) in &env_map {
         if key.ends_with("_VERSION") && key.starts_with("NGINX") {
-            let full_tag = value.clone();
-            
-            // 提取索引部分，如 NGINX127_VERSION -> 127
-            let index_part = &key[6..key.len() - 8]; // 去掉 "NGINX" 和 "_VERSION"
+            // 提取前缀，如 NGINX127_VERSION → NGINX127
+            let prefix = &key[..key.len() - 8]; // 去掉 "_VERSION"
+            let index_part = &key[6..key.len() - 8]; // 去掉 "NGINX" 和 "_VERSION" (注意 NGINX 是 5 个字母 + 1 = 6)
             
             if index_part.is_empty() {
                 continue;
             }
             
-            // 提取 tag 用于前端显示（如 "nginx:1.28-alpine" -> "1.28-alpine"）
-            let version = extract_image_tag(&full_tag);
+            // 使用 manifest 反查 ID，如 "NGINX127" → "nginx127"
+            let version = manifest.find_entry_by_env_prefix(&VmServiceType::Nginx, prefix)
+                .map(|(id, _)| id.clone())
+                .unwrap_or_else(|| prefix.to_lowercase());
             
             let port_key = format!("NGINX{index_part}_HTTP_HOST_PORT");
             
@@ -347,7 +340,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
             
             services.push(crate::engine::config_generator::ServiceEntry {
                 service_type: crate::engine::config_generator::ServiceType::Nginx,
-                version,
+                version,  // manifest ID，如 "nginx127"
                 host_port,
                 extensions: None,
             });
@@ -378,7 +371,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
 /// 生成 .env 文件内容预览
 #[tauri::command]
 pub fn generate_env_config(config: EnvConfig) -> Result<String, String> {
-    let env_file = ConfigGenerator::generate_env(&config, None);
+    let project_root = get_project_root()?;
+    let env_file = ConfigGenerator::generate_env(&config, None, &project_root);
     Ok(env_file.format())
 }
 
@@ -632,43 +626,72 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
         
-        let output = compose_cmd.output().map_err(|e| {
+        // Use spawn() for streaming output instead of blocking output()
+        let mut child = compose_cmd.spawn().map_err(|e| {
                 let err_msg = format!("执行 docker compose 失败: {e}");
                 ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
                 err_msg
             })?;
         
-        // 输出命令结果
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Stream stdout and stderr in real-time via threads
+        let stdout_opt = child.stdout.take();
+        let stderr_opt = child.stderr.take();
+        let stderr_lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         
-        if !stdout.is_empty() {
-            for line in stdout.lines() {
-                if !line.is_empty() {
-                    ui_log!(app_handle, info, "commands::start_environment", "   {}", line);
+        let app_stdout = app_handle.clone();
+        let stdout_thread = if let Some(stdout) = stdout_opt {
+            Some(std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().map_while(Result::ok) {
+                    if !line.is_empty() {
+                        ui_log!(&app_stdout, info, "commands::start_environment", "   {}", line);
+                    }
                 }
-            }
-        }
+            }))
+        } else { None };
         
-        if !stderr.is_empty() {
-            for line in stderr.lines() {
-                if !line.is_empty() {
-                    ui_log!(app_handle, info, "commands::start_environment", "   ⚠️ {}", line);
+        let app_stderr = app_handle.clone();
+        let stderr_lines_clone = stderr_lines.clone();
+        let stderr_thread = if let Some(stderr) = stderr_opt {
+            Some(std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().map_while(Result::ok) {
+                    if !line.is_empty() {
+                        ui_log!(&app_stderr, info, "commands::start_environment", "   ⚠️ {}", line);
+                        if let Ok(mut lines) = stderr_lines_clone.lock() {
+                            lines.push(line);
+                        }
+                    }
                 }
-            }
-        }
+            }))
+        } else { None };
         
-        if output.status.success() {
+        // Wait for the process to finish
+        let status = child.wait().map_err(|e| {
+            let err_msg = format!("等待 docker compose 完成失败: {e}");
+            ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
+            err_msg
+        })?;
+        
+        // Wait for reader threads to finish
+        if let Some(t) = stdout_thread { let _ = t.join(); }
+        if let Some(t) = stderr_thread { let _ = t.join(); }
+        
+        let collected_stderr = stderr_lines.lock().map(|l| l.join("\n")).unwrap_or_default();
+        
+        if status.success() {
             ui_log!(app_handle, info, "commands::start_environment", "✅ 环境启动成功！");
             Ok("环境启动成功".to_string())
         } else {
             // 分析错误类型，提供更友好的提示
-            let exit_code = output.status.code();
+            let exit_code = status.code();
             
             // 检查是否是端口冲突错误
-            let is_port_conflict = stderr.contains("port is already allocated") 
-                || stderr.contains("Bind for") 
-                || stderr.contains("address already in use");
+            let is_port_conflict = collected_stderr.contains("port is already allocated") 
+                || collected_stderr.contains("Bind for") 
+                || collected_stderr.contains("address already in use");
             
             if is_port_conflict {
                 ui_log!(app_handle, info, "commands::start_environment", "❌ 端口冲突 detected！");
@@ -691,7 +714,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 ui_log!(app_handle, info, "commands::start_environment", "");
                 
                 // 提取具体冲突的端口信息
-                if let Some(line) = stderr.lines().find(|l| l.contains("Bind for")) {
+                if let Some(line) = collected_stderr.lines().find(|l| l.contains("Bind for")) {
                     ui_log!(app_handle, info, "commands::start_environment", "📍 详细信息: {}", line.trim());
                 }
             } else {
@@ -1321,123 +1344,39 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     let override_manager = UserOverrideManager::new(&project_root);
     let mut result = HashMap::new();
     
-    // PHP 版本（按版本号降序）
-    let mut php_versions = Vec::new();
-    let mut php_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Php);
-    php_version_list.sort_by(|a, b| {
-        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        ver_b.cmp(&ver_a) // 降序
-    });
+    // 使用辅助函数处理每种服务类型
+    let service_types = [
+        ("php", VmServiceType::Php),
+        ("mysql", VmServiceType::Mysql),
+        ("redis", VmServiceType::Redis),
+        ("nginx", VmServiceType::Nginx),
+    ];
     
-    for version in php_version_list {
-        // 使用合并后的配置（用户覆盖优先）
-        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Php, version)
-            .or_else(|| manifest.get_image_info(&VmServiceType::Php, version).cloned());
+    for (key, service_type) in &service_types {
+        let mut versions = Vec::new();
+        let entries = manifest.get_available_entries(service_type);
         
-        if let Some(info) = merged_info {
-            // 检查是否有用户覆盖
-            let has_user_override = override_manager.has_user_override(&VmServiceType::Php, version);
+        for (id, entry) in entries {
+            // 使用合并后的配置（用户覆盖优先）
+            let merged_entry = override_manager.get_merged_entry(service_type, id)
+                .unwrap_or_else(|| entry.clone());
             
-            php_versions.push(serde_json::json!({
-                "version": version,
-                "image": info.image,
-                "tag": info.tag,
-                "full_name": info.full_name(),
-                "eol": info.eol,
-                "description": info.description,
+            let has_user_override = override_manager.has_user_override(service_type, id);
+            
+            versions.push(serde_json::json!({
+                "id": id,
+                "display_name": merged_entry.display_name,
+                "image_tag": merged_entry.image_tag,
+                "service_dir": merged_entry.service_dir,
+                "default_port": merged_entry.default_port,
+                "show_port": merged_entry.show_port,
+                "eol": merged_entry.eol,
+                "description": merged_entry.description,
                 "has_user_override": has_user_override
             }));
         }
+        result.insert(key.to_string(), serde_json::Value::Array(versions));
     }
-    result.insert("php".to_string(), serde_json::Value::Array(php_versions));
-    
-    // MySQL 版本（按版本号降序）
-    let mut mysql_versions = Vec::new();
-    let mut mysql_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Mysql);
-    mysql_version_list.sort_by(|a, b| {
-        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        ver_b.cmp(&ver_a) // 降序
-    });
-    
-    for version in mysql_version_list {
-        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Mysql, version)
-            .or_else(|| manifest.get_image_info(&VmServiceType::Mysql, version).cloned());
-        
-        if let Some(info) = merged_info {
-            let has_user_override = override_manager.has_user_override(&VmServiceType::Mysql, version);
-            
-            mysql_versions.push(serde_json::json!({
-                "version": version,
-                "image": info.image,
-                "tag": info.tag,
-                "full_name": info.full_name(),
-                "eol": info.eol,
-                "description": info.description,
-                "has_user_override": has_user_override
-            }));
-        }
-    }
-    result.insert("mysql".to_string(), serde_json::Value::Array(mysql_versions));
-    
-    // Redis 版本（按版本号降序）
-    let mut redis_versions = Vec::new();
-    let mut redis_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Redis);
-    redis_version_list.sort_by(|a, b| {
-        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        ver_b.cmp(&ver_a) // 降序
-    });
-    
-    for version in redis_version_list {
-        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Redis, version)
-            .or_else(|| manifest.get_image_info(&VmServiceType::Redis, version).cloned());
-        
-        if let Some(info) = merged_info {
-            let has_user_override = override_manager.has_user_override(&VmServiceType::Redis, version);
-            
-            redis_versions.push(serde_json::json!({
-                "version": version,
-                "image": info.image,
-                "tag": info.tag,
-                "full_name": info.full_name(),
-                "eol": info.eol,
-                "description": info.description,
-                "has_user_override": has_user_override
-            }));
-        }
-    }
-    result.insert("redis".to_string(), serde_json::Value::Array(redis_versions));
-    
-    // Nginx 版本（按版本号降序）
-    let mut nginx_versions = Vec::new();
-    let mut nginx_version_list: Vec<&String> = manifest.get_available_versions(&VmServiceType::Nginx);
-    nginx_version_list.sort_by(|a, b| {
-        let ver_a: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let ver_b: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        ver_b.cmp(&ver_a) // 降序
-    });
-    
-    for version in nginx_version_list {
-        let merged_info = override_manager.get_merged_image_info(&VmServiceType::Nginx, version)
-            .or_else(|| manifest.get_image_info(&VmServiceType::Nginx, version).cloned());
-        
-        if let Some(info) = merged_info {
-            let has_user_override = override_manager.has_user_override(&VmServiceType::Nginx, version);
-            
-            nginx_versions.push(serde_json::json!({
-                "version": version,
-                "image": info.image,
-                "tag": info.tag,
-                "full_name": info.full_name(),
-                "eol": info.eol,
-                "description": info.description,
-                "has_user_override": has_user_override
-            }));
-        }
-    }
-    result.insert("nginx".to_string(), serde_json::Value::Array(nginx_versions));
     
     serde_json::to_value(result).map_err(|e| format!("序列化失败: {e}"))
 }
@@ -1454,7 +1393,7 @@ pub fn validate_version(service_type: String, version: String) -> Result<bool, S
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
-    Ok(manifest.is_version_valid(&vm_service_type, &version))
+    Ok(manifest.is_id_valid(&vm_service_type, &version))
 }
 
 /// 获取推荐版本
@@ -1469,15 +1408,15 @@ pub fn get_recommended_version(service_type: String) -> Result<Option<String>, S
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
-    Ok(manifest.get_recommended_version(&vm_service_type).map(|s| s.to_string()))
+    Ok(manifest.get_recommended_entry(&vm_service_type).map(|(id, _)| id.to_string()))
 }
 
 /// 保存用户自定义版本覆盖
 #[tauri::command]
 pub fn save_user_override(
     service_type: String,
-    version: String,
-    tag: String,
+    id: String,
+    image_tag: String,
     description: Option<String>,
 ) -> Result<(), String> {
     let project_root = get_project_root()?;
@@ -1492,16 +1431,16 @@ pub fn save_user_override(
     };
     
     let override_config = UserVersionOverride {
-        tag,
+        image_tag,
         description,
     };
     
-    manager.save_user_override(&project_root, vm_service_type, version, override_config)
+    manager.save_user_override(&project_root, vm_service_type, id, override_config)
 }
 
 /// 删除用户自定义版本覆盖
 #[tauri::command]
-pub fn remove_user_override(service_type: String, version: String) -> Result<(), String> {
+pub fn remove_user_override(service_type: String, id: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
     
@@ -1513,7 +1452,7 @@ pub fn remove_user_override(service_type: String, version: String) -> Result<(),
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
     
-    manager.remove_user_override(&project_root, &vm_service_type, &version)
+    manager.remove_user_override(&project_root, &vm_service_type, &id)
 }
 
 /// 重置所有用户自定义版本覆盖
@@ -1529,7 +1468,6 @@ pub fn reset_all_overrides() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
 
     /// 测试 load_existing_config 解析多版本 Redis
     #[test]

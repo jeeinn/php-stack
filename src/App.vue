@@ -311,6 +311,13 @@ const checkEnvFileExists = async () => {
   }
 };
 
+// 监听 tab 切换，回到 dashboard 时刷新 .env 检测状态
+watch(activeTab, async (newTab) => {
+  if (newTab === 'dashboard') {
+    await checkEnvFileExists();
+  }
+});
+
 onMounted(() => {
   refreshContainers();
   checkEnvFileExists(); // 检查 .env 文件是否存在

@@ -1,128 +1,188 @@
 {
   "php": {
-    "8.5": {
-      "image": "php",
-      "tag": "8.5-fpm",
+    "php85": {
+      "display_name": "PHP 8.5",
+      "image_tag": "php:8.5-fpm",
+      "service_dir": "php85",
+      "default_port": 9000,
+      "show_port": false,
       "eol": false,
       "description": "PHP 8.5 (最新开发版)"
     },
-    "8.4": {
-      "image": "php",
-      "tag": "8.4-fpm",
+    "php84": {
+      "display_name": "PHP 8.4",
+      "image_tag": "php:8.4-fpm",
+      "service_dir": "php84",
+      "default_port": 9000,
+      "show_port": false,
       "eol": false,
       "description": "PHP 8.4 (最新版本)"
     },
-    "8.3": {
-      "image": "php",
-      "tag": "8.3-fpm",
+    "php83": {
+      "display_name": "PHP 8.3",
+      "image_tag": "php:8.3-fpm",
+      "service_dir": "php83",
+      "default_port": 9000,
+      "show_port": false,
       "eol": false,
       "description": "PHP 8.3 (活跃支持)"
     },
-    "8.2": {
-      "image": "php",
-      "tag": "8.2-fpm",
+    "php82": {
+      "display_name": "PHP 8.2",
+      "image_tag": "php:8.2-fpm",
+      "service_dir": "php82",
+      "default_port": 9000,
+      "show_port": false,
       "eol": false,
       "description": "PHP 8.2 (活跃支持)"
     },
-    "8.1": {
-      "image": "php",
-      "tag": "8.1-fpm",
+    "php81": {
+      "display_name": "PHP 8.1",
+      "image_tag": "php:8.1-fpm",
+      "service_dir": "php81",
+      "default_port": 9000,
+      "show_port": false,
       "eol": false,
       "description": "PHP 8.1 (安全支持至 2025-12)"
     },
-    "8.0": {
-      "image": "php",
-      "tag": "8.0-fpm",
+    "php80": {
+      "display_name": "PHP 8.0",
+      "image_tag": "php:8.0-fpm",
+      "service_dir": "php80",
+      "default_port": 9000,
+      "show_port": false,
       "eol": true,
       "description": "PHP 8.0 (已停止维护)"
     },
-    "7.4": {
-      "image": "php",
-      "tag": "7.4-fpm",
+    "php74": {
+      "display_name": "PHP 7.4",
+      "image_tag": "php:7.4-fpm",
+      "service_dir": "php74",
+      "default_port": 9000,
+      "show_port": false,
       "eol": true,
       "description": "PHP 7.4 (已停止维护)"
     },
-    "5.6": {
-      "image": "php",
-      "tag": "5.6-fpm",
+    "php56": {
+      "display_name": "PHP 5.6",
+      "image_tag": "php:5.6-fpm",
+      "service_dir": "php56",
+      "default_port": 9000,
+      "show_port": false,
       "eol": true,
       "description": "PHP 5.6 (已停止维护)"
     }
   },
   "mysql": {
-    "8.4": {
-      "image": "mysql",
-      "tag": "8.4",
+    "mysql84": {
+      "display_name": "MySQL 8.4 LTS",
+      "image_tag": "mysql:8.4",
+      "service_dir": "mysql84",
+      "default_port": 3306,
+      "show_port": true,
       "eol": false,
       "description": "MySQL 8.4 LTS (最新长期支持版)"
     },
-    "8.0": {
-      "image": "mysql",
-      "tag": "8.0",
+    "mysql80": {
+      "display_name": "MySQL 8.0",
+      "image_tag": "mysql:8.0",
+      "service_dir": "mysql80",
+      "default_port": 3306,
+      "show_port": true,
       "eol": false,
       "description": "MySQL 8.0 (长期支持)"
     },
-    "5.7": {
-      "image": "mysql",
-      "tag": "5.7",
+    "mysql57": {
+      "display_name": "MySQL 5.7",
+      "image_tag": "mysql:5.7",
+      "service_dir": "mysql57",
+      "default_port": 3306,
+      "show_port": true,
       "eol": true,
       "description": "MySQL 5.7 (已停止维护)"
     }
   },
   "redis": {
-    "8.2": {
-      "image": "redis",
-      "tag": "8.2-alpine",
+    "redis82": {
+      "display_name": "Redis 8.2",
+      "image_tag": "redis:8.2-alpine",
+      "service_dir": "redis82",
+      "default_port": 6379,
+      "show_port": true,
       "eol": false,
       "description": "Redis 8.2 (最新版本，2025-01 发布)"
     },
-    "7.2": {
-      "image": "redis",
-      "tag": "7.2-alpine",
+    "redis72": {
+      "display_name": "Redis 7.2",
+      "image_tag": "redis:7.2-alpine",
+      "service_dir": "redis72",
+      "default_port": 6379,
+      "show_port": true,
       "eol": false,
       "description": "Redis 7.2 (最新版)"
     },
-    "7.0": {
-      "image": "redis",
-      "tag": "7.0-alpine",
+    "redis70": {
+      "display_name": "Redis 7.0",
+      "image_tag": "redis:7.0-alpine",
+      "service_dir": "redis70",
+      "default_port": 6379,
+      "show_port": true,
       "eol": false,
       "description": "Redis 7.0 (稳定版)"
     },
-    "6.2": {
-      "image": "redis",
-      "tag": "6.2-alpine",
+    "redis62": {
+      "display_name": "Redis 6.2",
+      "image_tag": "redis:6.2-alpine",
+      "service_dir": "redis62",
+      "default_port": 6379,
+      "show_port": true,
       "eol": true,
       "description": "Redis 6.2 (旧版本)"
     }
   },
   "nginx": {
-    "1.28": {
-      "image": "nginx",
-      "tag": "1.28-alpine",
+    "nginx128": {
+      "display_name": "Nginx 1.28",
+      "image_tag": "nginx:1.28-alpine",
+      "service_dir": "nginx128",
+      "default_port": 80,
+      "show_port": true,
       "eol": false,
       "description": "Nginx 1.28 (最新版)"
     },
-    "1.27": {
-      "image": "nginx",
-      "tag": "1.27-alpine",
+    "nginx127": {
+      "display_name": "Nginx 1.27",
+      "image_tag": "nginx:1.27-alpine",
+      "service_dir": "nginx127",
+      "default_port": 80,
+      "show_port": true,
       "eol": false,
       "description": "Nginx 1.27 (稳定版)"
     },
-    "1.26": {
-      "image": "nginx",
-      "tag": "1.26-alpine",
+    "nginx126": {
+      "display_name": "Nginx 1.26",
+      "image_tag": "nginx:1.26-alpine",
+      "service_dir": "nginx126",
+      "default_port": 80,
+      "show_port": true,
       "eol": false,
       "description": "Nginx 1.26 (长期支持版)"
     },
-    "1.25": {
-      "image": "nginx",
-      "tag": "1.25-alpine",
+    "nginx125": {
+      "display_name": "Nginx 1.25",
+      "image_tag": "nginx:1.25-alpine",
+      "service_dir": "nginx125",
+      "default_port": 80,
+      "show_port": true,
       "eol": false,
       "description": "Nginx 1.25 (旧稳定版)"
     },
-    "1.24": {
-      "image": "nginx",
-      "tag": "1.24-alpine",
+    "nginx124": {
+      "display_name": "Nginx 1.24",
+      "image_tag": "nginx:1.24-alpine",
+      "service_dir": "nginx124",
+      "default_port": 80,
+      "show_port": true,
       "eol": true,
       "description": "Nginx 1.24 (已停止维护)"
     }

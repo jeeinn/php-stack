@@ -2,14 +2,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-use super::version_manifest::{ImageInfo, ServiceType, VersionManifest};
+use super::version_manifest::{VersionEntry, ServiceType, VersionManifest};
 use crate::app_log;
 
 /// 用户自定义的版本覆盖配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserVersionOverride {
-    /// Docker 镜像标签
-    pub tag: String,
+    /// 覆盖的完整 Docker 镜像名（如 "php:8.2-fpm-alpine"）
+    pub image_tag: String,
     /// 备注说明
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -85,29 +85,33 @@ impl UserOverrideManager {
         }
     }
 
-    /// 获取合并后的镜像信息（用户覆盖 > 默认配置）
-    pub fn get_merged_image_info(
+    /// 获取合并后的版本条目（用户覆盖 > 默认配置）
+    /// 用户覆盖仅替换 image_tag（和可选的 description），其他字段保持 manifest 默认值
+    pub fn get_merged_entry(
         &self,
         service_type: &ServiceType,
-        version: &str,
-    ) -> Option<ImageInfo> {
+        id: &str,
+    ) -> Option<VersionEntry> {
         // 1. 检查用户是否有覆盖配置
         if let Some(user_override) = self
             .user_overrides
             .get(service_type)
-            .and_then(|versions| versions.get(version))
+            .and_then(|entries| entries.get(id))
         {
             app_log!(info, "engine::user_override", "{} {} 使用自定义标签: {}",
                 format!("{service_type:?}").to_lowercase(),
-                version, 
-                user_override.tag);
+                id, 
+                user_override.image_tag);
             
             // 2. 获取默认配置作为基础
-            if let Some(default_info) = self.default_manifest.get_image_info(service_type, version) {
-                // 3. 返回合并后的配置（用户覆盖优先）
-                return Some(ImageInfo {
-                    image: default_info.image.clone(),
-                    tag: user_override.tag.clone(), // 使用用户的标签
+            if let Some(default_info) = self.default_manifest.get_entry(service_type, id) {
+                // 3. 返回合并后的配置（用户覆盖的 image_tag 优先）
+                return Some(VersionEntry {
+                    display_name: default_info.display_name.clone(),
+                    image_tag: user_override.image_tag.clone(), // 使用用户的镜像名
+                    service_dir: default_info.service_dir.clone(),
+                    default_port: default_info.default_port,
+                    show_port: default_info.show_port,
                     eol: default_info.eol,
                     description: user_override.description.clone().or_else(|| default_info.description.clone()),
                 });
@@ -115,7 +119,7 @@ impl UserOverrideManager {
         }
 
         // 4. 没有用户覆盖，返回默认配置
-        self.default_manifest.get_image_info(service_type, version).cloned()
+        self.default_manifest.get_entry(service_type, id).cloned()
     }
 
     /// 保存用户覆盖配置到文件
@@ -123,14 +127,14 @@ impl UserOverrideManager {
         &mut self,
         project_root: &Path,
         service_type: ServiceType,
-        version: String,
+        id: String,
         override_config: UserVersionOverride,
     ) -> Result<(), String> {
         // 更新内存中的配置
         self.user_overrides
             .entry(service_type)
             .or_default()
-            .insert(version, override_config);
+            .insert(id, override_config);
 
         // 序列化并保存到文件（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
@@ -148,10 +152,10 @@ impl UserOverrideManager {
         &mut self,
         project_root: &Path,
         service_type: &ServiceType,
-        version: &str,
+        id: &str,
     ) -> Result<(), String> {
-        if let Some(versions) = self.user_overrides.get_mut(service_type) {
-            versions.remove(version);
+        if let Some(entries) = self.user_overrides.get_mut(service_type) {
+            entries.remove(id);
         }
 
         // 重新保存（与 .env 同级目录）
@@ -179,11 +183,11 @@ impl UserOverrideManager {
         Ok(())
     }
 
-    /// 检查指定版本是否有用户覆盖配置
-    pub fn has_user_override(&self, service_type: &ServiceType, version: &str) -> bool {
+    /// 检查指定 ID 是否有用户覆盖配置
+    pub fn has_user_override(&self, service_type: &ServiceType, id: &str) -> bool {
         self.user_overrides
             .get(service_type)
-            .and_then(|versions| versions.get(version))
+            .and_then(|entries| entries.get(id))
             .is_some()
     }
 }
@@ -205,9 +209,9 @@ mod tests {
         let temp_dir = env::temp_dir();
         let manager = UserOverrideManager::new(&temp_dir);
         
-        let info = manager.get_merged_image_info(&ServiceType::Mysql, "8.0");
+        let info = manager.get_merged_entry(&ServiceType::Mysql, "mysql80");
         assert!(info.is_some());
         let info = info.unwrap();
-        assert_eq!(info.tag, "8.0");
+        assert_eq!(info.image_tag, "mysql:8.0");
     }
 }

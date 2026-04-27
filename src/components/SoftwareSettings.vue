@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import type { VersionMappings, VersionInfo, ServiceType } from '../types/version-mapping';
+import type { VersionMappings, VersionInfo, ServiceTypeLower } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
 const versionMappings = ref<VersionMappings | null>(null);
 const loading = ref(false);
-const selectedService = ref<ServiceType>('mysql');
+const selectedService = ref<ServiceTypeLower>('mysql');
 
 // 编辑对话框状态
 const showEditDialog = ref(false);
@@ -16,7 +16,7 @@ const editTag = ref('');
 const editDescription = ref('');
 
 // 服务类型标签映射
-const serviceLabels: Record<ServiceType, string> = {
+const serviceLabels: Record<ServiceTypeLower, string> = {
   php: 'PHP',
   mysql: 'MySQL',
   redis: 'Redis',
@@ -57,7 +57,7 @@ async function copyImageName(fullName: string) {
 // 打开编辑对话框
 function openEditDialog(version: VersionInfo) {
   editingVersion.value = version;
-  editTag.value = version.tag;
+  editTag.value = version.image_tag;
   editDescription.value = version.description || '';
   showEditDialog.value = true;
 }
@@ -71,8 +71,8 @@ async function saveOverride() {
   try {
     await invoke('save_user_override', {
       serviceType: selectedService.value,
-      version: editingVersion.value.version,
-      tag: editTag.value,
+      id: editingVersion.value.id,
+      imageTag: editTag.value,
       description: editDescription.value || undefined
     });
     
@@ -93,7 +93,7 @@ async function saveOverride() {
 async function removeOverride(version: VersionInfo) {
   const confirmed = await showConfirm({
     title: '删除确认',
-    message: `确定要删除 ${version.version} 的自定义配置吗？`,
+    message: `确定要删除 ${version.display_name} 的自定义配置吗？`,
     confirmText: '删除',
     type: 'danger'
   });
@@ -105,7 +105,7 @@ async function removeOverride(version: VersionInfo) {
   try {
     await invoke('remove_user_override', {
       serviceType: selectedService.value,
-      version: version.version
+      id: version.id
     });
     
     showToast('已恢复为默认配置', 'success');
@@ -180,7 +180,7 @@ onMounted(() => {
         <button
           v-for="(label, service) in serviceLabels"
           :key="service"
-          @click="selectedService = service as ServiceType"
+          @click="selectedService = service as ServiceTypeLower"
           :class="[
             'px-4 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm',
             selectedService === service
@@ -198,10 +198,9 @@ onMounted(() => {
           <table class="w-full text-left border-collapse min-w-[900px]">
             <thead class="sticky top-0 bg-slate-900 z-10">
               <tr class="border-b border-slate-700">
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">应用名称</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[100px]">版本号</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">Docker 镜像标签</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[250px]">完整镜像名</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">版本名称</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[200px]">Docker 镜像</th>
+                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[100px]">配置目录</th>
                 <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">状态</th>
                 <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[150px]">备注</th>
                 <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm sticky right-0 bg-slate-900 z-20 w-auto">操作</th>
@@ -210,25 +209,24 @@ onMounted(() => {
             <tbody>
               <tr 
                 v-for="version in getCurrentVersions()" 
-                :key="version.version"
+                :key="version.id"
                 class="border-b border-slate-800 hover:bg-slate-800/50 transition"
               >
-                <td class="py-3 px-3 text-sm">{{ serviceLabels[selectedService] }}</td>
                 <td class="py-3 px-3">
-                  <code class="bg-slate-800 px-2 py-1 rounded text-sm">{{ version.version }}</code>
-                </td>
-                <td class="py-3 px-3">
-                  <code class="bg-slate-800 px-2 py-1 rounded text-xs">{{ version.tag }}</code>
-                  <span v-if="version.has_user_override" class="ml-1 text-xs text-yellow-400">(自定义)</span>
+                  <code class="bg-slate-800 px-2 py-1 rounded text-sm">{{ version.display_name }}</code>
                 </td>
                 <td class="py-3 px-3">
                   <code 
-                    @click="copyImageName(version.full_name)"
+                    @click="copyImageName(version.image_tag)"
                     class="bg-slate-800 px-2 py-1 rounded text-xs block cursor-pointer hover:bg-slate-700 transition truncate"
-                    :title="version.full_name || ''"
+                    :title="'点击复制: ' + version.image_tag"
                   >
-                    {{ version.full_name }}
+                    {{ version.image_tag }}
                   </code>
+                  <span v-if="version.has_user_override" class="ml-1 text-xs text-yellow-400">(自定义)</span>
+                </td>
+                <td class="py-3 px-3">
+                  <code class="bg-slate-800 px-2 py-1 rounded text-xs">{{ version.service_dir }}</code>
                 </td>
                 <td class="py-3 px-3">
                   <span 
@@ -280,24 +278,24 @@ onMounted(() => {
     <!-- Edit Dialog -->
     <div v-if="showEditDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full mx-4 border border-slate-700">
-        <h2 class="text-xl font-bold mb-4">编辑镜像标签</h2>
+        <h2 class="text-xl font-bold mb-4">编辑 Docker 镜像</h2>
         
         <div class="space-y-4">
           <div>
-            <label class="block text-sm text-slate-400 mb-2">版本号</label>
+            <label class="block text-sm text-slate-400 mb-2">版本名称</label>
             <input
               v-if="editingVersion"
-              :value="editingVersion.version"
+              :value="editingVersion.display_name"
               disabled
               class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-400"
             />
           </div>
           
           <div>
-            <label class="block text-sm text-slate-400 mb-2">Docker 镜像标签 <span class="text-rose-400">*</span></label>
+            <label class="block text-sm text-slate-400 mb-2">Docker 镜像 <span class="text-rose-400">*</span></label>
             <input
               v-model="editTag"
-              placeholder="例如: 8.4-lts"
+              placeholder="例如: php:8.2-fpm-alpine"
               class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
             />
           </div>

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::io::Write;
 use chrono::Local;
@@ -94,9 +93,6 @@ impl ConfigGenerator {
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql84").
     /// `project_root` is the user's workspace directory where `.user_version_overrides.json` resides.
     pub fn generate_env(config: &EnvConfig, existing_env: Option<&EnvFile>, project_root: &Path) -> EnvFile {
-        // Collect all managed keys so we know what NOT to treat as custom
-        let managed_keys = Self::managed_keys(config);
-
         let mut env = if let Some(existing) = existing_env {
             existing.clone()
         } else {
@@ -238,10 +234,6 @@ impl ConfigGenerator {
                 }
             }
         }
-
-        // managed_keys is used to identify which keys are managed by ConfigGenerator
-        // All other keys in existing_env are preserved automatically since we started from a clone
-        let _ = managed_keys;
 
         env
     }
@@ -843,21 +835,9 @@ impl ConfigGenerator {
             backed_up_files = Self::backup_existing_config(project_root)?;
         }
 
-        // Read existing .env if present
+        // Generate and write .env (always generate fresh, backup mechanism handles rollback)
         let env_path = project_root.join(".env");
-        let existing_env = if env_path.exists() {
-            let content = std::fs::read_to_string(&env_path)
-                .map_err(|e| format!("读取 .env 文件失败: {e}"))?;
-            Some(
-                EnvFile::parse(&content)
-                    .map_err(|e| format!("解析 .env 文件失败: {e}"))?,
-            )
-        } else {
-            None
-        };
-
-        // Generate and write .env
-        let env_file = Self::generate_env(config, existing_env.as_ref(), project_root);
+        let env_file = Self::generate_env(config, None, project_root);
         std::fs::write(&env_path, env_file.format())
             .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
 
@@ -889,69 +869,6 @@ impl ConfigGenerator {
         Ok(backed_up_files)
     }
 
-    /// Collect all keys managed by ConfigGenerator for a given config.
-    /// Used to distinguish managed keys from user custom variables.
-    ///
-    /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82").
-    fn managed_keys(config: &EnvConfig) -> HashSet<String> {
-        let mut keys = HashSet::new();
-        keys.insert("SOURCE_DIR".to_string());
-        keys.insert("TZ".to_string());
-        keys.insert("DATA_DIR".to_string());
-        keys.insert("MYSQL_ROOT_PASSWORD".to_string());
-
-        // Create manifest once for service_dir lookups
-        let manifest = VersionManifest::new();
-
-        for service in &config.services {
-            let vm_service_type = match &service.service_type {
-                ServiceType::PHP => VmServiceType::Php,
-                ServiceType::MySQL => VmServiceType::Mysql,
-                ServiceType::Redis => VmServiceType::Redis,
-                ServiceType::Nginx => VmServiceType::Nginx,
-            };
-
-            // Derive env_prefix from manifest entry's service_dir, or fall back to the ID itself
-            let env_prefix = manifest
-                .get_entry(&vm_service_type, &service.version)
-                .map(|entry| entry.service_dir.to_uppercase())
-                .unwrap_or_else(|| service.version.to_uppercase());
-
-            match &service.service_type {
-                ServiceType::PHP => {
-                    keys.insert(format!("{env_prefix}_VERSION"));
-                    keys.insert(format!("{env_prefix}_HOST_PORT"));
-                    keys.insert(format!("{env_prefix}_EXTENSIONS"));
-                    keys.insert(format!("{env_prefix}_PHP_CONF_FILE"));
-                    keys.insert(format!("{env_prefix}_FPM_CONF_FILE"));
-                    keys.insert(format!("{env_prefix}_LOG_DIR"));
-                }
-                ServiceType::MySQL => {
-                    keys.insert(format!("{env_prefix}_VERSION"));
-                    keys.insert(format!("{env_prefix}_HOST_PORT"));
-                    keys.insert(format!("{env_prefix}_CONF_FILE"));
-                    keys.insert(format!("{env_prefix}_DATA_DIR"));
-                    keys.insert(format!("{env_prefix}_LOG_DIR"));
-                }
-                ServiceType::Redis => {
-                    keys.insert(format!("{env_prefix}_VERSION"));
-                    keys.insert(format!("{env_prefix}_HOST_PORT"));
-                    keys.insert(format!("{env_prefix}_CONF_FILE"));
-                    keys.insert(format!("{env_prefix}_DATA_DIR"));
-                }
-                ServiceType::Nginx => {
-                    keys.insert(format!("{env_prefix}_VERSION"));
-                    keys.insert(format!("{env_prefix}_HTTP_HOST_PORT"));
-                    keys.insert(format!("{env_prefix}_BUILD_CONTEXT"));
-                    keys.insert(format!("{env_prefix}_CONF_FILE"));
-                    keys.insert(format!("{env_prefix}_CONFD_DIR"));
-                    keys.insert("NGINX_LOG_DIR".to_string());
-                }
-            }
-        }
-
-        keys
-    }
 }
 
 #[cfg(test)]

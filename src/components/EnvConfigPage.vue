@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ServiceEntry, EnvConfig, VersionInfo } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
+import CustomSelect from './CustomSelect.vue';
 
 const emit = defineEmits<{
   (e: 'request-switch-tab', tabName: string): void;
@@ -37,6 +38,45 @@ const commonTimezones = [
   { value: 'Australia/Sydney', label: '悉尼 (UTC+10/+11)' },
   { value: 'UTC', label: '协调世界时 (UTC)' },
 ];
+
+// Computed options for selects
+const phpVersionOptions = computed(() => 
+  phpVersions.value.map(v => ({
+    value: v.id,
+    label: `${v.display_name} → ${v.image_tag}${v.eol ? ' (EOL)' : ''}`,
+    disabled: false,
+  }))
+);
+
+const mysqlVersionOptions = computed(() => 
+  mysqlVersions.value.map(v => ({
+    value: v.id,
+    label: `${v.display_name} → ${v.image_tag}${v.eol ? ' (EOL)' : ''}`,
+    disabled: false,
+  }))
+);
+
+const redisVersionOptions = computed(() => 
+  redisVersions.value.map(v => ({
+    value: v.id,
+    label: `${v.display_name} → ${v.image_tag}${v.eol ? ' (EOL)' : ''}`,
+    disabled: false,
+  }))
+);
+
+const nginxVersionOptions = computed(() => 
+  nginxVersions.value.map(v => ({
+    value: v.id,
+    label: `${v.display_name} → ${v.image_tag}${v.eol ? ' (EOL)' : ''}`,
+    disabled: false,
+  }))
+);
+
+const timezoneOptions = computed(() => [
+  ...commonTimezones,
+  ...(showCustomTimezoneInput.value && customTimezone.value ? [{ value: customTimezone.value, label: `自定义: ${customTimezone.value}` }] : []),
+  { value: '__custom__', label: '自定义时区...' },
+]);
 
 // State
 const phpServices = ref<ServiceEntry[]>([]);
@@ -419,21 +459,19 @@ function toggleExtension(phpIndex: number, ext: string) {
   }
 }
 
-function selectTimezone(value: string) {
-  if (value === '__custom__') {
-    showCustomTimezoneInput.value = true;
-    if (customTimezone.value) {
-      timezone.value = customTimezone.value;
-    }
-  } else {
-    showCustomTimezoneInput.value = false;
-    timezone.value = value;
-  }
-}
-
 function handleCustomTimezoneChange() {
   if (customTimezone.value.trim()) {
     timezone.value = customTimezone.value.trim();
+  }
+}
+
+function handleTimezoneChange(value: string) {
+  if (value === '__custom__') {
+    showCustomTimezoneInput.value = true;
+    customTimezone.value = '';
+  } else {
+    showCustomTimezoneInput.value = false;
+    timezone.value = value;
   }
 }
 
@@ -730,12 +768,11 @@ const goToMirrorSettings = () => {
               <label class="block text-xs text-slate-400 mb-1">
                 PHP 版本
               </label>
-              <select v-model="php.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in phpVersions" :key="v.id" :value="v.id">
-                  {{ v.display_name }} → {{ v.image_tag }}
-                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
-                </option>
-              </select>
+              <CustomSelect 
+                v-model="php.version" 
+                :options="phpVersionOptions"
+                placeholder="选择 PHP 版本"
+              />
             </div>
             <button v-if="phpServices.length > 1" @click="removePhpVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">删除</button>
           </div>
@@ -770,12 +807,11 @@ const goToMirrorSettings = () => {
               <label class="block text-xs text-slate-400 mb-1">
                 MySQL 版本
               </label>
-              <select v-model="mysql.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in mysqlVersions" :key="v.id" :value="v.id">
-                  {{ v.display_name }} → {{ v.image_tag }}
-                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
-                </option>
-              </select>
+              <CustomSelect 
+                v-model="mysql.version" 
+                :options="mysqlVersionOptions"
+                placeholder="选择 MySQL 版本"
+              />
             </div>
             <div class="w-full sm:w-32" v-if="mysqlVersions.find(v => v.id === mysql.version)?.show_port !== false">
               <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
@@ -818,12 +854,11 @@ const goToMirrorSettings = () => {
               <label class="block text-xs text-slate-400 mb-1">
                 Redis 版本
               </label>
-              <select v-model="redis.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in redisVersions" :key="v.id" :value="v.id">
-                  {{ v.display_name }} → {{ v.image_tag }}
-                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
-                </option>
-              </select>
+              <CustomSelect 
+                v-model="redis.version" 
+                :options="redisVersionOptions"
+                placeholder="选择 Redis 版本"
+              />
             </div>
             <div class="w-full sm:w-32" v-if="redisVersions.find(v => v.id === redis.version)?.show_port !== false">
               <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
@@ -851,12 +886,11 @@ const goToMirrorSettings = () => {
               <label class="block text-xs text-slate-400 mb-1">
                 Nginx 版本
               </label>
-              <select v-model="nginx.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in nginxVersions" :key="v.id" :value="v.id">
-                  {{ v.display_name }} → {{ v.image_tag }}
-                  <span v-if="v.eol" class="text-amber-400">(EOL)</span>
-                </option>
-              </select>
+              <CustomSelect 
+                v-model="nginx.version" 
+                :options="nginxVersionOptions"
+                placeholder="选择 Nginx 版本"
+              />
             </div>
             <div class="w-full sm:w-32" v-if="nginxVersions.find(v => v.id === nginx.version)?.show_port !== false">
               <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
@@ -888,16 +922,12 @@ const goToMirrorSettings = () => {
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">时区</label>
-            <select 
-              @change="(e) => selectTimezone((e.target as HTMLSelectElement).value)"
-              :value="showCustomTimezoneInput ? '__custom__' : timezone"
-              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option v-for="tz in commonTimezones" :key="tz.value" :value="tz.value">
-                {{ tz.label }}
-              </option>
-              <option value="__custom__">自定义时区...</option>
-            </select>
+            <CustomSelect 
+              :modelValue="showCustomTimezoneInput ? '__custom__' : timezone"
+              :options="timezoneOptions"
+              placeholder="选择时区"
+              @change="handleTimezoneChange"
+            />
             <div v-if="showCustomTimezoneInput" class="mt-2">
               <input 
                 v-model="customTimezone"

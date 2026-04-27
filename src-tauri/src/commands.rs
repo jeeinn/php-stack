@@ -626,43 +626,72 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
         
-        let output = compose_cmd.output().map_err(|e| {
+        // Use spawn() for streaming output instead of blocking output()
+        let mut child = compose_cmd.spawn().map_err(|e| {
                 let err_msg = format!("执行 docker compose 失败: {e}");
                 ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
                 err_msg
             })?;
         
-        // 输出命令结果
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Stream stdout and stderr in real-time via threads
+        let stdout_opt = child.stdout.take();
+        let stderr_opt = child.stderr.take();
+        let stderr_lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         
-        if !stdout.is_empty() {
-            for line in stdout.lines() {
-                if !line.is_empty() {
-                    ui_log!(app_handle, info, "commands::start_environment", "   {}", line);
+        let app_stdout = app_handle.clone();
+        let stdout_thread = if let Some(stdout) = stdout_opt {
+            Some(std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().map_while(Result::ok) {
+                    if !line.is_empty() {
+                        ui_log!(&app_stdout, info, "commands::start_environment", "   {}", line);
+                    }
                 }
-            }
-        }
+            }))
+        } else { None };
         
-        if !stderr.is_empty() {
-            for line in stderr.lines() {
-                if !line.is_empty() {
-                    ui_log!(app_handle, info, "commands::start_environment", "   ⚠️ {}", line);
+        let app_stderr = app_handle.clone();
+        let stderr_lines_clone = stderr_lines.clone();
+        let stderr_thread = if let Some(stderr) = stderr_opt {
+            Some(std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().map_while(Result::ok) {
+                    if !line.is_empty() {
+                        ui_log!(&app_stderr, info, "commands::start_environment", "   ⚠️ {}", line);
+                        if let Ok(mut lines) = stderr_lines_clone.lock() {
+                            lines.push(line);
+                        }
+                    }
                 }
-            }
-        }
+            }))
+        } else { None };
         
-        if output.status.success() {
+        // Wait for the process to finish
+        let status = child.wait().map_err(|e| {
+            let err_msg = format!("等待 docker compose 完成失败: {e}");
+            ui_log!(app_handle, info, "commands::start_environment", "❌ {}", err_msg);
+            err_msg
+        })?;
+        
+        // Wait for reader threads to finish
+        if let Some(t) = stdout_thread { let _ = t.join(); }
+        if let Some(t) = stderr_thread { let _ = t.join(); }
+        
+        let collected_stderr = stderr_lines.lock().map(|l| l.join("\n")).unwrap_or_default();
+        
+        if status.success() {
             ui_log!(app_handle, info, "commands::start_environment", "✅ 环境启动成功！");
             Ok("环境启动成功".to_string())
         } else {
             // 分析错误类型，提供更友好的提示
-            let exit_code = output.status.code();
+            let exit_code = status.code();
             
             // 检查是否是端口冲突错误
-            let is_port_conflict = stderr.contains("port is already allocated") 
-                || stderr.contains("Bind for") 
-                || stderr.contains("address already in use");
+            let is_port_conflict = collected_stderr.contains("port is already allocated") 
+                || collected_stderr.contains("Bind for") 
+                || collected_stderr.contains("address already in use");
             
             if is_port_conflict {
                 ui_log!(app_handle, info, "commands::start_environment", "❌ 端口冲突 detected！");
@@ -685,7 +714,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 ui_log!(app_handle, info, "commands::start_environment", "");
                 
                 // 提取具体冲突的端口信息
-                if let Some(line) = stderr.lines().find(|l| l.contains("Bind for")) {
+                if let Some(line) = collected_stderr.lines().find(|l| l.contains("Bind for")) {
                     ui_log!(app_handle, info, "commands::start_environment", "📍 详细信息: {}", line.trim());
                 }
             } else {

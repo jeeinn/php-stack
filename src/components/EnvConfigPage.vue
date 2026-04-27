@@ -105,7 +105,7 @@ async function loadVersionMappings() {
     const mappings = await invoke<any>('get_version_mappings');
     console.log('[EnvConfig] 版本映射:', mappings);
     
-    // 提取版本信息列表（包含 version、tag、full_name 等完整信息）
+    // 提取版本信息列表（包含 id、display_name、image_tag、service_dir 等完整信息）
     if (mappings.php) {
       phpVersions.value = mappings.php;
       console.log('[EnvConfig] PHP 版本:', phpVersions.value);
@@ -126,72 +126,31 @@ async function loadVersionMappings() {
     console.error('[EnvConfig] 加载版本映射失败:', e);
     // 使用默认值作为后备
     phpVersions.value = [
-      { version: '5.6', tag: '5.6-fpm', full_name: 'php:5.6-fpm', eol: true },
-      { version: '7.4', tag: '7.4-fpm', full_name: 'php:7.4-fpm', eol: true },
-      { version: '8.0', tag: '8.0-fpm', full_name: 'php:8.0-fpm', eol: true },
-      { version: '8.1', tag: '8.1-fpm', full_name: 'php:8.1-fpm', eol: false },
-      { version: '8.2', tag: '8.2-fpm', full_name: 'php:8.2-fpm', eol: false },
-      { version: '8.3', tag: '8.3-fpm', full_name: 'php:8.3-fpm', eol: false },
-      { version: '8.4', tag: '8.4-fpm', full_name: 'php:8.4-fpm', eol: false },
+      { id: 'php56', display_name: 'PHP 5.6', image_tag: 'php:5.6-fpm', service_dir: 'php56', default_port: 9000, show_port: false, eol: true },
+      { id: 'php74', display_name: 'PHP 7.4', image_tag: 'php:7.4-fpm', service_dir: 'php74', default_port: 9000, show_port: false, eol: true },
+      { id: 'php80', display_name: 'PHP 8.0', image_tag: 'php:8.0-fpm', service_dir: 'php80', default_port: 9000, show_port: false, eol: true },
+      { id: 'php81', display_name: 'PHP 8.1', image_tag: 'php:8.1-fpm', service_dir: 'php81', default_port: 9000, show_port: false, eol: false },
+      { id: 'php82', display_name: 'PHP 8.2', image_tag: 'php:8.2-fpm', service_dir: 'php82', default_port: 9000, show_port: false, eol: false },
+      { id: 'php83', display_name: 'PHP 8.3', image_tag: 'php:8.3-fpm', service_dir: 'php83', default_port: 9000, show_port: false, eol: false },
+      { id: 'php84', display_name: 'PHP 8.4', image_tag: 'php:8.4-fpm', service_dir: 'php84', default_port: 9000, show_port: false, eol: false },
     ];
     mysqlVersions.value = [
-      { version: '5.7', tag: '5.7', full_name: 'mysql:5.7', eol: true },
-      { version: '8.0', tag: '8.0', full_name: 'mysql:8.0', eol: false },
-      { version: '8.4', tag: '8.4', full_name: 'mysql:8.4', eol: false },
+      { id: 'mysql57', display_name: 'MySQL 5.7', image_tag: 'mysql:5.7', service_dir: 'mysql57', default_port: 3306, show_port: true, eol: true },
+      { id: 'mysql80', display_name: 'MySQL 8.0', image_tag: 'mysql:8.0', service_dir: 'mysql80', default_port: 3306, show_port: true, eol: false },
+      { id: 'mysql84', display_name: 'MySQL 8.4 LTS', image_tag: 'mysql:8.4', service_dir: 'mysql84', default_port: 3306, show_port: true, eol: false },
     ];
     redisVersions.value = [
-      { version: '6.2', tag: '6.2-alpine', full_name: 'redis:6.2-alpine', eol: true },
-      { version: '7.0', tag: '7.0-alpine', full_name: 'redis:7.0-alpine', eol: false },
-      { version: '7.2', tag: '7.2-alpine', full_name: 'redis:7.2-alpine', eol: false },
-      { version: '8.2', tag: '8.2-alpine', full_name: 'redis:8.2-alpine', eol: false },
+      { id: 'redis62', display_name: 'Redis 6.2', image_tag: 'redis:6.2-alpine', service_dir: 'redis62', default_port: 6379, show_port: true, eol: true },
+      { id: 'redis70', display_name: 'Redis 7.0', image_tag: 'redis:7.0-alpine', service_dir: 'redis70', default_port: 6379, show_port: true, eol: false },
+      { id: 'redis72', display_name: 'Redis 7.2', image_tag: 'redis:7.2-alpine', service_dir: 'redis72', default_port: 6379, show_port: true, eol: false },
+      { id: 'redis82', display_name: 'Redis 8.2', image_tag: 'redis:8.2-alpine', service_dir: 'redis82', default_port: 6379, show_port: true, eol: false },
     ];
     nginxVersions.value = [
-      { version: '1.24', tag: '1.24-alpine', full_name: 'nginx:1.24-alpine', eol: true },
-      { version: '1.25', tag: '1.25-alpine', full_name: 'nginx:1.25-alpine', eol: false },
-      { version: '1.27', tag: '1.27-alpine', full_name: 'nginx:1.27-alpine', eol: false },
+      { id: 'nginx124', display_name: 'Nginx 1.24', image_tag: 'nginx:1.24-alpine', service_dir: 'nginx124', default_port: 80, show_port: true, eol: true },
+      { id: 'nginx125', display_name: 'Nginx 1.25', image_tag: 'nginx:1.25-alpine', service_dir: 'nginx125', default_port: 80, show_port: true, eol: false },
+      { id: 'nginx127', display_name: 'Nginx 1.27', image_tag: 'nginx:1.27-alpine', service_dir: 'nginx127', default_port: 80, show_port: true, eol: false },
     ];
   }
-}
-
-// 辅助函数：确保版本在列表中，如果不存在则创建
-// version 参数是镜像 tag（如 "8.2-fpm", "8.0", "8.2-alpine"）
-function ensureVersionInList(versions: VersionInfo[], version: string, serviceType: string): void {
-  // 直接匹配 version 字段
-  if (!versions.find(v => v.version === version)) {
-    // 如果不存在，创建一个新版本项
-    const newVersion: VersionInfo = {
-      version: version,
-      tag: version,
-      full_name: `${serviceType.toLowerCase()}:${version}`,
-      eol: false, // 默认标记为未停止维护
-    };
-    versions.push(newVersion);
-    console.log(`[EnvConfig] 动态添加版本: ${version} (${serviceType})`);
-  }
-}
-
-// 辅助函数：获取 Redis 镜像标签
-function getRedisImageTag(version: string): string {
-  const info = redisVersions.value.find(v => v.version === version);
-  return info ? info.full_name : `redis:${version}`;
-}
-
-// 辅助函数：获取 Nginx 镜像标签
-function getNginxImageTag(version: string): string {
-  const info = nginxVersions.value.find(v => v.version === version);
-  return info ? info.full_name : `nginx:${version}`;
-}
-
-// 辅助函数：获取 PHP 镜像标签
-function getPhpImageTag(version: string): string {
-  const info = phpVersions.value.find(v => v.version === version);
-  return info ? info.full_name : `php:${version}-fpm`;
-}
-
-// 辅助函数：获取 MySQL 镜像标签
-function getMysqlImageTag(version: string): string {
-  const info = mysqlVersions.value.find(v => v.version === version);
-  return info ? info.full_name : `mysql:${version}`;
 }
 
 // 错误信息格式化
@@ -252,20 +211,12 @@ async function loadExistingConfig() {
         console.log('[EnvConfig] 解析服务:', s);
         if (s.service_type === 'PHP') {
           phpSvcs.push({ ...s, extensions: s.extensions ? [...s.extensions] : [] });
-          // 确保 PHP 版本在列表中
-          ensureVersionInList(phpVersions.value, s.version, 'PHP');
         } else if (s.service_type === 'MySQL') {
           mysqlSvcs.push({ ...s });
-          // 确保 MySQL 版本在列表中
-          ensureVersionInList(mysqlVersions.value, s.version, 'MySQL');
         } else if (s.service_type === 'Redis') {
           redisSvcs.push({ ...s });
-          // 确保 Redis 版本在列表中
-          ensureVersionInList(redisVersions.value, s.version, 'Redis');
         } else if (s.service_type === 'Nginx') {
           nginxSvcs.push({ ...s });
-          // 确保 Nginx 版本在列表中
-          ensureVersionInList(nginxVersions.value, s.version, 'Nginx');
         }
       });
       
@@ -276,14 +227,14 @@ async function loadExistingConfig() {
       
       phpServices.value = phpSvcs.length > 0 ? phpSvcs : [{
         service_type: 'PHP',
-        version: '8.2',
+        version: 'php82',
         host_port: 9000,
         extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
       }];
       
       mysqlServices.value = mysqlSvcs.length > 0 ? mysqlSvcs : [{
         service_type: 'MySQL',
-        version: '8.0',
+        version: 'mysql80',
         host_port: 3306,
       }];
       
@@ -311,13 +262,13 @@ async function loadExistingConfig() {
       // Default config
       phpServices.value = [{
         service_type: 'PHP',
-        version: '8.2',
+        version: 'php82',
         host_port: 9000,
         extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
       }];
       mysqlServices.value = [{
         service_type: 'MySQL',
-        version: '8.0',
+        version: 'mysql80',
         host_port: 3306,
       }];
     }
@@ -326,13 +277,13 @@ async function loadExistingConfig() {
     // Use defaults
     phpServices.value = [{
       service_type: 'PHP',
-      version: '8.2',
+      version: 'php82',
       host_port: 9000,
       extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
     }];
     mysqlServices.value = [{
       service_type: 'MySQL',
-      version: '8.0',
+      version: 'mysql80',
       host_port: 3306,
     }];
   }
@@ -393,11 +344,11 @@ function buildConfig(): EnvConfig {
 // Add PHP version
 function addPhpVersion() {
   const usedVersions = phpServices.value.map(s => s.version);
-  const available = phpVersions.value.filter(v => !usedVersions.includes(v.version));
+  const available = phpVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   phpServices.value.push({
     service_type: 'PHP',
-    version: available[0].version,
+    version: available[0].id,
     host_port: 9000 + phpServices.value.length,
     extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'curl'],
   });
@@ -411,11 +362,11 @@ function removePhpVersion(index: number) {
 // Add MySQL version
 function addMysqlVersion() {
   const usedVersions = mysqlServices.value.map(s => s.version);
-  const available = mysqlVersions.value.filter(v => !usedVersions.includes(v.version));
+  const available = mysqlVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   mysqlServices.value.push({
     service_type: 'MySQL',
-    version: available[0].version,
+    version: available[0].id,
     host_port: 3306 + mysqlServices.value.length,
   });
 }
@@ -428,11 +379,11 @@ function removeMysqlVersion(index: number) {
 // Add Redis version
 function addRedisVersion() {
   const usedVersions = redisServices.value.map(s => s.version);
-  const available = redisVersions.value.filter(v => !usedVersions.includes(v.version));
+  const available = redisVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   redisServices.value.push({
     service_type: 'Redis',
-    version: available[0].version,
+    version: available[0].id,
     host_port: 6379 + redisServices.value.length,
   });
 }
@@ -444,11 +395,11 @@ function removeRedisVersion(index: number) {
 // Add Nginx version
 function addNginxVersion() {
   const usedVersions = nginxServices.value.map(s => s.version);
-  const available = nginxVersions.value.filter(v => !usedVersions.includes(v.version));
+  const available = nginxVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   nginxServices.value.push({
     service_type: 'Nginx',
-    version: available[0].version,
+    version: available[0].id,
     host_port: 80 + nginxServices.value.length,
   });
 }
@@ -578,23 +529,21 @@ async function handleApply() {
     const hasNginx = nginxServices.value.length > 0;
     
     if (hasPHP && hasNginx) {
-      // 获取所有 PHP 服务的容器地址（容器名:端口）
+      // 获取所有 PHP 服务的容器地址（容器名:端口）— 直接使用 service_dir
       phpContainerNames.value = phpServices.value.map(service => {
-        const ver = service.version.replace(/\./g, '');
-        return `ps-php${ver}:9000`;
+        const versionInfo = phpVersions.value.find(v => v.id === service.version);
+        const serviceDir = versionInfo ? versionInfo.service_dir : service.version;
+        return `ps-${serviceDir}:9000`;
       });
       
-      // 获取所有 Nginx 服务的信息
+      // 获取所有 Nginx 服务的信息 — 直接使用 service_dir
       nginxServicesList.value = nginxServices.value.map(service => {
-        // 与后端逻辑保持一致：提取版本号的主次版本，去掉点号
-        const versionBase = service.version.split('-')[0]; // 提取 "1.28" from "1.28-alpine"
-        const versionParts = versionBase.split('.');
-        const ver = versionParts.length >= 2 
-          ? `${versionParts[0]}${versionParts[1]}` 
-          : '127'; // 默认值
+        const versionInfo = nginxVersions.value.find(v => v.id === service.version);
+        const serviceDir = versionInfo ? versionInfo.service_dir : service.version;
+        const displayName = versionInfo ? versionInfo.display_name : service.version;
         return {
-          name: `nginx${ver}`,
-          version: service.version,
+          name: serviceDir,
+          version: displayName,
           port: service.host_port
         };
       });
@@ -609,16 +558,16 @@ async function handleApply() {
 }
 
 // 打开 Nginx 配置目录
-async function openNginxConfigDir(serviceName?: string) {
+async function openNginxConfigDir(serviceDir?: string) {
   try {
-    // 如果没有指定服务名，默认打开第一个 Nginx 的配置目录
-    const targetService = serviceName || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
-    await invoke('open_service_config', { serviceName: targetService });
-    showToast(`已打开 ${targetService} 配置目录`, 'success');
+    // 如果没有指定服务目录，默认打开第一个 Nginx 的配置目录
+    const targetDir = serviceDir || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
+    await invoke('open_service_config', { serviceName: targetDir });
+    showToast(`已打开 ${targetDir} 配置目录`, 'success');
   } catch (e) {
     console.error('打开目录失败:', e);
-    const targetService = serviceName || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
-    showToast(`打开目录失败，请手动打开 services/${targetService}/conf.d/`, 'error');
+    const targetDir = serviceDir || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
+    showToast(`打开目录失败，请手动打开 services/${targetDir}/conf.d/`, 'error');
   }
 }
 
@@ -711,7 +660,7 @@ const goToMirrorSettings = () => {
                 <div class="flex items-center gap-2">
                   <span class="text-xs text-slate-500 font-mono">{{ index + 1 }}.</span>
                   <code class="text-sm text-blue-400 font-mono">{{ nginx.name }}</code>
-                  <span class="text-xs text-slate-500">(v{{ nginx.version }})</span>
+                  <span class="text-xs text-slate-500">({{ nginx.version }})</span>
                   <span v-if="nginx.port" class="text-xs text-slate-500">- 端口 {{ nginx.port }}</span>
                 </div>
                 <button
@@ -780,11 +729,10 @@ const goToMirrorSettings = () => {
             <div class="flex-1 w-full sm:w-auto">
               <label class="block text-xs text-slate-400 mb-1">
                 PHP 版本
-                <span class="text-slate-500 ml-1 hidden sm:inline">(将使用镜像: {{ getPhpImageTag(php.version) }})</span>
               </label>
               <select v-model="php.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in phpVersions" :key="v.version" :value="v.version">
-                  PHP {{ v.version }} → {{ v.tag }}
+                <option v-for="v in phpVersions" :key="v.id" :value="v.id">
+                  {{ v.display_name }} → {{ v.image_tag }}
                   <span v-if="v.eol" class="text-amber-400">(EOL)</span>
                 </option>
               </select>
@@ -821,16 +769,15 @@ const goToMirrorSettings = () => {
             <div class="flex-1 w-full sm:w-auto">
               <label class="block text-xs text-slate-400 mb-1">
                 MySQL 版本
-                <span class="text-slate-500 ml-1 hidden sm:inline">(将使用镜像: {{ getMysqlImageTag(mysql.version) }})</span>
               </label>
               <select v-model="mysql.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in mysqlVersions" :key="v.version" :value="v.version">
-                  MySQL {{ v.version }} → {{ v.tag }}
+                <option v-for="v in mysqlVersions" :key="v.id" :value="v.id">
+                  {{ v.display_name }} → {{ v.image_tag }}
                   <span v-if="v.eol" class="text-amber-400">(EOL)</span>
                 </option>
               </select>
             </div>
-            <div class="w-full sm:w-32">
+            <div class="w-full sm:w-32" v-if="mysqlVersions.find(v => v.id === mysql.version)?.show_port !== false">
               <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
               <input v-model.number="mysql.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
@@ -870,16 +817,15 @@ const goToMirrorSettings = () => {
             <div class="flex-1 w-full sm:w-auto">
               <label class="block text-xs text-slate-400 mb-1">
                 Redis 版本
-                <span class="text-slate-500 ml-1 hidden sm:inline">(将使用镜像: {{ getRedisImageTag(redis.version) }})</span>
               </label>
               <select v-model="redis.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in redisVersions" :key="v.version" :value="v.version">
-                  Redis {{ v.version }} → {{ v.tag }}
+                <option v-for="v in redisVersions" :key="v.id" :value="v.id">
+                  {{ v.display_name }} → {{ v.image_tag }}
                   <span v-if="v.eol" class="text-amber-400">(EOL)</span>
                 </option>
               </select>
             </div>
-            <div class="w-full sm:w-32">
+            <div class="w-full sm:w-32" v-if="redisVersions.find(v => v.id === redis.version)?.show_port !== false">
               <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
               <input v-model.number="redis.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
@@ -904,16 +850,15 @@ const goToMirrorSettings = () => {
             <div class="flex-1 w-full sm:w-auto">
               <label class="block text-xs text-slate-400 mb-1">
                 Nginx 版本
-                <span class="text-slate-500 ml-1 hidden sm:inline">(将使用镜像: {{ getNginxImageTag(nginx.version) }})</span>
               </label>
               <select v-model="nginx.version" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option v-for="v in nginxVersions" :key="v.version" :value="v.version">
-                  Nginx {{ v.version }} → {{ v.tag }}
+                <option v-for="v in nginxVersions" :key="v.id" :value="v.id">
+                  {{ v.display_name }} → {{ v.image_tag }}
                   <span v-if="v.eol" class="text-amber-400">(EOL)</span>
                 </option>
               </select>
             </div>
-            <div class="w-full sm:w-32">
+            <div class="w-full sm:w-32" v-if="nginxVersions.find(v => v.id === nginx.version)?.show_port !== false">
               <label class="block text-xs text-slate-400 mb-1">宿主机端口</label>
               <input v-model.number="nginx.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
             </div>

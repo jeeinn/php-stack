@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+# GITHUB_TOKEN 需要写 Release 的权限
+permissions:
+  contents: write
+
 # 确保同一时间只有一个 release 流程在运行
 concurrency:
   group: release-${{ github.ref }}

@@ -21,6 +21,23 @@ const commonExtensions = [
   'soap', 'imagick', 'mongodb', 'amqp', 'memcached',
 ];
 
+// Common timezones for selection
+const commonTimezones = [
+  { value: 'Asia/Shanghai', label: '上海 (UTC+8)' },
+  { value: 'Asia/Hong_Kong', label: '香港 (UTC+8)' },
+  { value: 'Asia/Tokyo', label: '东京 (UTC+9)' },
+  { value: 'Asia/Singapore', label: '新加坡 (UTC+8)' },
+  { value: 'Asia/Dubai', label: '迪拜 (UTC+4)' },
+  { value: 'Europe/London', label: '伦敦 (UTC+0/+1)' },
+  { value: 'Europe/Paris', label: '巴黎 (UTC+1/+2)' },
+  { value: 'Europe/Berlin', label: '柏林 (UTC+1/+2)' },
+  { value: 'America/New_York', label: '纽约 (UTC-5/-4)' },
+  { value: 'America/Los_Angeles', label: '洛杉矶 (UTC-8/-7)' },
+  { value: 'America/Chicago', label: '芝加哥 (UTC-6/-5)' },
+  { value: 'Australia/Sydney', label: '悉尼 (UTC+10/+11)' },
+  { value: 'UTC', label: '协调世界时 (UTC)' },
+];
+
 // State
 const phpServices = ref<ServiceEntry[]>([]);
 const mysqlServices = ref<ServiceEntry[]>([]);
@@ -29,6 +46,8 @@ const nginxServices = ref<ServiceEntry[]>([]);
 
 const sourceDir = ref('./www');
 const timezone = ref('Asia/Shanghai');
+const customTimezone = ref('');
+const showCustomTimezoneInput = ref(false);
 const mysqlRootPassword = ref('root');  // MySQL root密码
 const workspacePath = ref<string>('加载中...');
 
@@ -274,6 +293,13 @@ async function loadExistingConfig() {
       sourceDir.value = config.source_dir;
       timezone.value = config.timezone;
       
+      // Check if timezone is in common list
+      const isInCommonList = commonTimezones.some(tz => tz.value === config.timezone);
+      if (!isInCommonList && config.timezone) {
+        customTimezone.value = config.timezone;
+        showCustomTimezoneInput.value = true;
+      }
+      
       // 加载MySQL root密码（如果有）
       if (config.mysql_root_password) {
         mysqlRootPassword.value = config.mysql_root_password;
@@ -442,6 +468,24 @@ function toggleExtension(phpIndex: number, ext: string) {
   }
 }
 
+function selectTimezone(value: string) {
+  if (value === '__custom__') {
+    showCustomTimezoneInput.value = true;
+    if (customTimezone.value) {
+      timezone.value = customTimezone.value;
+    }
+  } else {
+    showCustomTimezoneInput.value = false;
+    timezone.value = value;
+  }
+}
+
+function handleCustomTimezoneChange() {
+  if (customTimezone.value.trim()) {
+    timezone.value = customTimezone.value.trim();
+  }
+}
+
 // Preview
 async function handlePreview() {
   if (portConflicts.value.length > 0) {
@@ -542,11 +586,16 @@ async function handleApply() {
       
       // 获取所有 Nginx 服务的信息
       nginxServicesList.value = nginxServices.value.map(service => {
-        const ver = service.version.replace(/\./g, '');
+        // 与后端逻辑保持一致：提取版本号的主次版本，去掉点号
+        const versionBase = service.version.split('-')[0]; // 提取 "1.28" from "1.28-alpine"
+        const versionParts = versionBase.split('.');
+        const ver = versionParts.length >= 2 
+          ? `${versionParts[0]}${versionParts[1]}` 
+          : '127'; // 默认值
         return {
           name: `nginx${ver}`,
           version: service.version,
-          port: service.port
+          port: service.host_port
         };
       });
       
@@ -894,14 +943,28 @@ const goToMirrorSettings = () => {
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">时区</label>
-            <select v-model="timezone" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="Asia/Shanghai">Asia/Shanghai</option>
-              <option value="Asia/Tokyo">Asia/Tokyo</option>
-              <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
-              <option value="UTC">UTC</option>
-              <option value="America/New_York">America/New_York</option>
-              <option value="Europe/London">Europe/London</option>
+            <select 
+              @change="(e) => selectTimezone((e.target as HTMLSelectElement).value)"
+              :value="showCustomTimezoneInput ? '__custom__' : timezone"
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option v-for="tz in commonTimezones" :key="tz.value" :value="tz.value">
+                {{ tz.label }}
+              </option>
+              <option value="__custom__">自定义时区...</option>
             </select>
+            <div v-if="showCustomTimezoneInput" class="mt-2">
+              <input 
+                v-model="customTimezone"
+                @input="handleCustomTimezoneChange"
+                type="text"
+                placeholder="例如：Europe/Moscow"
+                class="w-full bg-slate-800 border border-blue-500/50 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p class="text-xs text-slate-500 mt-1">
+                💡 提示：请输入有效的 IANA 时区标识符，如 "Europe/Moscow"、"Pacific/Auckland"
+              </p>
+            </div>
           </div>
         </div>
       </section>

@@ -248,6 +248,7 @@ impl ConfigGenerator {
         let manifest = VersionManifest::new();
         let mut lines: Vec<String> = Vec::new();
         // Note: 'version' attribute is obsolete in modern Docker Compose, omit it
+        lines.push("name: php-stack".to_string());
         lines.push("services:".to_string());
 
         for service in &config.services {

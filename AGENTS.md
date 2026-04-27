@@ -21,7 +21,13 @@
     - `backup_engine.rs`: **增强备份引擎**（v0.1.0 新增）
     - `restore_engine.rs`: **恢复引擎**（v0.1.0 新增）
     - `export.rs`: 旧版导出引擎（保留向后兼容）
-  - `commands.rs`: 定义暴露给前端的 `#[tauri::command]` 接口。
+  - `commands/`: 暴露给前端的 `#[tauri::command]` 接口，按业务域拆分为子模块。
+    - `mod.rs`: 模块声明、`get_project_root()` 共享函数、re-export 所有命令。
+    - `docker.rs`: 容器 CRUD 操作（check_docker、list/start/stop/restart_container）。
+    - `env_config.rs`: 环境配置生成、应用、启动/重启/停止环境。
+    - `mirror.rs`: 镜像源预设管理、自定义配置、连接测试。
+    - `backup.rs`: 备份创建、恢复预览/验证/执行、路径转换。
+    - `workspace.rs`: 工作区管理、版本映射查询、用户覆盖、日志导出。
   - `lib.rs`: 插件注册与指令分发中心。
 
 ## ✅ v0.1.0 已完成功能
@@ -69,7 +75,7 @@
 ### 5. 基础设施模块
 - **env_parser.rs**: .env 文件可靠读写，保留注释和空行（Property 9, 10）
 - **backup_manifest.rs**: Manifest 序列化/反序列化（Property 11, 12）
-- **测试覆盖**: 72 个单元测试全部通过，包括属性测试（proptest）
+- **测试覆盖**: 77 个测试全部通过（74 单元测试 + 3 集成测试），包括属性测试（proptest）
 
 ## 🛠️ 开发规范
 
@@ -82,7 +88,10 @@
    - 纯函数模块（env_parser、backup_manifest、config_generator）使用 `proptest` 进行属性测试
    - 标签格式：`// Feature: env-config-and-backup, Property N: {property_text}`
    - 运行测试：`cargo test`
-4. **模块注册**: 新增模块需在 `engine/mod.rs` 中声明 `pub mod xxx;`
+4. **模块注册**: 
+   - 新增引擎模块需在 `engine/mod.rs` 中声明 `pub mod xxx;`
+   - 新增命令子模块需在 `commands/mod.rs` 中声明并 re-export
+   - 新增的 `#[tauri::command]` 函数需在 `lib.rs` 的 `invoke_handler` 中注册
 
 ### Vue 前端
 1. **状态管理**: 目前使用 `ref` 和 `reactive` 进行局部状态管理。
@@ -185,16 +194,19 @@
   - 重要问题排查过程
   - 每日开发日志
 
-#### 4. `doc/implementation/` - 实施总结和进度报告
-- **用途**: 功能实施总结、优化进度、测试结果
+#### 4. `doc/history/` - 历史记录和归档文档
+- **用途**: 功能实施总结、优化进度、测试结果、问题修复记录，更新文档时不需要更新此目录下的文档
 - **示例**: 
-  - `IMPLEMENTATION_SUMMARY.md` - 实施总结
-  - `TEST_RESULTS_REPORT.md` - 测试结果报告
-  - `VERSION_SCOPE.md` - 版本范围定义
+  - `2026-04-17_IMPLEMENTATION_SUMMARY.md` - 实施总结
+  - `2026-04-23_TEST_RESULTS_REPORT.md` - 测试结果报告
+  - `2026-04-17_VERSION_SCOPE.md` - 版本范围定义
+  - `YYYY-MM-DD_*.md` - 按日期归档的历史文档
 - **何时使用**: 
   - 功能完成后的实施总结
   - 阶段性进度报告
   - 测试和验证结果
+  - Bug 修复记录
+  - 所有需要归档的文档
 
 #### 5. `doc/README.md` - 文档索引
 - **用途**: 文档目录和导航
@@ -226,7 +238,8 @@
 4. **更新原则**:
    - 修改代码后及时更新相关文档
    - Bug 修复后记录到 `doc/history/`
-   - 新功能完成后编写实施总结到 `doc/implementation/`
+   - 新功能完成后编写实施总结到 `doc/history/`（带日期前缀）
+   - 所有文档最终都归档到 `doc/history/`
 
 ## 🚀 Agent 任务接入建议
 

@@ -61,12 +61,12 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 ┌──────────────────────▼──────────────────────────────────────┐
 │                      后端层 (Rust/Tauri)                     │
 ├─────────────────────────────────────────────────────────────┤
-│  commands.rs (API 命令入口)                                  │
-│  ├── check_docker / list_containers                         │
-│  ├── generate_env_config / apply_env_config                 │
-│  ├── get_mirror_presets / apply_mirror_preset               │
-│  ├── create_backup / preview_restore                        │
-│  └── get_version_mappings / save_user_override              │
+│  commands/ (API 命令入口，按业务域拆分)                       │
+│  ├── docker.rs        → 容器 CRUD 操作                      │
+│  ├── env_config.rs    → 环境配置生成 + 启停环境              │
+│  ├── mirror.rs        → 镜像源管理                          │
+│  ├── backup.rs        → 备份与恢复                          │
+│  └── workspace.rs     → 工作区、版本映射、用户覆盖          │
 ├─────────────────────────────────────────────────────────────┤
 │  engine/ (核心业务引擎)                                      │
 │  ├── config_generator.rs       (配置生成器 + 动态镜像切换)   │
@@ -233,7 +233,13 @@ php-stack/
 │       └── portChecker.ts           # 端口冲突检测工具
 ├── src-tauri/
 │   ├── src/
-│   │   ├── commands.rs              # Tauri 命令入口
+│   │   ├── commands/                 # Tauri 命令入口（按业务域拆分）
+│   │   │   ├── mod.rs               # 模块声明 + get_project_root() 共享函数
+│   │   │   ├── docker.rs            # 容器 CRUD（check_docker, list/start/stop/restart）
+│   │   │   ├── env_config.rs        # 环境配置生成 + 启动/重启/停止环境
+│   │   │   ├── mirror.rs            # 镜像源管理（预设、自定义、测试连接）
+│   │   │   ├── backup.rs            # 备份创建、恢复预览/验证/执行
+│   │   │   └── workspace.rs         # 工作区管理、版本映射、用户覆盖、日志导出
 │   │   ├── lib.rs                   # 插件注册与日志初始化
 │   │   ├── logging.rs               # 日志基础设施
 │   │   ├── engine/
@@ -275,7 +281,7 @@ php-stack/
 ### 相关文档
 
 - [VERSION_MANIFEST.md](../history/2026-04-20_VERSION_MANIFEST.md) — 版本清单系统历史说明
-- [IMPLEMENTATION_SUMMARY.md](../implementation/IMPLEMENTATION_SUMMARY.md) — 实现总结报告
+- [IMPLEMENTATION_SUMMARY.md](../history/2026-04-17_IMPLEMENTATION_SUMMARY.md) — 实现总结报告
 - [DYNAMIC_BASE_IMAGE.md](../guides/DYNAMIC_BASE_IMAGE.md) — 动态基础镜像详细文档
 - [TESTING_GUIDE.md](../guides/TESTING_GUIDE.md) — 测试指南
 

@@ -135,15 +135,25 @@ PHP83_VERSION=registry.example.com/php:8.3-custom
 
 ## 3. 添加新的后端 Command
 
-### 步骤 1: 在 `commands.rs` 中添加函数
+### 步骤 1: 在 `commands/` 对应子模块中添加函数
+
+根据命令的业务域，选择合适的子模块：
+- `commands/docker.rs` — 容器操作相关
+- `commands/env_config.rs` — 环境配置相关
+- `commands/mirror.rs` — 镜像源管理相关
+- `commands/backup.rs` — 备份恢复相关
+- `commands/workspace.rs` — 工作区、版本管理、日志相关
 
 ```rust
 #[tauri::command]
 pub fn my_new_command(param: String) -> Result<String, String> {
-    // 实现逻辑
+    // 如需获取项目根目录，使用 super::get_project_root()
+    let project_root = super::get_project_root()?;
     Ok(format!("Result: {}", param))
 }
 ```
+
+> 如果命令不属于任何现有子模块，可以新建子模块并在 `commands/mod.rs` 中声明和 re-export。
 
 ### 步骤 2: 在 `lib.rs` 中注册
 

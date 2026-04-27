@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-shell';
 import type { ServiceEntry, EnvConfig, VersionInfo } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
@@ -16,11 +17,17 @@ const mysqlVersions = ref<VersionInfo[]>([]);
 const redisVersions = ref<VersionInfo[]>([]);
 const nginxVersions = ref<VersionInfo[]>([]);
 
+// PHP 扩展预设列表（扁平化）
 const commonExtensions = [
-  'pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache', 'bcmath',
-  'redis', 'xdebug', 'swoole', 'zip', 'pcntl', 'sockets', 'intl',
-  'soap', 'imagick', 'mongodb', 'amqp', 'memcached',
+  'pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache', 'zip', 'bcmath', 'intl',
+  'pdo_pgsql', 'pdo_sqlite', 'mongodb', 'redis', 'memcached', 'amqp',
+  'swoole', 'openswoole', 'parallel',
+  'xdebug', 'blackfire', 'tidy', 'soap',
+  'imagick', 'exif', 'pcntl', 'sockets'
 ];
+
+const customExtInput = ref('');
+const isExtensionsPanelOpen = ref(false);
 
 // Common timezones for selection
 const commonTimezones = [
@@ -459,6 +466,23 @@ function toggleExtension(phpIndex: number, ext: string) {
   }
 }
 
+function syncCustomExtensions(phpIndex: number) {
+  const service = phpServices.value[phpIndex];
+  if (!service.extensions) service.extensions = [];
+  
+  // 获取当前已选的预设扩展
+  const presetExts = service.extensions.filter(e => commonExtensions.includes(e));
+  
+  // 解析用户输入的自定义扩展
+  const customExts = customExtInput.value
+    .split(/[,\s]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !commonExtensions.includes(s));
+  
+  // 合并并去重
+  service.extensions = [...new Set([...presetExts, ...customExts])];
+}
+
 function handleCustomTimezoneChange() {
   if (customTimezone.value.trim()) {
     timezone.value = customTimezone.value.trim();
@@ -777,17 +801,59 @@ const goToMirrorSettings = () => {
             <button v-if="phpServices.length > 1" @click="removePhpVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">删除</button>
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-2">PHP 扩展</label>
-            <div class="flex flex-wrap gap-2">
-              <label
-                v-for="ext in commonExtensions"
-                :key="ext"
-                class="flex items-center gap-1.5 text-xs px-2 py-1 rounded cursor-pointer transition"
-                :class="php.extensions?.includes(ext) ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700 hover:border-slate-600'"
+            <label class="block text-xs text-slate-400 mb-2">PHP 扩展配置</label>
+            
+            <!-- 统一折叠面板 -->
+            <div class="border border-slate-700/50 rounded-lg overflow-hidden">
+              <button 
+                @click="isExtensionsPanelOpen = !isExtensionsPanelOpen"
+                class="w-full flex justify-between items-center px-3 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors text-left"
               >
-                <input type="checkbox" :checked="php.extensions?.includes(ext)" @change="toggleExtension(idx, ext)" class="hidden" />
-                {{ ext }}
-              </label>
+                <span class="text-xs font-medium text-slate-300">📦 预设扩展库 & 自定义配置</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-500 transition-transform duration-200" :class="{ 'rotate-180': isExtensionsPanelOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div v-show="isExtensionsPanelOpen" class="p-3 bg-slate-900/50 border-t border-slate-700/50 space-y-3">
+                <!-- 平铺扩展列表 -->
+                <div class="max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                  <div class="flex flex-wrap gap-2">
+                    <label
+                      v-for="ext in commonExtensions"
+                      :key="ext"
+                      class="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded cursor-pointer transition select-none"
+                      :class="php.extensions?.includes(ext) ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700 hover:border-slate-600'"
+                    >
+                      <input type="checkbox" :checked="php.extensions?.includes(ext)" @change="toggleExtension(idx, ext)" class="hidden" />
+                      {{ ext }}
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 自定义扩展输入区 -->
+                <div class="pt-3 border-t border-slate-700/50">
+                  <label class="block text-[10px] font-medium text-emerald-400 mb-1.5">✨ 自定义扩展 (空格或逗号分隔)</label>
+                  <input 
+                    v-model="customExtInput" 
+                    @blur="syncCustomExtensions(idx)"
+                    placeholder="例如: grpc protobuf" 
+                    class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-mono outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
+                  <div class="flex items-center justify-between mt-1.5">
+                    <p class="text-[10px] text-slate-500">💡 由 docker-php-extension-installer 自动处理依赖。</p>
+                    <button 
+                      @click="open('https://github.com/mlocati/docker-php-extension-installer#supported-php-extensions')"
+                      class="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <span>查看支持列表</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

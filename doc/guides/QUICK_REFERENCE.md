@@ -173,28 +173,40 @@ await invoke('execute_restore', {
 | `backup_engine.rs` | 368 | 备份引擎（ZIP 打包） |
 | `restore_engine.rs` | 625 | 恢复引擎（ZIP 解压） |
 
-### Tauri 命令 (`src-tauri/src/commands.rs`)
+### Tauri 命令 (`src-tauri/src/commands/`)
 
-#### 配置生成命令
+命令按业务域拆分为子模块：
+
+#### Docker 容器 (`docker.rs`)
+- `check_docker` - 检查 Docker 可用性
+- `list_containers` / `list_all_running_containers` - 列出容器
+- `start_container` / `stop_container` / `restart_container` - 容器操作
+
+#### 配置生成 (`env_config.rs`)
 - `validate_env_config` - 验证配置
 - `generate_env_config` - 生成 .env 预览
 - `preview_compose` - 预览 docker-compose.yml
 - `apply_env_config` - 应用配置
+- `start_environment` / `restart_environment` / `stop_environment` - 环境生命周期
 
-#### 镜像源命令
+#### 镜像源 (`mirror.rs`)
 - `get_mirror_presets` - 获取预设方案
 - `apply_mirror_preset` - 应用预设
 - `update_single_mirror` - 更新单个类别
 - `test_mirror` - 测试连接
 - `get_mirror_status` - 获取当前状态
 
-#### 备份命令
+#### 备份恢复 (`backup.rs`)
 - `create_backup` - 创建备份
-
-#### 恢复命令
 - `preview_restore` - 预览备份
 - `verify_backup` - 验证完整性
 - `execute_restore` - 执行恢复
+
+#### 工作区与版本 (`workspace.rs`)
+- `get_workspace_info` / `set_workspace_path` - 工作区管理
+- `get_version_mappings` / `validate_version` - 版本映射
+- `save_user_override` / `remove_user_override` - 用户覆盖
+- `export_logs` - 日志导出
 
 ---
 

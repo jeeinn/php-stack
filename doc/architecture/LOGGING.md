@@ -109,7 +109,7 @@ graph TD
 |------|------|
 | `src-tauri/src/logging.rs` | 日志基础设施（tracing 配置、宏定义） |
 | `src-tauri/src/lib.rs` | 日志系统初始化 |
-| `src-tauri/src/commands.rs` | 导出日志命令 |
+| `src-tauri/src/commands/workspace.rs` | 导出日志命令 |
 | `src/composables/useToast.ts` | 前端日志状态管理 |
 | `src/App.vue` | 日志面板 UI、事件监听、自动滚动 |
 | `src-tauri/capabilities/default.json` | 剪贴板权限配置 |
@@ -130,7 +130,7 @@ graph TD
 
 **版本**: v0.1.1 (2026-04-25)  
 **问题**: 修复启动后按钮状态卡死问题  
-**影响模块**: `commands.rs`, `docker/manager.rs`
+**影响模块**: `commands/env_config.rs`, `docker/manager.rs`
 
 ### 2.1 问题背景
 
@@ -143,7 +143,7 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant FE as 前端 (App.vue)
-    participant CMD as commands.rs
+    participant CMD as commands/env_config.rs
     participant DM as DockerManager
     participant DC as Docker Compose
     participant LOGS as docker logs -f
@@ -210,7 +210,7 @@ sequenceDiagram
 | 文件 | 修改内容 |
 |------|----------|
 | `src-tauri/src/docker/manager.rs` | `check_all_ps_containers_running()` 方法 |
-| `src-tauri/src/commands.rs` | 智能等待循环实现 |
+| `src-tauri/src/commands/env_config.rs` | 智能等待循环实现 |
 | `src/App.vue` | 按钮交互优化 |
 
 ### 2.8 测试建议

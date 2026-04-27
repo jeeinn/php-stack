@@ -6,7 +6,7 @@
 |------|------|
 | [README.md](../../README.md) | 项目介绍、安装指南、功能特性 |
 | [AGENTS.md](../../AGENTS.md) | AI Agent 开发指南、架构说明、后续任务 |
-| [IMPLEMENTATION_SUMMARY.md](../implementation/IMPLEMENTATION_SUMMARY.md) | v0.1.0 实现总结、测试统计、代码质量报告 |
+| [IMPLEMENTATION_SUMMARY.md](../history/2026-04-17_IMPLEMENTATION_SUMMARY.md) | v0.1.0 实现总结、测试统计、代码质量报告 |
 | [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) | 系统架构文档 |
 | [文档中心](../README.md) | 完整文档索引 |
 

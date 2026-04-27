@@ -194,16 +194,19 @@
   - 重要问题排查过程
   - 每日开发日志
 
-#### 4. `doc/implementation/` - 实施总结和进度报告
-- **用途**: 功能实施总结、优化进度、测试结果
+#### 4. `doc/history/` - 历史记录和归档文档
+- **用途**: 功能实施总结、优化进度、测试结果、问题修复记录，更新文档时不需要更新此目录下的文档
 - **示例**: 
-  - `IMPLEMENTATION_SUMMARY.md` - 实施总结
-  - `TEST_RESULTS_REPORT.md` - 测试结果报告
-  - `VERSION_SCOPE.md` - 版本范围定义
+  - `2026-04-17_IMPLEMENTATION_SUMMARY.md` - 实施总结
+  - `2026-04-23_TEST_RESULTS_REPORT.md` - 测试结果报告
+  - `2026-04-17_VERSION_SCOPE.md` - 版本范围定义
+  - `YYYY-MM-DD_*.md` - 按日期归档的历史文档
 - **何时使用**: 
   - 功能完成后的实施总结
   - 阶段性进度报告
   - 测试和验证结果
+  - Bug 修复记录
+  - 所有需要归档的文档
 
 #### 5. `doc/README.md` - 文档索引
 - **用途**: 文档目录和导航
@@ -235,7 +238,8 @@
 4. **更新原则**:
    - 修改代码后及时更新相关文档
    - Bug 修复后记录到 `doc/history/`
-   - 新功能完成后编写实施总结到 `doc/implementation/`
+   - 新功能完成后编写实施总结到 `doc/history/`（带日期前缀）
+   - 所有文档最终都归档到 `doc/history/`
 
 ## 🚀 Agent 任务接入建议
 

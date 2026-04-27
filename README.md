@@ -19,7 +19,7 @@
 
 - **[📖 文档中心](doc/README.md)** - 完整的文档索引和导航
 - **[🏗️ 系统架构](doc/architecture/ARCHITECTURE.md)** - 系统架构、工作流程、模块说明
-- **[💻 实现总结](doc/implementation/IMPLEMENTATION_SUMMARY.md)** - v0.1.0 功能实现详情
+- **[💻 实现总结](doc/history/2026-04-17_IMPLEMENTATION_SUMMARY.md)** - v0.1.0 功能实现详情
 - **[📖 使用指南](doc/guides/MIRROR_GUIDE.md)** - 镜像源配置、快速参考
 - **[📜 历史记录](doc/history/)** - 问题修复、重构记录、开发日志
 

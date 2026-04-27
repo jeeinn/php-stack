@@ -7,126 +7,37 @@
 
 ---
 
-## 📚 文档分类
+## 📁 文档目录结构
 
-### 🏗️ 架构文档 (architecture/)
+```
+doc/
+├── README.md                    # 📖 本文档 - 文档中心索引
+├── architecture/                # 🏗️ 架构设计文档（稳定）
+│   ├── ARCHITECTURE.md         # 系统架构
+│   ├── WORKFLOWS.md            # 核心工作流程
+│   ├── LOGGING.md              # 日志系统
+│   ├── DECISIONS.md            # 技术决策 (ADR)
+│   └── EXTENSION_GUIDE.md      # 扩展指南
+├── guides/                      # 📖 使用指南（活跃）
+│   ├── MIRROR_GUIDE.md         # 镜像源配置指南
+│   ├── QUICK_REFERENCE.md      # 快速参考
+│   ├── TESTING_GUIDE.md        # 测试规范指南
+│   ├── TEST_RESTRUCTURE.md     # 测试重构说明
+│   └── TESTING_QUICK_REF.md    # 测试快速参考
+├── history/                     # 📜 历史归档（所有其他文档）
+│   ├── YYYY-MM-DD_*.md         # 按日期归档的文档
+│   ├── Dev.log.md              # 开发日志
+│   ├── FIX_*.md                # 问题修复记录
+│   └── ...                     # 其他历史文档
+└── implementation/              # 💻 临时实现文档（功能完成后归档到 history/）
+    └── .gitkeep                # 保持目录存在
+```
 
-系统设计和架构相关文档：
-
-- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) - 系统架构文档（入口）
-  - 项目概述与技术栈
-  - 系统架构图
-  - 模块概览与核心数据结构
-  - 数据流概览
-  - 文件结构
-
-- [WORKFLOWS.md](architecture/WORKFLOWS.md) - 核心工作流程
-  - 工作目录初始化
-  - 环境配置与启动流程
-  - 版本映射查询流程
-  - 备份与恢复流程
-
-- [LOGGING.md](architecture/LOGGING.md) - 日志与启动系统
-  - 三层日志架构
-  - 实时日志推送与自动滚动
-  - 容器启动智能等待机制
-
-- [DECISIONS.md](architecture/DECISIONS.md) - 关键技术决策 (ADR)
-  - 版本清单设计、用户覆盖机制
-  - ZIP 备份、动态镜像切换
-  - version_manifest.json 扁平化重构
-
-- [EXTENSION_GUIDE.md](architecture/EXTENSION_GUIDE.md) - 扩展指南
-  - 添加新服务版本
-  - 用户自定义标签
-  - 添加新 Command
-
-### 💻 实现文档 (implementation/)
-
-功能实现和技术细节文档：
-
-- [IMPLEMENTATION_SUMMARY.md](implementation/IMPLEMENTATION_SUMMARY.md) - v0.1.0 实现总结报告
-  - 已完成功能清单
-  - 代码统计与测试覆盖
-  - 架构改进说明
-  
-- [VERSION_SCOPE.md](implementation/VERSION_SCOPE.md) - 版本定位说明
-  - v0.1.0 包含/不包含的功能
-  - 设计理念与用户场景
-  - 常见问题解答
-
-- [VERSION_SELECTION_OPTIMIZATION.md](implementation/VERSION_SELECTION_OPTIMIZATION.md) - 版本选择界面优化说明
-  - 优化目标与实现
-  - 用户体验改进
-
-### 📖 使用指南 (guides/)
-
-用户和开发者指南：
-
-- [MIRROR_GUIDE.md](guides/MIRROR_GUIDE.md) - 镜像源配置使用指南
-  - 配置项说明
-  - 作用时机
-  - 配置步骤
-  - 常见问题
-
-- [QUICK_REFERENCE.md](guides/QUICK_REFERENCE.md) - 快速参考指南
-  - 核心功能速览
-  - API 命令参考
-  - 开发规范速查
-  - 常见问题
-
-- [TESTING_GUIDE.md](guides/TESTING_GUIDE.md) - 测试规范指南 ⭐️新增
-  - Rust后端测试规范
-  - Vue前端测试规范
-  - 测试编写示例
-  - 最佳实践
-
-- [TEST_RESTRUCTURE.md](guides/TEST_RESTRUCTURE.md) - 测试结构重构说明 ⭐️新增
-  - 重构前后对比
-  - 目录结构说明
-  - 使用示例
-
-- [TESTING_QUICK_REF.md](guides/TESTING_QUICK_REF.md) - 测试快速参考 ⭐️新增
-  - 常用命令
-  - 代码模板
-  - 覆盖目标
-
-### 📜 历史文档 (history/)
-
-项目开发过程中的历史记录、问题修复和优化记录：
-
-#### 开发日志
-- [Dev.log.md](history/Dev.log.md) - 开发日志
-
-#### 代码清理
-- [CLEANUP_PLAN.md](history/CLEANUP_PLAN.md) - 代码清理计划（已执行完成）
-
-#### 镜像配置重构
-- [MIRROR_CONFIG_REFACTOR_SUMMARY.md](history/MIRROR_CONFIG_REFACTOR_SUMMARY.md) - 镜像源管理重构总结（合并版）
-
-#### 问题修复归档
-- [FIXES_ARCHIVE_SUMMARY.md](history/FIXES_ARCHIVE_SUMMARY.md) - 问题修复历史归档摘要
-- FIX_*.md 系列 - 详细问题修复报告（供深度参考）
-  - [FIX_CONFIG_GENERATOR_PATH.md](history/FIX_CONFIG_GENERATOR_PATH.md)
-  - [FIX_USER_OVERRIDE_NOT_APPLIED.md](history/FIX_USER_OVERRIDE_NOT_APPLIED.md)
-  - [FIX_VERSION_KEY_MATCHING.md](history/FIX_VERSION_KEY_MATCHING.md)
-  - [FIX_ENV_CONFIG_AUTO_SELECT.md](history/FIX_ENV_CONFIG_AUTO_SELECT.md)
-
-#### 其他历史记录
-- VERIFY_*.md 系列 - 验证报告
-- REFACTOR_*.md 系列 - 重构记录
-- USER_OVERRIDE_*.md - 用户覆盖功能文档
-- VERSION_*.md - 版本相关文档
-
-#### AI 辅助开发文档（按日期归档）
-- [2026-04-25_REALTIME_LOG_DISPLAY_OPTIMIZATION.md](history/2026-04-25_REALTIME_LOG_DISPLAY_OPTIMIZATION.md) - Docker Compose 实时日志显示优化
-- [2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md](history/2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md) - Docker Compose 跨平台兼容性修复
-- [2026-04-16_Docker_Compose_集成实施.md](history/2026-04-16_Docker_Compose_集成实施.md) - Docker Compose 集成实施方案
-- [2026-04-17_requirements.md](history/2026-04-17_requirements.md) - 环境配置与备份需求文档
-- [2026-04-17_design.md](history/2026-04-17_design.md) - 系统设计方案
-- [2026-04-17_tasks.md](history/2026-04-17_tasks.md) - 开发任务清单
-
-> 💡 **提示**: 历史文档主要用于了解项目开发过程和问题解决思路，日常开发可参考架构文档和使用指南。
+**核心原则**:
+- **architecture/** - 系统架构设计，长期稳定的核心文档
+- **guides/** - 用户使用指南和开发者教程，持续更新的活跃文档
+- **history/** - 所有实施总结、测试报告、修复记录等历史文档（带日期前缀）该文件夹下的文档不需要更新
+- **implementation/** - 仅在功能开发过程中临时存放文档，完成后统一归档到 history/
 
 ---
 
@@ -140,12 +51,10 @@
 
 ### 开发者必读
 1. [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) - 理解系统架构
-2. [implementation/IMPLEMENTATION_SUMMARY.md](implementation/IMPLEMENTATION_SUMMARY.md) - 了解实现细节
-3. [guides/TESTING_GUIDE.md](guides/TESTING_GUIDE.md) - 掌握测试规范 ⭐️新增
-4. 根目录 [AGENTS.md](../AGENTS.md) - AI Agent 开发指南
+2. [guides/TESTING_GUIDE.md](guides/TESTING_GUIDE.md) - 掌握测试规范 ⭐️新增
+3. 根目录 [AGENTS.md](../AGENTS.md) - AI Agent 开发指南
 
 ### 版本信息
-- [implementation/VERSION_SCOPE.md](implementation/VERSION_SCOPE.md) - 版本定位和功能范围
 - 根目录 [CHANGELOG.md](../CHANGELOG.md) - 版本变更历史
 
 ---
@@ -154,29 +63,50 @@
 
 ### 文档分类原则
 
-| 文档类型 | 存放位置 | 示例 |
+| 文档类型 | 存放位置 | 说明 |
 |---------|---------|------|
-| 架构设计 | `doc/architecture/` | 系统架构图、模块设计 |
-| 实现总结 | `doc/implementation/` | 功能实现报告、优化说明 |
-| 使用指南 | `doc/guides/` | 用户手册、快速参考 |
-| 历史记录 | `doc/history/` | 问题修复、重构记录、开发日志 |
+| 架构设计 | `doc/architecture/` | 系统架构、工作流程、技术决策（长期稳定） |
+| 使用指南 | `doc/guides/` | 用户手册、快速参考、测试指南（持续更新） |
+| 历史归档 | `doc/history/` | 实施总结、测试报告、修复记录等（带日期前缀 YYYY-MM-DD_） |
+| 临时实现 | `doc/implementation/` | **仅**在功能开发过程中临时存放，完成后立即归档到 history/ |
 | 项目说明 | 根目录 | README.md, CHANGELOG.md |
 | 开发指南 | 根目录 | AGENTS.md |
 
 ### 文档命名规范
 
-- 使用大写字母和下划线：`FEATURE_NAME.md`
-- 架构文档：简洁明了，如 `ARCHITECTURE.md`
-- 实现文档：包含版本或功能名，如 `IMPLEMENTATION_SUMMARY.md`
-- 历史文档：保留原始名称，便于追溯
+- **架构/指南文档**: 使用大写字母和下划线，如 `ARCHITECTURE.md`, `TESTING_GUIDE.md`
+- **历史归档文档**: 必须使用日期前缀 `YYYY-MM-DD_标题.md`，便于按时间排序和追溯
+- **临时实现文档**: 开发过程中可使用简洁名称，归档时必须添加日期前缀
 
-### 文档更新流程
+### 文档生命周期
 
-1. **新增文档**：根据内容类型放入对应目录
-2. **更新文档**：修改后更新"最后更新"日期
-3. **过时文档**：移至 `doc/history/` 并标注状态
-4. **重复文档**：合并内容后删除冗余版本
-5. **更新索引**：在本文档中添加/更新链接
+1. **开发阶段**: 新功能开发时，相关文档可临时存放在 `doc/implementation/`
+2. **功能完成**: 功能实现后，立即将文档移动到 `doc/history/` 并添加日期前缀
+3. **日常维护**: 架构文档和使用指南直接在原位置更新
+4. **过时文档**: 不再适用的文档移至 `doc/history/` 并标注状态
+5. **重复文档**: 合并内容后删除冗余版本
+6. **更新索引**: 重要文档变更后，检查是否需要更新本文档
+
+### implementation/ 目录使用说明
+
+**重要**: `doc/implementation/` 目录**仅用于**功能开发过程中的临时文档存放。
+
+**使用流程**:
+```
+1. 开始新功能开发 → 在 implementation/ 中创建文档
+2. 功能开发中     → 持续更新 implementation/ 中的文档
+3. 功能完成后     → 立即移动到 history/ 并添加日期前缀
+4. 清理           → implementation/ 目录应保持为空（除 .gitkeep）
+```
+
+**示例**:
+```bash
+# 开发过程中
+doc/implementation/FEATURE_DESIGN.md
+
+# 功能完成后
+Move-Item doc/implementation/FEATURE_DESIGN.md doc/history/2026-04-27_FEATURE_DESIGN.md
+```
 
 ---
 

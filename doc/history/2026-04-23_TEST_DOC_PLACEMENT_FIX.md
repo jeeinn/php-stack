@@ -25,13 +25,13 @@ doc/guides/
 └── TESTING_QUICK_REF.md         # ✅ 测试快速参考（102行）
 ```
 
-### doc/implementation/ （实现文档）
+### doc/history/ （历史归档文档）
 ```
-doc/implementation/
-├── IMPLEMENTATION_SUMMARY.md    # ✅ v0.1.0实现总结
-├── VERSION_SCOPE.md             # ✅ 版本范围说明
-├── VERSION_SELECTION_OPTIMIZATION.md  # ✅ 版本选择优化
-└── TEST_REFACTOR_SUMMARY.md     # ✅ 测试重构总结（220行）
+doc/history/
+├── IMPLEMENTATION_SUMMARY.md    # ✅ v0.1.0实现总结（已归档）
+├── VERSION_SCOPE.md             # ✅ 版本范围说明（已归档）
+├── VERSION_SELECTION_OPTIMIZATION.md  # ✅ 版本选择优化（已归档）
+└── TEST_REFACTOR_SUMMARY.md     # ✅ 测试重构总结（220行，已归档）
 ```
 
 ## 🔧 修正操作
@@ -39,8 +39,8 @@ doc/implementation/
 ### 移动的文件
 1. `TEST_REFACTOR_SUMMARY.md` 
    - 从：根目录 `/`
-   - 到：`doc/implementation/TEST_REFACTOR_SUMMARY.md`
-   - 原因：这是实现总结类文档，应放在 `implementation/` 目录
+   - 到：`doc/history/2026-04-23_TEST_REFACTOR_SUMMARY.md`（已按日期归档）
+   - 原因：这是实现总结类文档，应归档到 `history/` 目录
 
 2. `TESTING_QUICK_REF.md`
    - 从：根目录 `/`
@@ -83,9 +83,8 @@ doc/implementation/
 | 文档类型 | 存放位置 | 本次文档示例 |
 |---------|---------|------------|
 | 架构设计 | `doc/architecture/` | - |
-| 实现总结 | `doc/implementation/` | TEST_REFACTOR_SUMMARY.md |
 | 使用指南 | `doc/guides/` | TESTING_GUIDE.md, TEST_RESTRUCTURE.md, TESTING_QUICK_REF.md |
-| 历史记录 | `doc/history/` | - |
+| 历史记录 | `doc/history/` | TEST_REFACTOR_SUMMARY.md（已归档） |
 | 项目说明 | 根目录 | README.md, CHANGELOG.md |
 | 开发指南 | 根目录 | AGENTS.md |
 
@@ -105,8 +104,9 @@ Get-ChildItem doc/guides/*.md
 
 ### implementation目录检查
 ```bash
-Get-ChildItem doc/implementation/*.md
-# 结果：4个文件（包含1个新增测试总结）✅
+# implementation 目录已移除，所有文档已归档到 history/
+Get-ChildItem doc/history/*TEST*.md
+# 结果：测试相关文档已归档 ✅
 ```
 
 ## 🎯 符合规范

@@ -281,7 +281,7 @@ php-stack/
 ### 相关文档
 
 - [VERSION_MANIFEST.md](../history/2026-04-20_VERSION_MANIFEST.md) — 版本清单系统历史说明
-- [IMPLEMENTATION_SUMMARY.md](../implementation/IMPLEMENTATION_SUMMARY.md) — 实现总结报告
+- [IMPLEMENTATION_SUMMARY.md](../history/2026-04-17_IMPLEMENTATION_SUMMARY.md) — 实现总结报告
 - [DYNAMIC_BASE_IMAGE.md](../guides/DYNAMIC_BASE_IMAGE.md) — 动态基础镜像详细文档
 - [TESTING_GUIDE.md](../guides/TESTING_GUIDE.md) — 测试指南
 

@@ -34,48 +34,72 @@ const sortedCategories = computed(() => {
   });
 });
 
-// Docker Registry 平台配置文档
-const dockerRegistryDocs = [
-  {
-    platform: 'Windows (Docker Desktop)',
-    steps: [
-      '打开 Docker Desktop',
-      '点击右上角齿轮图标 ⚙️ 进入 Settings',
-      '选择左侧 "Docker Engine"',
-      '在 JSON 配置中添加：\n"registry-mirrors": [\n  "https://docker.1ms.run",\n  "https://docker.m.daocloud.io"\n]',
-      '点击 "Apply & restart" 重启 Docker'
-    ]
-  },
-  {
-    platform: 'macOS (Docker Desktop)',
-    steps: [
-      '打开 Docker Desktop',
-      '点击右上角齿轮图标 ⚙️ 进入 Preferences',
-      '选择左侧 "Docker Engine"',
-      '在 JSON 配置中添加：\n"registry-mirrors": [\n  "https://docker.1ms.run",\n  "https://docker.m.daocloud.io"\n]',
-      '点击 "Apply & restart" 重启 Docker'
-    ]
-  },
-  {
-    platform: 'Linux (systemd)',
-    steps: [
-      '创建或编辑配置文件：sudo mkdir -p /etc/docker',
-      '编辑文件：sudo nano /etc/docker/daemon.json',
-      '添加以下内容：\n{\n  "registry-mirrors": [\n    "https://docker.1ms.run",\n    "https://docker.m.daocloud.io"\n  ]\n}',
-      '保存后重启 Docker：\nsudo systemctl daemon-reload\nsudo systemctl restart docker',
-      '验证配置：docker info | grep -A 5 "Registry Mirrors"'
-    ]
-  },
-  {
-    platform: '推荐镜像源',
-    steps: [
-      '🇨🇳 壹秒镜像：https://docker.1ms.run（稳定推荐）',
-      '🇨 DaoCloud：https://docker.m.daocloud.io',
-      '🇨🇳 阿里云（需登录）：https://<your-id>.mirror.aliyuncs.com',
-      'ℹ️ 配置多个镜像源可实现自动故障转移'
-    ]
-  }
-];
+// 从 i18n 获取 tm 函数（用于获取数组类型的翻译）
+const { tm } = useI18n();
+
+// Docker Registry 平台配置文档（从 i18n 加载，URL 动态生成）
+const dockerRegistryDocs = computed(() => {
+  console.log('[MirrorPanel-debug] dockerRegistryDocs computed triggered');
+  console.log('[MirrorPanel-debug] categories:', categories.value);
+  
+  // 从已加载的 categories 中提取 docker_registry 的所有镜像源
+  const dockerCategory = categories.value.find(c => c.category_id === 'docker_registry');
+  console.log('[MirrorPanel-debug] dockerCategory:', dockerCategory);
+  
+  const mirrors = dockerCategory?.options || [];
+  console.log('[MirrorPanel-debug] mirrors:', mirrors);
+  
+  // 提取所有非空的 URL（过滤掉官方默认的 empty value）
+  const mirrorUrls = mirrors
+    .map(m => m.value)
+    .filter(Boolean); // 过滤空字符串
+  
+  // 格式化 URLs 为 JSON 数组格式
+  const formattedUrls = mirrorUrls.map(url => `"${url}"`).join(',\n  ');
+  console.log('[MirrorPanel-debug] formattedUrls:', formattedUrls);
+  
+  // 如果没有可用的镜像源，使用占位符提示
+  const urlsText = formattedUrls || '"https://your-mirror-url"';
+  console.log('[MirrorPanel-debug] urlsText:', urlsText);
+  
+  // 获取翻译数组
+  // 注意：vue-i18n v10 中，t() 函数对数组类型的支持有限
+  // 使用 tm() 方法可以直接获取翻译消息（Message）
+  const windowsSteps = tm('mirror.dockerRegistry.steps.windows') as string[] || [];
+  const macosSteps = tm('mirror.dockerRegistry.steps.macos') as string[] || [];
+  const linuxSteps = tm('mirror.dockerRegistry.steps.linux') as string[] || [];
+  
+  console.log('[MirrorPanel-debug] windowsSteps (via tm):', windowsSteps);
+  console.log('[MirrorPanel-debug] macosSteps (via tm):', macosSteps);
+  console.log('[MirrorPanel-debug] linuxSteps (via tm):', linuxSteps);
+  
+  // 替换 {urls} 占位符
+  const replaceUrls = (step: string) => step.replace('{urls}', urlsText);
+  
+  const result = [
+    {
+      platform: t('mirror.dockerRegistry.platforms.windows'),
+      steps: windowsSteps.map(replaceUrls)
+    },
+    {
+      platform: t('mirror.dockerRegistry.platforms.macos'),
+      steps: macosSteps.map(replaceUrls)
+    },
+    {
+      platform: t('mirror.dockerRegistry.platforms.linux'),
+      steps: linuxSteps.map(replaceUrls)
+    },
+    {
+      platform: t('mirror.dockerRegistry.platforms.recommended'),
+      steps: mirrors.map(m => 
+        m.value ? `${m.name}：${m.value}` : `${m.name}（使用官方源）`
+      )
+    }
+  ];
+  
+  console.log('[MirrorPanel-debug] Final result:', result);
+  return result;
+});
 
 // 展开的平台
 const expandedPlatforms = ref<Set<string>>(new Set());

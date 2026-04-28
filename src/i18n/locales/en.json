@@ -171,6 +171,11 @@
       "title": "Port Conflict",
       "detail": "Port {port} conflict: {service1} and {service2}"
     },
+    "portChecker": {
+      "header": "Found {count} port conflicts:\n\n",
+      "item": "{index}. Port {port} ({service})\n   Occupied by container: {container_name}\n   Image: {container_image}\n   Container ID: {container_id}\n\n",
+      "solution": "💡 Solutions:\n• Stop conflicting container: docker stop <container_name>\n• Or remove it: docker rm <container_name>\n• Or change to another port in environment config"
+    },
     "general": {
       "title": "🔧 General Settings",
       "workspace": "Workspace",
@@ -212,7 +217,9 @@
       "dismiss": "Got it"
     },
     "previewModal": {
-      "title": "📄 Config Preview"
+      "title": "📄 Config Preview",
+      "close": "Close",
+      "applyConfig": "Apply Config"
     },
     "confirmOverwrite": {
       "title": "Config Files Exist",
@@ -277,13 +284,37 @@
       "delete": "Delete"
     },
     "dockerRegistry": {
-      "warning": "⚠️ Docker Registry mirrors must be configured in Docker Desktop global settings",
+      "warning": "️ Docker Registry mirrors must be configured in Docker Desktop global settings",
       "hint": "Due to Docker architecture limitations, this cannot be auto-configured. Please follow the guide below.",
       "platforms": {
         "windows": "Windows (Docker Desktop)",
         "macos": "macOS (Docker Desktop)",
         "linux": "Linux (systemd)",
         "recommended": "Recommended Mirrors"
+      },
+      "steps": {
+        "windows": [
+          "Open Docker Desktop",
+          "Click the gear icon ⚙️ in the top-right to enter Settings",
+          "Select \"Docker Engine\" from the left sidebar",
+          "Add or modify the following field in JSON config:",
+          "{\n  \"registry-mirrors\": [\n    {urls}\n  ]\n}",
+          "Click \"Apply & restart\" to restart Docker"
+        ],
+        "macos": [
+          "Open Docker Desktop",
+          "Click Docker icon in the top menu bar → Preferences",
+          "Select \"Docker Engine\" from the left sidebar",
+          "Add or modify the following field in JSON config:",
+          "{\n  \"registry-mirrors\": [\n    {urls}\n  ]\n}",
+          "Click \"Apply & restart\" to restart Docker"
+        ],
+        "linux": [
+          "Create or edit /etc/docker/daemon.json",
+          "Add or modify the following JSON config:",
+          "{\n  \"registry-mirrors\": [\n    {urls}\n  ]\n}",
+          "Restart Docker service: sudo systemctl restart docker"
+        ]
       }
     },
     "editDialog": {

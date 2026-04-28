@@ -83,27 +83,35 @@ function isRunning(state: string): boolean {
 /**
  * 格式化容器端口冲突提示信息
  */
-export function formatContainerConflictMessage(conflicts: ContainerPortConflict[]): string {
+export function formatContainerConflictMessage(
+  conflicts: ContainerPortConflict[],
+  t?: (key: string, params?: Record<string, any>) => string
+): string {
   if (conflicts.length === 0) {
     return '';
   }
   
-  let message = `发现 ${conflicts.length} 个端口冲突：\n\n`;
+  // 如果有翻译函数，使用 i18n
+  if (t) {
+    let message = t('envConfig.portChecker.header', { count: conflicts.length });
+    
+    conflicts.forEach((conflict, index) => {
+      message += t('envConfig.portChecker.item', {
+        index: index + 1,
+        port: conflict.port,
+        service: conflict.service,
+        container_name: conflict.container_name,
+        container_image: conflict.container_image,
+        container_id: conflict.container_id
+      });
+    });
+    
+    message += t('envConfig.portChecker.solution');
+    return message;
+  }
   
-  conflicts.forEach((conflict, index) => {
-    message += `${index + 1}. 端口 ${conflict.port} (${conflict.service})\n`;
-    message += `   被占用容器: ${conflict.container_name}\n`;
-    message += `   镜像: ${conflict.container_image}\n`;
-    message += `   容器ID: ${conflict.container_id}\n`;
-    message += '\n';
-  });
-  
-  message += '💡 解决方案：\n';
-  message += '• 停止冲突容器: docker stop <容器名>\n';
-  message += '• 或删除冲突容器: docker rm <容器名>\n';
-  message += '• 或在环境配置中修改为其他端口\n';
-  
-  return message;
+  // 如果没有翻译函数，返回空字符串（调用方应始终传入 t）
+  return '';
 }
 
 /**

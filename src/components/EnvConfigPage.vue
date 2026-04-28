@@ -726,7 +726,7 @@ const goToMirrorSettings = () => {
                   @click="openNginxConfigDir(nginx.name)"
                   class="sm:ml-auto px-3 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs transition border border-blue-600/30 whitespace-nowrap"
                 >
-                  打开配置目录
+                  {{ $t('envConfig.nginxHint.openConfigDir') }}
                 </button>
               </div>
             </div>
@@ -736,14 +736,14 @@ const goToMirrorSettings = () => {
             <p><strong class="text-blue-600 dark:text-blue-400">{{ $t('envConfig.nginxHint.configSteps') }}</strong></p>
             <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-600 dark:text-slate-400">
               <li v-if="nginxServicesList.length === 1">
-                编辑文件：<code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">services/{{ nginxServicesList[0].name }}/conf.d/default.conf</code>
+                {{ $t('envConfig.nginxHint.step1Single', { path: `services/${nginxServicesList[0].name}/conf.d/default.conf` }) }}
               </li>
               <li v-else>
-                为每个 Nginx 版本编辑对应的配置文件（见上方列表）
+                {{ $t('envConfig.nginxHint.step1Multi') }}
               </li>
-              <li>找到 <code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">fastcgi_pass</code> 行（默认值为 <code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">php:9000</code>）</li>
-              <li>修改为：<code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded text-emerald-600 dark:text-emerald-400">fastcgi_pass [容器地址];</code>（选择上面的某个容器地址，如 <code class="text-emerald-600 dark:text-emerald-400">ps-php85:9000</code>）</li>
-              <li class="text-xs text-slate-500 dark:text-slate-500 mt-1">💡 提示：如果使用了多个 PHP 版本，可以为不同的 server 块配置不同的 fastcgi_pass 地址</li>
+              <li>{{ $t('envConfig.nginxHint.step2', { directive: 'fastcgi_pass', default: 'php:9000' }) }}</li>
+              <li>{{ $t('envConfig.nginxHint.step3', { example: 'fastcgi_pass [container_address];', hint: 'ps-php85:9000' }) }}</li>
+              <li class="text-xs text-slate-500 dark:text-slate-500 mt-1">{{ $t('envConfig.nginxHint.step4') }}</li>
             </ol>
           </div>
           
@@ -756,13 +756,13 @@ const goToMirrorSettings = () => {
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
               </svg>
-              打开配置目录
+              {{ $t('envConfig.nginxHint.openConfigDir') }}
             </button>
             <button
               @click="showNginxHint = false"
               class="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-sm font-medium transition text-slate-700 dark:text-slate-300"
             >
-              我知道了
+              {{ $t('envConfig.nginxHint.dismiss') }}
             </button>
           </div>
         </div>
@@ -1029,10 +1029,10 @@ const goToMirrorSettings = () => {
         </div>
         <div class="p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-end gap-3">
           <button @click="showPreviewModal = false" class="w-full sm:w-auto px-5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition">
-            关闭
+            {{ $t('envConfig.previewModal.close') }}
           </button>
           <button @click="handleApply" :disabled="applying" class="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50">
-            {{ applying ? '应用中...' : '应用配置' }}
+            {{ applying ? $t('envConfig.applying') : $t('envConfig.previewModal.applyConfig') }}
           </button>
         </div>
       </div>

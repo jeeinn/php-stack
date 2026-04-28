@@ -17,12 +17,6 @@
       "name": "DaoCloud",
       "value": "https://docker.m.daocloud.io",
       "description": "DaoCloud 官方镜像站，老牌服务，稳定性强"
-    },
-    {
-      "id": "default",
-      "name": "官方默认",
-      "value": "",
-      "description": "使用 Docker Hub 官方源（无加速）"
     }
   ],
   "apt": [

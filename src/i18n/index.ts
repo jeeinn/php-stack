@@ -2,6 +2,10 @@ import { createI18n } from 'vue-i18n';
 import zhCN from './locales/zh-CN.json';
 import en from './locales/en.json';
 
+// 调试：检查翻译数据是否正确加载
+console.log('[i18n] zhCN.mirror.dockerRegistry:', JSON.stringify(zhCN.mirror?.dockerRegistry, null, 2));
+console.log('[i18n] en.mirror.dockerRegistry:', JSON.stringify(en.mirror?.dockerRegistry, null, 2));
+
 export type SupportedLocale = 'zh-CN' | 'en';
 
 const STORAGE_KEY = 'php-stack-locale';

@@ -8,8 +8,73 @@
 ## [Unreleased]
 
 ### 待发布功能
-- 软件管理中心（多版本一键安装）
 - 虚拟主机管理（Nginx 站点配置）
+
+---
+
+## [0.3.0] - 2026-04-28
+
+PHP-Stack v0.3.0 正式发布！此版本重点增强了用户体验和国际化支持，引入了完整的 i18n 多语言系统和主题预设功能。
+
+### ✨ 新增功能
+
+#### 前端国际化 (i18n) 支持
+- ✅ 添加 vue-i18n 依赖并配置中/英双语支持
+- ✅ 创建 i18n 目录结构及翻译文件 (zh-CN.json, en.json)
+- ✅ 改造所有 Vue 组件使用 $t() 函数替换硬编码文本
+- ✅ 后端所有日志消息统一改为英文，便于国际化部署
+- ✅ 支持运行时动态切换语言
+
+#### 主题预设系统
+- ✅ 新增 useTheme composable，支持自动/明亮/暗黑三种主题模式
+- ✅ 完善 Tailwind darkMode 配置和全局样式过渡动画
+- ✅ 适配 11 个主要组件的明亮/暗黑主题样式：
+  - App.vue - 主应用布局
+  - SettingsPage.vue - 设置页面（含主题切换器 UI）
+  - MirrorPanel.vue - 镜像源设置
+  - SoftwareSettings.vue - 软件版本映射
+  - EnvConfigPage.vue - 环境配置页面
+  - MigrationPage.vue - 迁移页面
+  - BackupPage.vue - 备份页面
+  - RestorePage.vue - 恢复页面
+  - CustomSelect.vue - 自定义下拉选择器
+  - ConfirmDialog.vue - 确认对话框
+- ✅ 添加主题相关的国际化支持（zh-CN/en）
+
+### 🐛 Bug 修复
+
+#### 主题适配修复
+- ✅ 修复环境配置页面 Nginx 配置提醒的深色模式主题适配
+  - 外层提示框、代码块背景、多 Nginx 警告框的颜色适配
+  - 确保浅色和深色模式下都有足够的对比度
+- ✅ 修复时区提示文本的国际化遗漏
+
+#### 国际化修复
+- ✅ 修复 Docker Registry 配置文档数组翻译显示问题
+  - 使用 tm() 替代 t() 获取 vue-i18n v10 数组类型翻译
+  - 统一 Windows/macOS/Linux 三个平台的 JSON 配置描述格式
+
+### 🔧 技术实现
+
+#### 前端组件（Vue 3 + TypeScript）
+- **i18n/index.ts** - 国际化配置和初始化
+- **i18n/locales/zh-CN.json** - 中文翻译文件（490+ 词条）
+- **i18n/locales/en.json** - 英文翻译文件（490+ 词条）
+- **composables/useTheme.ts** - 主题管理 composable
+- **style.css** - 添加暗色模式支持和过渡动画
+
+#### 后端（Rust）
+- **lib.rs** - 日志消息英文化
+- **所有引擎模块** - app_log/ui_log 消息统一改为英文
+
+### 📊 代码统计
+
+| 模块 | 行数变化 | 主要变更 |
+|------|----------|----------|
+| Vue 前端组件 | ~1500行新增 | i18n 集成、主题系统、样式适配 |
+| Rust 后端 | ~50行调整 | 日志英文化 |
+| 翻译文件 | ~980行新增 | 中英文翻译词条 |
+| **总计** | **~2780行新增** | **国际化与主题系统全面升级** |
 
 ---
 
@@ -39,7 +104,6 @@ PHP-Stack v0.2.0 正式发布！此版本重点优化了代码结构、用户体
 - ✅ 添加 `.github/workflows/release.yml` 自动化发布流程
 - ✅ 支持 Windows、macOS、Linux 多平台构建和发布
 - ✅ 自动创建 GitHub Release 并上传安装包
-- ✅ 修复 Release 创建权限问题（添加 `contents:write` 权限）
 
 #### 其他功能增强
 - ✅ 在 `docker-compose.yml` 顶层添加项目名称 (`name: ${PROJECT_NAME}`)
@@ -76,11 +140,6 @@ PHP-Stack v0.2.0 正式发布！此版本重点优化了代码结构、用户体
 - `docker compose up` 不带 `-d` 会导致 `child.wait()` 永久阻塞
 - 前端 `await invoke` 永不完成，finally 不执行
 - 按钮状态卡在“启动中...”无法更新
-
-**影响文件**:
-- `src-tauri/src/docker/manager.rs` - 新增容器状态检查方法
-- `src-tauri/src/commands.rs` - 重构启动逻辑，实现智能等待
-- `src/App.vue` - （之前的修改）按钮交互优化
 
 **测试场景**:
 - ✅ 快速重启：容器已存在，按钮状态正确更新

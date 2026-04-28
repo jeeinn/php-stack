@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import BackupPage from './BackupPage.vue';
 import RestorePage from './RestorePage.vue';
 
-const { t } = useI18n();
+useI18n();
 
 type TabType = 'backup' | 'restore';
 

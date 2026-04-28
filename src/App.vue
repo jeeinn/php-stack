@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { getVersion } from '@tauri-apps/api/app';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
 import MigrationPage from './components/MigrationPage.vue';
@@ -14,6 +15,8 @@ import { getLogs, addLog, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 
 const { t } = useI18n();
+
+const appVersion = ref('v0.0.0'); // 应用版本号
 
 interface Container {
   id: String;
@@ -321,7 +324,15 @@ watch(activeTab, async (newTab) => {
   }
 });
 
-onMounted(() => {
+onMounted(async () => {
+  // 获取应用版本号
+  try {
+    const version = await getVersion();
+    appVersion.value = `v${version}`;
+  } catch (error) {
+    console.error('Failed to get app version:', error);
+  }
+  
   refreshContainers();
   checkEnvFileExists(); // 检查 .env 文件是否存在
   // 每 5 秒自动静默刷新一次
@@ -444,7 +455,7 @@ async function copyLogs() {
       <!-- Version & Toggle Button -->
       <div class="mt-auto pt-3 sm:pt-4 border-t border-slate-200 dark:border-slate-800">
         <div v-if="!sidebarCollapsed" class="text-xs sm:text-sm text-slate-500 dark:text-slate-500 text-center mb-2 sm:mb-3 hidden sm:block">
-          {{ $t('common.version') }}
+          {{ appVersion }}
         </div>
                 
         <!-- Toggle Button -->

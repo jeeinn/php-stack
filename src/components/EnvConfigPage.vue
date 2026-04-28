@@ -655,17 +655,17 @@ const goToMirrorSettings = () => {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col overflow-hidden">
+  <div class="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 transition-colors duration-300">
     <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
       <div>
-        <h1 class="text-2xl sm:text-3xl font-bold">{{ $t('envConfig.title') }}</h1>
-        <p class="text-slate-400 text-xs sm:text-sm mt-1">{{ $t('envConfig.subtitle') }}</p>
+        <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">{{ $t('envConfig.title') }}</h1>
+        <p class="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1">{{ $t('envConfig.subtitle') }}</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
         <button
           @click="handlePreview"
           :disabled="loading"
-          class="w-full sm:w-auto px-5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition disabled:opacity-50"
+          class="w-full sm:w-auto px-5 py-2 bg-slate-800 dark:bg-slate-800 hover:bg-slate-700 dark:hover:bg-slate-700 border border-slate-700 dark:border-slate-700 text-white dark:text-slate-300 rounded-lg font-medium transition disabled:opacity-50"
         >
           {{ loading ? $t('envConfig.previewing') : $t('envConfig.preview') }}
         </button>
@@ -696,8 +696,8 @@ const goToMirrorSettings = () => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="text-base font-semibold text-blue-300 mb-2">{{ $t('envConfig.nginxHint.title') }}</h3>
-          <p class="text-sm text-slate-300 mb-3">
+          <h3 class="text-base font-semibold text-blue-600 dark:text-blue-400 mb-2">{{ $t('envConfig.nginxHint.title') }}</h3>
+          <p class="text-sm text-slate-700 dark:text-slate-300 mb-3">
             {{ $t('envConfig.nginxHint.description') }}
           </p>
           
@@ -717,10 +717,10 @@ const goToMirrorSettings = () => {
             <div class="space-y-2">
               <div v-for="(nginx, index) in nginxServicesList" :key="index" class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
                 <div class="flex items-center gap-2">
-                  <span class="text-xs text-slate-500 font-mono">{{ index + 1 }}.</span>
-                  <code class="text-sm text-blue-400 font-mono">{{ nginx.name }}</code>
-                  <span class="text-xs text-slate-500">({{ nginx.version }})</span>
-                  <span v-if="nginx.port" class="text-xs text-slate-500">- {{ $t('envConfig.nginxHint.port', { port: nginx.port }) }}</span>
+                  <span class="text-xs text-slate-500 dark:text-slate-500 font-mono">{{ index + 1 }}.</span>
+                  <code class="text-sm text-blue-600 dark:text-blue-400 font-mono">{{ nginx.name }}</code>
+                  <span class="text-xs text-slate-500 dark:text-slate-500">({{ nginx.version }})</span>
+                  <span v-if="nginx.port" class="text-xs text-slate-500 dark:text-slate-500">- {{ $t('envConfig.nginxHint.port', { port: nginx.port }) }}</span>
                 </div>
                 <button
                   @click="openNginxConfigDir(nginx.name)"
@@ -732,18 +732,18 @@ const goToMirrorSettings = () => {
             </div>
           </div>
           
-          <div class="space-y-2 text-sm text-slate-300">
-            <p><strong class="text-blue-300">{{ $t('envConfig.nginxHint.configSteps') }}</strong></p>
-            <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-400">
+          <div class="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+            <p><strong class="text-blue-600 dark:text-blue-400">{{ $t('envConfig.nginxHint.configSteps') }}</strong></p>
+            <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-600 dark:text-slate-400">
               <li v-if="nginxServicesList.length === 1">
-                编辑文件：<code class="text-xs bg-slate-800 px-1 rounded">services/{{ nginxServicesList[0].name }}/conf.d/default.conf</code>
+                编辑文件：<code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">services/{{ nginxServicesList[0].name }}/conf.d/default.conf</code>
               </li>
               <li v-else>
                 为每个 Nginx 版本编辑对应的配置文件（见上方列表）
               </li>
-              <li>找到 <code class="text-xs bg-slate-800 px-1 rounded">fastcgi_pass</code> 行（默认值为 <code class="text-xs bg-slate-800 px-1 rounded">php:9000</code>）</li>
-              <li>修改为：<code class="text-xs bg-slate-800 px-1 rounded text-emerald-400">fastcgi_pass [容器地址];</code>（选择上面的某个容器地址，如 <code class="text-emerald-400">ps-php85:9000</code>）</li>
-              <li class="text-xs text-slate-500 mt-1">💡 提示：如果使用了多个 PHP 版本，可以为不同的 server 块配置不同的 fastcgi_pass 地址</li>
+              <li>找到 <code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">fastcgi_pass</code> 行（默认值为 <code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">php:9000</code>）</li>
+              <li>修改为：<code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded text-emerald-600 dark:text-emerald-400">fastcgi_pass [容器地址];</code>（选择上面的某个容器地址，如 <code class="text-emerald-600 dark:text-emerald-400">ps-php85:9000</code>）</li>
+              <li class="text-xs text-slate-500 dark:text-slate-500 mt-1">💡 提示：如果使用了多个 PHP 版本，可以为不同的 server 块配置不同的 fastcgi_pass 地址</li>
             </ol>
           </div>
           
@@ -751,7 +751,7 @@ const goToMirrorSettings = () => {
             <button
               v-if="nginxServicesList.length === 1"
               @click="openNginxConfigDir()"
-              class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
+              class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 text-white"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -760,7 +760,7 @@ const goToMirrorSettings = () => {
             </button>
             <button
               @click="showNginxHint = false"
-              class="w-full sm:w-auto px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition"
+              class="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-sm font-medium transition text-slate-700 dark:text-slate-300"
             >
               我知道了
             </button>
@@ -769,24 +769,24 @@ const goToMirrorSettings = () => {
       </div>
     </div>
     
-    <div v-if="portConflicts.length > 0" class="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm">
+    <div v-if="portConflicts.length > 0" class="mb-4 p-4 bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-600 dark:text-amber-400 text-sm">
       <div class="font-bold mb-1">{{ $t('envConfig.portConflict.title') }}</div>
       <div v-for="c in portConflicts" :key="c">{{ c }}</div>
     </div>
 
     <div class="flex-1 overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-6">
       <!-- PHP Services -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold">{{ $t('envConfig.php.title') }}</h2>
-          <button @click="addPhpVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
+          <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.php.title') }}</h2>
+          <button @click="addPhpVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
         </div>
-        <div v-for="(php, idx) in phpServices" :key="idx" class="mb-4 sm:mb-6 p-3 sm:p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+        <div v-for="(php, idx) in phpServices" :key="idx" class="mb-4 sm:mb-6 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-3">
             <div class="flex-1 w-full sm:w-auto">
-              <label class="block text-xs text-slate-400 mb-1">
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">
                 {{ $t('envConfig.php.version') }}
               </label>
               <CustomSelect 
@@ -795,24 +795,24 @@ const goToMirrorSettings = () => {
                 :placeholder="$t('envConfig.php.versionPlaceholder')" 
               />
             </div>
-            <button v-if="phpServices.length > 1" @click="removePhpVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
+            <button v-if="phpServices.length > 1" @click="removePhpVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-2">{{ $t('envConfig.php.extensions') }}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-2">{{ $t('envConfig.php.extensions') }}</label>
             
             <!-- 统一折叠面板 -->
-            <div class="border border-slate-700/50 rounded-lg overflow-hidden">
+            <div class="border border-slate-200 dark:border-slate-700/50 rounded-lg overflow-hidden">
               <button 
                 @click="isExtensionsPanelOpen = !isExtensionsPanelOpen"
-                class="w-full flex justify-between items-center px-3 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors text-left"
+                class="w-full flex justify-between items-center px-3 py-2 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
               >
-                <span class="text-xs font-medium text-slate-300">{{ $t('envConfig.php.extensionsPanel') }}</span>
+                <span class="text-xs font-medium text-slate-700 dark:text-slate-300">{{ $t('envConfig.php.extensionsPanel') }}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-500 transition-transform duration-200" :class="{ 'rotate-180': isExtensionsPanelOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div v-show="isExtensionsPanelOpen" class="p-3 bg-slate-900/50 border-t border-slate-700/50 space-y-3">
+              <div v-show="isExtensionsPanelOpen" class="p-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700/50 space-y-3">
                 <!-- 平铺扩展列表 -->
                 <div class="max-h-64 overflow-y-auto pr-1 custom-scrollbar">
                   <div class="flex flex-wrap gap-2">
@@ -820,7 +820,7 @@ const goToMirrorSettings = () => {
                       v-for="ext in commonExtensions"
                       :key="ext"
                       class="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded cursor-pointer transition select-none"
-                      :class="php.extensions?.includes(ext) ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700 hover:border-slate-600'"
+                      :class="php.extensions?.includes(ext) ? 'bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-500/30' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-500 border border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'"
                     >
                       <input type="checkbox" :checked="php.extensions?.includes(ext)" @change="toggleExtension(idx, ext)" class="hidden" />
                       {{ ext }}
@@ -829,19 +829,19 @@ const goToMirrorSettings = () => {
                 </div>
 
                 <!-- 自定义扩展输入区 -->
-                <div class="pt-3 border-t border-slate-700/50">
-                  <label class="block text-[10px] font-medium text-emerald-400 mb-1.5">{{ $t('envConfig.php.customExtensions') }}</label>
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-700/50">
+                  <label class="block text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">{{ $t('envConfig.php.customExtensions') }}</label>
                   <input 
                     v-model="customExtInput" 
                     @blur="syncCustomExtensions(idx)"
                     :placeholder="$t('envConfig.php.customExtPlaceholder')"  
-                    class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-mono outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono outline-none focus:ring-2 focus:ring-emerald-500/50"
                   />
                   <div class="flex items-center justify-between mt-1.5">
-                    <p class="text-[10px] text-slate-500">{{ $t('envConfig.php.customExtHint') }}</p>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-500">{{ $t('envConfig.php.customExtHint') }}</p>
                     <button 
                       @click="open('https://github.com/mlocati/docker-php-extension-installer#supported-php-extensions')"
-                      class="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors cursor-pointer"
+                      class="text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 transition-colors cursor-pointer"
                     >
                       <span>{{ $t('envConfig.php.viewSupported') }}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -857,17 +857,17 @@ const goToMirrorSettings = () => {
       </section>
 
       <!-- MySQL -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold">{{ $t('envConfig.mysql.title') }}</h2>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.mysql.title') }}</h2>
           <button @click="addMysqlVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
         </div>
-        <div v-for="(mysql, idx) in mysqlServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+        <div v-for="(mysql, idx) in mysqlServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <div class="flex-1 w-full sm:w-auto">
-              <label class="block text-xs text-slate-400 mb-1">
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">
                 {{ $t('envConfig.mysql.version') }}
               </label>
               <CustomSelect 
@@ -877,44 +877,44 @@ const goToMirrorSettings = () => {
               />
             </div>
             <div class="w-full sm:w-32" v-if="mysqlVersions.find(v => v.id === mysql.version)?.show_port !== false">
-              <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
-              <input v-model.number="mysql.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
+              <input v-model.number="mysql.host_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button v-if="mysqlServices.length > 1" @click="removeMysqlVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
         </div>
         
         <!-- MySQL Root 密码配置 -->
-        <div class="mt-4 p-3 sm:p-4 bg-slate-800/30 border border-slate-700/50 rounded-lg">
+        <div class="mt-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/50 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <div class="flex-1 w-full sm:w-64">
-              <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.mysql.rootPassword') }}</label>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.mysql.rootPassword') }}</label>
               <input 
                 v-model="mysqlRootPassword" 
                 type="password" 
                 placeholder="root"
-                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" 
+                class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
               />
             </div>
             <div class="flex-1">
-              <p class="text-xs text-slate-500">{{ $t('envConfig.mysql.rootPasswordHint') }}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-500">{{ $t('envConfig.mysql.rootPasswordHint') }}</p>
             </div>
           </div>
         </div>
       </section>
 
       <!-- Redis -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold">{{ $t('envConfig.redis.title') }}</h2>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.redis.title') }}</h2>
           <button @click="addRedisVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
         </div>
-        <div v-for="(redis, idx) in redisServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+        <div v-for="(redis, idx) in redisServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <div class="flex-1 w-full sm:w-auto">
-              <label class="block text-xs text-slate-400 mb-1">
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">
                 {{ $t('envConfig.redis.version') }}
               </label>
               <CustomSelect 
@@ -924,29 +924,29 @@ const goToMirrorSettings = () => {
               />
             </div>
             <div class="w-full sm:w-32" v-if="redisVersions.find(v => v.id === redis.version)?.show_port !== false">
-              <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
-              <input v-model.number="redis.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
+              <input v-model.number="redis.host_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button @click="removeRedisVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
         </div>
-        <div v-if="redisServices.length === 0" class="text-center py-8 text-slate-500 text-sm">
+        <div v-if="redisServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
           点击上方“{{ $t('envConfig.addVersion') }}”按钮添加 Redis 服务
         </div>
       </section>
 
       <!-- Nginx -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold">{{ $t('envConfig.nginx.title') }}</h2>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.nginx.title') }}</h2>
           <button @click="addNginxVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
         </div>
-        <div v-for="(nginx, idx) in nginxServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+        <div v-for="(nginx, idx) in nginxServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <div class="flex-1 w-full sm:w-auto">
-              <label class="block text-xs text-slate-400 mb-1">
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">
                 {{ $t('envConfig.nginx.version') }}
               </label>
               <CustomSelect 
@@ -956,35 +956,35 @@ const goToMirrorSettings = () => {
               />
             </div>
             <div class="w-full sm:w-32" v-if="nginxVersions.find(v => v.id === nginx.version)?.show_port !== false">
-              <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
-              <input v-model.number="nginx.host_port" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
+              <input v-model.number="nginx.host_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button @click="removeNginxVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
         </div>
-        <div v-if="nginxServices.length === 0" class="text-center py-8 text-slate-500 text-sm">
+        <div v-if="nginxServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
           点击上方“{{ $t('envConfig.addVersion') }}”按钮添加 Nginx 服务
         </div>
       </section>
 
       <!-- General Settings -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6">
-        <h2 class="text-lg font-bold mb-4">{{ $t('envConfig.general.title') }}</h2>
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
+        <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('envConfig.general.title') }}</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
-            <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.general.workspace') }}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.workspace') }}</label>
             <input 
               :value="workspacePath" 
               readonly
-              class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 cursor-not-allowed"
+              class="w-full bg-slate-100 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 cursor-not-allowed"
             />
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.general.sourceDir') }}</label>
-            <input v-model="sourceDir" type="text" placeholder="./www" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.sourceDir') }}</label>
+            <input v-model="sourceDir" type="text" placeholder="./www" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1">{{ $t('envConfig.general.timezone') }}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.timezone') }}</label>
             <CustomSelect 
               :modelValue="showCustomTimezoneInput ? '__custom__' : timezone"
               :options="timezoneOptions"
@@ -997,9 +997,9 @@ const goToMirrorSettings = () => {
                 @input="handleCustomTimezoneChange"
                 type="text"
                 placeholder="例如：Europe/Moscow"
-                class="w-full bg-slate-800 border border-blue-500/50 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full bg-white dark:bg-slate-800 border border-blue-500/50 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p class="text-xs text-slate-500 mt-1">
+              <p class="text-xs text-slate-500 dark:text-slate-500 mt-1">
                 💡 提示：请输入有效的 IANA 时区标识符，如 "Europe/Moscow"、"Pacific/Auckland"
               </p>
             </div>
@@ -1009,26 +1009,26 @@ const goToMirrorSettings = () => {
     </div>
 
     <!-- Preview Modal -->
-    <div v-if="showPreviewModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3 sm:p-4" @click.self="showPreviewModal = false">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl sm:max-w-6xl mx-auto max-h-[90vh] flex flex-col">
-        <div class="flex justify-between items-center p-4 sm:p-6 border-b border-slate-700">
-          <h2 class="text-lg sm:text-xl font-bold">{{ $t('envConfig.previewModal.title') }}</h2>
-          <button @click="showPreviewModal = false" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+    <div v-if="showPreviewModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4" @click.self="showPreviewModal = false">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-4xl sm:max-w-6xl mx-auto max-h-[90vh] flex flex-col shadow-2xl">
+        <div class="flex justify-between items-center p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700">
+          <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.previewModal.title') }}</h2>
+          <button @click="showPreviewModal = false" class="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-2xl">&times;</button>
         </div>
         <div class="flex-1 overflow-y-auto p-4 sm:p-6">
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <div class="text-xs text-slate-400 mb-2 uppercase tracking-wider">.env</div>
-              <pre class="bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-green-300/80 border border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewEnv }}</pre>
+              <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">.env</div>
+              <pre class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-green-600 dark:text-green-300/80 border border-slate-200 dark:border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewEnv }}</pre>
             </div>
             <div>
-              <div class="text-xs text-slate-400 mb-2 uppercase tracking-wider">docker-compose.yml</div>
-              <pre class="bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-blue-300/80 border border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewCompose }}</pre>
+              <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">docker-compose.yml</div>
+              <pre class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-blue-600 dark:text-blue-300/80 border border-slate-200 dark:border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewCompose }}</pre>
             </div>
           </div>
         </div>
-        <div class="p-4 sm:p-6 border-t border-slate-700 flex flex-col sm:flex-row justify-end gap-3">
-          <button @click="showPreviewModal = false" class="w-full sm:w-auto px-5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition">
+        <div class="p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-end gap-3">
+          <button @click="showPreviewModal = false" class="w-full sm:w-auto px-5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition">
             关闭
           </button>
           <button @click="handleApply" :disabled="applying" class="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50">
@@ -1040,9 +1040,9 @@ const goToMirrorSettings = () => {
 
     <!-- Start Environment Confirmation Dialog -->
     <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
-        <h2 class="text-2xl font-bold text-white mb-4">{{ $t('dashboard.startConfirm.title') }}</h2>
-        <p class="text-slate-400 mb-6">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-slate-900 dark:text-slate-200 mb-4">{{ $t('dashboard.startConfirm.title') }}</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
           {{ $t('dashboard.startConfirm.message', { proxy: '' }) }}
           <strong>{{ $t('dashboard.startConfirm.proxy') }}</strong>
         </p>
@@ -1051,7 +1051,7 @@ const goToMirrorSettings = () => {
           <div class="flex gap-3">
             <button 
               @click="showStartConfirm = false"
-              class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+              class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
             >
               取消
             </button>

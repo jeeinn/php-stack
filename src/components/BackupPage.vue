@@ -131,39 +131,39 @@ async function handleBackup() {
 <template>
   <div class="flex-1 flex flex-col overflow-hidden">
     <header class="mb-6">
-      <h1 class="text-3xl font-bold">{{ $t('backup.title') }}</h1>
-      <p class="text-slate-400 text-sm mt-1">{{ $t('backup.subtitle') }}</p>
+      <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-200">{{ $t('backup.title') }}</h1>
+      <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">{{ $t('backup.subtitle') }}</p>
     </header>
 
     <div class="flex-1 overflow-y-auto pr-2 space-y-6">
       <!-- Backup Options -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h2 class="text-lg font-bold mb-4">{{ $t('backup.options.title') }}</h2>
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
+        <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('backup.options.title') }}</h2>
         <div class="space-y-4">
-          <label class="flex items-center gap-3 text-sm text-slate-400">
+          <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-400">
             <input type="checkbox" checked disabled class="accent-blue-500" />
             <span>{{ $t('backup.options.coreConfig') }}</span>
           </label>
 
           <div>
-            <label class="flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
+            <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
               <input type="checkbox" v-model="options.include_projects" class="accent-blue-500" />
               <span>{{ $t('backup.options.includeProjects') }}</span>
             </label>
             <transition name="fade">
               <div v-if="options.include_projects" class="mt-3 ml-7">
                 <div class="flex items-center justify-between mb-1">
-                  <label class="block text-xs text-slate-400">{{ $t('backup.options.patterns') }}</label>
+                  <label class="block text-xs text-slate-600 dark:text-slate-400">{{ $t('backup.options.patterns') }}</label>
                   <div class="flex gap-2">
                     <button 
                       @click="selectProjectFolder"
-                      class="text-xs px-2 py-1 bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600 hover:text-white transition"
+                      class="text-xs px-2 py-1 bg-blue-600/20 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-600 hover:text-white transition"
                     >
                       {{ $t('backup.options.selectFolder') }}
                     </button>
                     <button 
                       @click="selectProjectFile"
-                      class="text-xs px-2 py-1 bg-emerald-600/20 text-emerald-400 rounded hover:bg-emerald-600 hover:text-white transition"
+                      class="text-xs px-2 py-1 bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-600 hover:text-white transition"
                     >
                       {{ $t('backup.options.selectFile') }}
                     </button>
@@ -172,44 +172,44 @@ async function handleBackup() {
                 <textarea
                   v-model="projectPatternsText"
                   :placeholder="$t('backup.options.patternsPlaceholder')"
-                  class="w-full h-24 bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs font-mono text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
+                  class="w-full h-24 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-900 dark:text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
                 ></textarea>
-                <p class="text-[10px] text-slate-500 mt-1">
+                <p class="text-[10px] text-slate-500 dark:text-slate-500 mt-1">
                   {{ $t('backup.options.patternsHint') }}
                 </p>
               </div>
             </transition>
           </div>
 
-          <label class="flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
+          <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
             <input type="checkbox" v-model="options.include_logs" class="accent-blue-500" />
             <div class="flex flex-col">
               <span>{{ $t('backup.options.includeLogs') }}</span>
-              <span class="text-xs text-slate-500">{{ $t('backup.options.logsWarning') }}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-500">{{ $t('backup.options.logsWarning') }}</span>
             </div>
           </label>
         </div>
       </section>
 
       <!-- Progress -->
-      <section v-if="progress" class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h2 class="text-lg font-bold mb-4">{{ $t('backup.progress.title') }}</h2>
-        <div class="mb-2 text-sm text-slate-300">{{ progress.step }}</div>
-        <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+      <section v-if="progress" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
+        <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('backup.progress.title') }}</h2>
+        <div class="mb-2 text-sm text-slate-700 dark:text-slate-300">{{ progress.step }}</div>
+        <div class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
           <div
             class="h-full bg-blue-600 rounded-full transition-all duration-300"
             :style="{ width: progress.percentage + '%' }"
           ></div>
         </div>
-        <div class="text-xs text-slate-500 mt-1 text-right">{{ progress.percentage }}%</div>
+        <div class="text-xs text-slate-500 dark:text-slate-500 mt-1 text-right">{{ progress.percentage }}%</div>
       </section>
 
       <!-- Action -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
         <button
           @click="handleBackup"
           :disabled="backing"
-          class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2"
+          class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2 text-white"
         >
           <span v-if="backing" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
           {{ backing ? $t('backup.action.creating') : $t('backup.action.create') }}

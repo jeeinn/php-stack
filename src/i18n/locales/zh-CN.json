@@ -245,6 +245,11 @@
     "tabs": {
       "mirrors": "镜像源设置",
       "software": "软件版本映射"
+    },
+    "theme": {
+      "auto": "自动",
+      "light": "明亮",
+      "dark": "暗黑"
     }
   },
   "mirror": {

@@ -389,16 +389,16 @@ async function copyLogs() {
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-200">
+  <div class="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 transition-colors duration-300">
     <!-- Sidebar -->
     <div 
-      class="bg-slate-900 flex flex-col border-r border-slate-800 overflow-y-auto transition-all duration-300 ease-in-out"
+      class="bg-white dark:bg-slate-900 flex flex-col border-r border-slate-200 dark:border-slate-800 overflow-y-auto transition-all duration-300 ease-in-out"
       :class="sidebarCollapsed ? 'w-16 sm:w-20 p-2 sm:p-3' : 'w-48 sm:w-52 p-3 sm:p-4'"
     >
       <!-- Logo -->
       <div class="mb-4 sm:mb-6 flex items-center gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
         <span class="bg-blue-500 text-white p-1 rounded font-bold text-sm sm:text-base">PS</span>
-        <span v-if="!sidebarCollapsed" class="text-xl sm:text-2xl font-bold text-blue-400 hidden sm:inline">PHP-Stack</span>
+        <span v-if="!sidebarCollapsed" class="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400 hidden sm:inline">PHP-Stack</span>
       </div>
       
       <!-- Menu Items -->
@@ -442,15 +442,15 @@ async function copyLogs() {
       </div>
       
       <!-- Version & Toggle Button -->
-      <div class="mt-auto pt-3 sm:pt-4 border-t border-slate-800">
-        <div v-if="!sidebarCollapsed" class="text-xs sm:text-sm text-slate-500 text-center mb-2 sm:mb-3 hidden sm:block">
+      <div class="mt-auto pt-3 sm:pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div v-if="!sidebarCollapsed" class="text-xs sm:text-sm text-slate-500 dark:text-slate-500 text-center mb-2 sm:mb-3 hidden sm:block">
           {{ $t('common.version') }}
         </div>
-        
+                
         <!-- Toggle Button -->
         <button 
           @click="sidebarCollapsed = !sidebarCollapsed"
-          class="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-center text-slate-400 hover:text-slate-200"
+          class="w-full py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
           :title="sidebarCollapsed ? '展开侧边栏' : '收缩侧边栏'"
         >
           <svg 
@@ -515,7 +515,7 @@ async function copyLogs() {
         </header>
 
         <!-- Docker Error Alert -->
-        <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-4 text-rose-400">
+        <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 dark:bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-4 text-rose-500 dark:text-rose-400">
           <div class="p-3 bg-rose-500/20 rounded-full text-rose-500">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
@@ -532,7 +532,7 @@ async function copyLogs() {
         </div>
 
         <!-- No Env File Alert -->
-        <div v-if="!hasEnvFile" class="mb-8 p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-4 text-amber-400">
+        <div v-if="!hasEnvFile" class="mb-8 p-6 bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-4 text-amber-600 dark:text-amber-400">
           <div class="p-3 bg-amber-500/20 rounded-full text-amber-500">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
@@ -550,9 +550,9 @@ async function copyLogs() {
 
         <!-- Container Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 overflow-y-auto mb-8 pr-2">
-          <div v-for="c in containers" :key="String(c.id)" class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-blue-500/50 transition-colors shadow-lg">
+          <div v-for="c in containers" :key="String(c.id)" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 hover:border-blue-500/50 transition-colors shadow-lg">
             <div class="flex justify-between items-start mb-4">
-              <span class="text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
+              <span class="text-slate-500 dark:text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
               <span 
                 :class="isRunning(String(c.state)) ? 'text-emerald-400' : 'text-rose-400'"
                 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-tighter"
@@ -561,8 +561,8 @@ async function copyLogs() {
                 {{ isRunning(String(c.state)) ? $t('dashboard.container.running') : $t('dashboard.container.stopped') }}
               </span>
             </div>
-            <div class="text-xl font-bold mb-1 truncate" :title="String(c.name)">{{ String(c.name) }}</div>
-            <div class="text-slate-500 text-xs mb-4">
+            <div class="text-xl font-bold mb-1 truncate text-slate-900 dark:text-slate-200" :title="String(c.name)">{{ String(c.name) }}</div>
+            <div class="text-slate-500 dark:text-slate-500 text-xs mb-4">
               <span v-if="c.ports.length > 0">Ports: {{ c.ports.join(', ') }}</span>
               <span v-else>{{ $t('dashboard.container.noPorts') }}</span>
             </div>
@@ -584,7 +584,7 @@ async function copyLogs() {
               </button>
               <button 
                 @click="openServiceConfig(String(c.name))"
-                class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-sm transition border border-slate-700"
+                class="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-sm transition border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
               >
                 {{ $t('dashboard.container.config') }}
               </button>
@@ -592,9 +592,9 @@ async function copyLogs() {
           </div>
 
           <!-- Empty State -->
-          <div v-if="containers.length === 0 && !loading" class="col-span-full py-20 text-center bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-2xl">
-            <div class="text-slate-500 mb-2">{{ t('dashboard.empty.title') }}</div>
-            <div class="text-slate-600 text-sm">{{ t('dashboard.empty.description') }}</div>
+          <div v-if="containers.length === 0 && !loading" class="col-span-full py-20 text-center bg-slate-100/50 dark:bg-slate-900/50 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-2xl">
+            <div class="text-slate-500 dark:text-slate-500 mb-2">{{ t('dashboard.empty.title') }}</div>
+            <div class="text-slate-600 dark:text-slate-600 text-sm">{{ t('dashboard.empty.description') }}</div>
           </div>
         </div>
       </div>
@@ -615,30 +615,30 @@ async function copyLogs() {
       </div>
 
       <!-- Log Panel (Global) -->
-      <div class="mt-auto border-t border-slate-800 pt-3 sm:pt-4 bg-slate-950/50 backdrop-blur-md">
+      <div class="mt-auto border-t border-slate-200 dark:border-slate-800 pt-3 sm:pt-4 bg-slate-50/50 dark:bg-slate-950/50 backdrop-blur-md">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-          <h2 class="text-lg font-bold flex items-center gap-2 text-slate-400">
+          <h2 class="text-lg font-bold flex items-center gap-2 text-slate-600 dark:text-slate-400">
             <span class="w-2 h-2 bg-blue-500 rounded-full" :class="{ 'animate-pulse': loading }"></span> 
             {{ $t('dashboard.log.title') }}
           </h2>
           <div class="flex flex-wrap gap-2">
             <button 
               @click="copyLogs"
-              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
               title="复制日志到剪贴板"
             >
               📋 {{ $t('common.copy') }}
             </button>
             <button 
               @click="scrollToBottom"
-              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
               title=""
             >
               {{ $t('dashboard.log.bottom') }}
             </button>
             <button 
               @click="showLogs = !showLogs"
-              class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
             >
               {{ showLogs ? $t('dashboard.log.hide') : $t('dashboard.log.show') }}
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -653,12 +653,12 @@ async function copyLogs() {
             v-show="showLogs" 
             ref="logPanelRef"
             @scroll="handleLogScroll"
-            class="bg-black/40 p-3 sm:p-4 rounded-xl font-mono text-xs sm:text-sm text-blue-300/80 border border-slate-800 h-32 sm:h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
+            class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-xl font-mono text-xs sm:text-sm text-blue-600 dark:text-blue-300/80 border border-slate-300 dark:border-slate-800 h-32 sm:h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
           >
             <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
               {{ log }}
             </div>
-            <div v-if="logs.length === 0" class="text-slate-600 italic">{{ $t('dashboard.log.empty') }}</div>
+            <div v-if="logs.length === 0" class="text-slate-500 dark:text-slate-600 italic">{{ $t('dashboard.log.empty') }}</div>
           </div>
         </transition>
       </div>
@@ -675,9 +675,9 @@ async function copyLogs() {
 
     <!-- Start Environment Confirmation Dialog -->
     <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
-        <h2 class="text-2xl font-bold text-white mb-4">{{ $t('dashboard.startConfirm.title') }}</h2>
-        <p class="text-slate-400 mb-6">
+      <div class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">{{ $t('dashboard.startConfirm.title') }}</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
           {{ $t('dashboard.startConfirm.message', { proxy: '' }) }}
           <strong>{{ $t('dashboard.startConfirm.proxy') }}</strong>
         </p>
@@ -686,7 +686,7 @@ async function copyLogs() {
           <div class="flex gap-3">
             <button 
               @click="showStartConfirm = false"
-              class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+              class="flex-1 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
             >
               {{ $t('common.cancel') }}
             </button>
@@ -709,16 +709,16 @@ async function copyLogs() {
 
     <!-- Restart Environment Confirmation Dialog -->
     <div v-if="showRestartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
-        <h2 class="text-2xl font-bold text-white mb-4">{{ $t('dashboard.restartConfirm.title') }}</h2>
-        <p class="text-slate-400 mb-6">
+      <div class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+        <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">{{ $t('dashboard.restartConfirm.title') }}</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
           {{ $t('dashboard.restartConfirm.message', { warning: '' }) }}
           <strong class="text-amber-400">{{ $t('dashboard.restartConfirm.warning') }}</strong>
         </p>
         <div class="space-y-4">
           <button 
             @click="showRestartConfirm = false"
-            class="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+            class="w-full px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
           >
             {{ $t('common.cancel') }}
           </button>
@@ -738,10 +738,10 @@ async function copyLogs() {
 @reference "tailwindcss";
 
 .sidebar-item {
-  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-slate-100 border border-transparent flex items-center;
+  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent flex items-center;
 }
 .sidebar-item.active {
-  @apply bg-blue-600/10 text-blue-400 border-blue-600/20;
+  @apply bg-blue-600/10 text-blue-600 dark:text-blue-400 border-blue-600/20;
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;

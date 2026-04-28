@@ -245,6 +245,11 @@
     "tabs": {
       "mirrors": "Mirror Sources",
       "software": "Version Mappings"
+    },
+    "theme": {
+      "auto": "Auto",
+      "light": "Light",
+      "dark": "Dark"
     }
   },
   "mirror": {

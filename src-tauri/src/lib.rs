@@ -29,7 +29,7 @@ pub fn run() {
                 eprintln!("Failed to initialize logging: {e}");
             }
             
-            app_log!(info, "app", "PHP-Stack 启动，日志文件位于: {:?}", log_dir.join("php-stack.log"));
+            app_log!(info, "app", "PHP-Stack started, log file at: {:?}", log_dir.join("php-stack.log"));
             
             app.handle().plugin(tauri_plugin_dialog::init())?;
             app.handle().plugin(tauri_plugin_clipboard_manager::init())?;

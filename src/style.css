@@ -1,18 +1,28 @@
 @import "tailwindcss";
 
+/* 配置 Tailwind CSS v4 的暗黑模式 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #0f172a;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light theme - 不设置背景色，让组件自己控制 */
+html.light {
+  color-scheme: light;
+}
+
+/* Dark theme - 不设置背景色，让组件自己控制 */
+html.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -21,4 +31,33 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+}
+
+/* Theme utility classes for common patterns */
+.theme-bg-primary {
+  @apply bg-white dark:bg-slate-950;
+}
+
+.theme-bg-secondary {
+  @apply bg-slate-50 dark:bg-slate-900;
+}
+
+.theme-bg-card {
+  @apply bg-white dark:bg-slate-900;
+}
+
+.theme-text-primary {
+  @apply text-slate-900 dark:text-slate-200;
+}
+
+.theme-text-secondary {
+  @apply text-slate-600 dark:text-slate-400;
+}
+
+.theme-border {
+  @apply border-slate-200 dark:border-slate-800;
+}
+
+.theme-button-secondary {
+  @apply bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300;
 }

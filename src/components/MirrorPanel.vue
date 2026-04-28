@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import type { MergedMirrorCategory, MirrorSourceOption } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
+
+const { t } = useI18n();
 
 const categories = ref<MergedMirrorCategory[]>([]);
 const loading = ref(false);
@@ -31,48 +34,59 @@ const sortedCategories = computed(() => {
   });
 });
 
-// Docker Registry 平台配置文档
-const dockerRegistryDocs = [
-  {
-    platform: 'Windows (Docker Desktop)',
-    steps: [
-      '打开 Docker Desktop',
-      '点击右上角齿轮图标 ⚙️ 进入 Settings',
-      '选择左侧 "Docker Engine"',
-      '在 JSON 配置中添加：\n"registry-mirrors": [\n  "https://docker.1ms.run",\n  "https://docker.m.daocloud.io"\n]',
-      '点击 "Apply & restart" 重启 Docker'
-    ]
-  },
-  {
-    platform: 'macOS (Docker Desktop)',
-    steps: [
-      '打开 Docker Desktop',
-      '点击右上角齿轮图标 ⚙️ 进入 Preferences',
-      '选择左侧 "Docker Engine"',
-      '在 JSON 配置中添加：\n"registry-mirrors": [\n  "https://docker.1ms.run",\n  "https://docker.m.daocloud.io"\n]',
-      '点击 "Apply & restart" 重启 Docker'
-    ]
-  },
-  {
-    platform: 'Linux (systemd)',
-    steps: [
-      '创建或编辑配置文件：sudo mkdir -p /etc/docker',
-      '编辑文件：sudo nano /etc/docker/daemon.json',
-      '添加以下内容：\n{\n  "registry-mirrors": [\n    "https://docker.1ms.run",\n    "https://docker.m.daocloud.io"\n  ]\n}',
-      '保存后重启 Docker：\nsudo systemctl daemon-reload\nsudo systemctl restart docker',
-      '验证配置：docker info | grep -A 5 "Registry Mirrors"'
-    ]
-  },
-  {
-    platform: '推荐镜像源',
-    steps: [
-      '🇨🇳 壹秒镜像：https://docker.1ms.run（稳定推荐）',
-      '🇨 DaoCloud：https://docker.m.daocloud.io',
-      '🇨🇳 阿里云（需登录）：https://<your-id>.mirror.aliyuncs.com',
-      'ℹ️ 配置多个镜像源可实现自动故障转移'
-    ]
-  }
-];
+// 从 i18n 获取 tm 函数（用于获取数组类型的翻译）
+const { tm } = useI18n();
+
+// Docker Registry 平台配置文档（从 i18n 加载，URL 动态生成）
+const dockerRegistryDocs = computed(() => {
+  // 从已加载的 categories 中提取 docker_registry 的所有镜像源
+  const dockerCategory = categories.value.find(c => c.category_id === 'docker_registry');
+  const mirrors = dockerCategory?.options || [];
+  
+  // 提取所有非空的 URL（过滤掉官方默认的 empty value）
+  const mirrorUrls = mirrors
+    .map(m => m.value)
+    .filter(Boolean); // 过滤空字符串
+  
+  // 格式化 URLs 为 JSON 数组格式
+  const formattedUrls = mirrorUrls.map(url => `"${url}"`).join(',\n  ');
+  
+  // 如果没有可用的镜像源，使用占位符提示
+  const urlsText = formattedUrls || '"https://your-mirror-url"';
+  
+  // 获取翻译数组
+  // 注意：vue-i18n v10 中，t() 函数对数组类型的支持有限
+  // 使用 tm() 方法可以直接获取翻译消息（Message）
+  const windowsSteps = tm('mirror.dockerRegistry.steps.windows') as string[] || [];
+  const macosSteps = tm('mirror.dockerRegistry.steps.macos') as string[] || [];
+  const linuxSteps = tm('mirror.dockerRegistry.steps.linux') as string[] || [];
+  
+  // 替换 {urls} 占位符
+  const replaceUrls = (step: string) => step.replace('{urls}', urlsText);
+  
+  const result = [
+    {
+      platform: t('mirror.dockerRegistry.platforms.windows'),
+      steps: windowsSteps.map(replaceUrls)
+    },
+    {
+      platform: t('mirror.dockerRegistry.platforms.macos'),
+      steps: macosSteps.map(replaceUrls)
+    },
+    {
+      platform: t('mirror.dockerRegistry.platforms.linux'),
+      steps: linuxSteps.map(replaceUrls)
+    },
+    {
+      platform: t('mirror.dockerRegistry.platforms.recommended'),
+      steps: mirrors.map(m => 
+        m.value ? `${m.name}：${m.value}` : `${m.name}（使用官方源）`
+      )
+    }
+  ];
+  
+  return result;
+});
 
 // 展开的平台
 const expandedPlatforms = ref<Set<string>>(new Set());
@@ -101,7 +115,7 @@ async function loadMirrorList() {
     const data = await invoke<MergedMirrorCategory[]>('get_merged_mirror_list');
     categories.value = data;
   } catch (e) {
-    showToast(`加载镜像源列表失败: ${e}`, 'error');
+    showToast(t('mirror.toast.loadFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -128,12 +142,12 @@ async function testConnection(option: MirrorSourceOption) {
   try {
     const result = await invoke<boolean>('test_mirror', { url: option.value });
     if (result) {
-      showToast(`✅ ${option.name} 连接成功！`, 'success');
+      showToast(t('mirror.toast.testSuccess', { name: option.name }), 'success');
     } else {
-      showToast(`❌ ${option.name} 连接失败，请检查网络或镜像源地址`, 'error');
+      showToast(t('mirror.toast.testFailed', { name: option.name }), 'error');
     }
   } catch (e) {
-    showToast(`测试失败: ${e}`, 'error');
+    showToast(t('mirror.toast.testError', { error: e }), 'error');
   } finally {
     testingOptions.value.delete(optionKey);
   }
@@ -162,12 +176,12 @@ async function selectMirror(option: MirrorSourceOption) {
       source: option.value
     });
     
-    showToast(`已选择并应用 ${option.name}`, 'success');
+    showToast(t('mirror.toast.selected', { name: option.name }), 'success');
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(`保存失败: ${e}`, 'error');
+    showToast(t('mirror.toast.saveFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -194,7 +208,7 @@ function openEditDialog(option: MirrorSourceOption) {
 // 保存编辑（更新已有选项）并自动应用配置
 async function saveEdit() {
   if (!editValue.value.trim()) {
-    showToast('请输入镜像源地址', 'warning');
+    showToast(t('mirror.toast.urlRequired'), 'warning');
     return;
   }
   
@@ -214,13 +228,13 @@ async function saveEdit() {
       source: editValue.value.trim()
     });
     
-    showToast('镜像源已更新并应用！', 'success');
+    showToast(t('mirror.toast.updated'), 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(`更新失败: ${e}`, 'error');
+    showToast(t('mirror.toast.updateFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -229,7 +243,7 @@ async function saveEdit() {
 // 保存自定义镜像源并自动应用配置
 async function saveCustomMirror() {
   if (!editValue.value.trim()) {
-    showToast('请输入镜像源地址', 'warning');
+    showToast(t('mirror.toast.urlRequired'), 'warning');
     return;
   }
   
@@ -249,13 +263,13 @@ async function saveCustomMirror() {
       source: editValue.value.trim()
     });
     
-    showToast('自定义镜像源已保存并应用！', 'success');
+    showToast(t('mirror.toast.customSaved'), 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(`保存失败: ${e}`, 'error');
+    showToast(t('mirror.toast.saveFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -264,9 +278,9 @@ async function saveCustomMirror() {
 // 删除自定义镜像源
 async function removeCustomMirror() {
   const confirmed = await showConfirm({
-    title: '删除确认',
-    message: '确定要删除自定义镜像源吗？',
-    confirmText: '删除',
+    title: t('mirror.confirm.deleteTitle'),
+    message: t('mirror.confirm.deleteMessage'),
+    confirmText: t('common.delete'),
     type: 'danger'
   });
   
@@ -305,13 +319,13 @@ async function removeCustomMirror() {
       source: defaultValue
     });
     
-    showToast('已恢复为默认配置并更新 .env', 'success');
+    showToast(t('mirror.toast.deleted'), 'success');
     showEditDialog.value = false;
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(`删除失败: ${e}`, 'error');
+    showToast(t('mirror.toast.deleteFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -320,9 +334,9 @@ async function removeCustomMirror() {
 // 重置所有自定义
 async function resetAllOverrides() {
   const confirmed = await showConfirm({
-    title: '重置所有自定义',
-    message: '确定要重置所有自定义镜像源配置吗？此操作不可撤销。',
-    confirmText: '重置',
+    title: t('mirror.confirm.resetTitle'),
+    message: t('mirror.confirm.resetMessage'),
+    confirmText: t('common.reset'),
     type: 'danger'
   });
   
@@ -350,12 +364,12 @@ async function resetAllOverrides() {
       });
     }
     
-    showToast('已重置所有自定义配置并更新 .env', 'success');
+    showToast(t('mirror.toast.resetDone'), 'success');
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(`重置失败: ${e}`, 'error');
+    showToast(t('mirror.toast.resetFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -365,9 +379,9 @@ async function resetAllOverrides() {
 async function copyUrl(url: string) {
   try {
     await navigator.clipboard.writeText(url);
-    showToast('已复制到剪贴板！', 'success');
+    showToast(t('mirror.toast.copied'), 'success');
   } catch (e) {
-    showToast('复制失败', 'error');
+    showToast(t('mirror.toast.copyFailed'), 'error');
   }
 }
 
@@ -377,31 +391,31 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col overflow-hidden">
+  <div class="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 transition-colors duration-300">
     <header class="mb-4 sm:mb-6 flex flex-col sm:flex-row justify-between items-start gap-3">
       <div>
-        <p class="text-slate-400 text-xs sm:text-sm">统一管理 Docker、APT、Composer、NPM 镜像源</p>
+        <p class="text-slate-500 dark:text-slate-400 text-xs sm:text-sm">{{ $t('mirror.subtitle') }}</p>
       </div>
       <div class="flex gap-2 w-full sm:w-auto">
         <button
           @click="resetAllOverrides"
           class="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition text-sm"
         >
-          🔄 重置所有自定义
+          {{ $t('mirror.resetAll') }}
         </button>
       </div>
     </header>
     <div v-if="loading && categories.length === 0" class="flex-1 flex items-center justify-center">
       <div class="text-center">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p class="text-slate-400">加载中...</p>
+        <p class="text-slate-500 dark:text-slate-400">{{ $t('common.loading') }}</p>
       </div>
     </div>
 
     <!-- Content -->
     <div v-else-if="categories.length > 0" class="flex-1 flex flex-col min-h-0">
       <!-- Category Tabs -->
-      <div class="flex gap-2 mb-3 sm:mb-4 border-b border-slate-700 pb-2 flex-shrink-0 overflow-x-auto scrollbar-hide">
+      <div class="flex gap-2 mb-3 sm:mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex-shrink-0 overflow-x-auto scrollbar-hide">
         <button
           v-for="category in sortedCategories"
           :key="category.category_id"
@@ -410,7 +424,7 @@ onMounted(() => {
             'px-3 sm:px-4 py-1.5 rounded-lg font-medium transition whitespace-nowrap text-xs sm:text-sm',
             selectedCategory === category.category_id
               ? 'bg-blue-600 text-white'
-              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
           ]"
         >
           {{ categoryLabels[category.category_id] || category.category_id }}
@@ -422,9 +436,9 @@ onMounted(() => {
       <div v-if="selectedCategory !== 'docker_registry'" class="mb-3 flex-shrink-0">
         <button
           @click="openCustomEdit"
-          class="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm transition"
+          class="w-full sm:w-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm transition"
         >
-          ➕ 新增自定义
+          {{ $t('mirror.addCustom') }}
         </button>
       </div>
 
@@ -433,23 +447,23 @@ onMounted(() => {
         <div class="space-y-3">
           <!-- 提示框 -->
           <div class="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-            <p class="text-yellow-400 text-sm font-medium">⚠️ Docker Registry 镜像源需要在 Docker Desktop 全局设置中配置</p>
-            <p class="text-slate-400 text-xs mt-1">由于 Docker 架构限制，无法通过本项目自动配置，请按照下方指引手动配置</p>
+            <p class="text-yellow-600 dark:text-yellow-400 text-sm font-medium">{{ $t('mirror.dockerRegistry.warning') }}</p>
+            <p class="text-slate-600 dark:text-slate-400 text-xs mt-1">{{ $t('mirror.dockerRegistry.hint') }}</p>
           </div>
 
           <!-- 平台配置文档 -->
           <div 
             v-for="doc in dockerRegistryDocs" 
             :key="doc.platform"
-            class="border border-slate-700 rounded-lg overflow-hidden"
+            class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
           >
             <button
               @click="togglePlatform(doc.platform)"
-              class="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 text-left flex items-center justify-between transition"
+              class="w-full px-4 py-3 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-200 text-left flex items-center justify-between transition"
             >
               <span class="font-medium text-sm">{{ doc.platform }}</span>
               <svg 
-                class="w-5 h-5 text-slate-400 transition-transform" 
+                class="w-5 h-5 text-slate-500 dark:text-slate-400 transition-transform" 
                 :class="{ 'rotate-180': expandedPlatforms.has(doc.platform) }"
                 fill="none" 
                 stroke="currentColor" 
@@ -460,9 +474,9 @@ onMounted(() => {
             </button>
             <div 
               v-show="expandedPlatforms.has(doc.platform)"
-              class="px-4 py-3 bg-slate-900 border-t border-slate-700"
+              class="px-4 py-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700"
             >
-              <ol class="space-y-2 text-sm text-slate-300">
+              <ol class="space-y-2 text-sm text-slate-700 dark:text-slate-300">
                 <li 
                   v-for="(step, index) in doc.steps" 
                   :key="index"
@@ -483,13 +497,13 @@ onMounted(() => {
       <div v-else class="flex-1 overflow-auto min-h-0">
         <div class="overflow-x-auto -mx-3 sm:mx-0">
           <table class="w-full text-left border-collapse min-w-[800px]">
-            <thead class="sticky top-0 bg-slate-900 z-10">
-              <tr class="border-b border-slate-700">
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">镜像源名称</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[250px]">地址</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[200px]">描述</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">状态</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm sticky right-0 bg-slate-900 z-20 w-auto">操作</th>
+            <thead class="sticky top-0 bg-white dark:bg-slate-900 z-10">
+              <tr class="border-b border-slate-200 dark:border-slate-700">
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">{{ $t('mirror.table.name') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[250px]">{{ $t('mirror.table.url') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[200px]">{{ $t('mirror.table.description') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">{{ $t('mirror.table.status') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm sticky right-0 bg-white dark:bg-slate-900 z-20 w-auto">{{ $t('mirror.table.actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -497,9 +511,9 @@ onMounted(() => {
                 v-for="option in getCurrentOptions()" 
                 :key="option.id"
                 :class="[
-                  'border-b border-slate-800 hover:bg-slate-800/50 transition',
+                  'border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition',
                   categories.find(c => c.category_id === selectedCategory)?.selected_id === option.id 
-                    ? 'bg-blue-600/10' 
+                    ? 'bg-blue-600/10 dark:bg-blue-600/10' 
                     : ''
                 ]"
               >
@@ -509,25 +523,25 @@ onMounted(() => {
                     v-if="getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id" 
                     class="ml-2 text-xs text-blue-400"
                   >
-                    (当前)
+                    {{ $t('mirror.status.current') }}
                   </span>
                   <span 
                     v-if="option.id === 'custom'" 
                     class="ml-2 text-xs text-yellow-400"
                   >
-                    (自定义)
+                    {{ $t('mirror.status.custom') }}
                   </span>
                 </td>
                 <td class="py-3 px-3">
                   <code 
                     @click="copyUrl(option.value)"
-                    class="bg-slate-800 px-2 py-1.5 rounded text-xs font-mono block cursor-pointer hover:bg-slate-700 transition truncate"
+                    class="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded text-xs font-mono block cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition truncate"
                     :title="option.value || ''"
                   >
                     {{ option.value || '-' }}
                   </code>
                 </td>
-                <td class="py-3 px-3 text-slate-400 text-sm truncate" :title="option.description || ''">
+                <td class="py-3 px-3 text-slate-600 dark:text-slate-400 text-sm truncate" :title="option.description || ''">
                   {{ option.description || '-' }}
                 </td>
                 <td class="py-3 px-3">
@@ -535,16 +549,16 @@ onMounted(() => {
                     v-if="option.value"
                     class="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 whitespace-nowrap"
                   >
-                    可用
+                    {{ $t('mirror.status.available') }}
                   </span>
                   <span 
                     v-else
                     class="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-400 whitespace-nowrap"
                   >
-                    默认
+                    {{ $t('mirror.status.default') }}
                   </span>
                 </td>
-                <td class="py-3 px-3 sticky right-0 bg-slate-900 z-10 whitespace-nowrap">
+                <td class="py-3 px-3 sticky right-0 bg-white dark:bg-slate-900 z-10 whitespace-nowrap">
                   <div class="flex items-center gap-2">
                     <button
                       @click="selectMirror(option)"
@@ -552,12 +566,12 @@ onMounted(() => {
                         'px-3 py-1.5 rounded text-xs transition',
                         getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id
                           ? 'bg-blue-600 text-white cursor-default'
-                          : 'bg-slate-700 hover:bg-slate-600 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-white'
                       ]"
                       :disabled="!!getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id"
                       title="选择此镜像源"
                     >
-                      选择
+                      {{ $t('mirror.actions.select') }}
                     </button>
                     <button
                       v-if="option.value"
@@ -567,7 +581,7 @@ onMounted(() => {
                       title="测试连接"
                     >
                       <span v-if="isTesting(option)" class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-white"></span>
-                      <span>{{ isTesting(option) ? '测试中...' : '测试' }}</span>
+                      <span>{{ isTesting(option) ? $t('mirror.actions.testing') : $t('mirror.actions.test') }}</span>
                     </button>
                     <button
                       v-if="option.id === 'custom' || option.value"
@@ -575,7 +589,7 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition"
                       title="编辑"
                     >
-                      编辑
+                      {{ $t('mirror.actions.edit') }}
                     </button>
                     <button
                       v-if="option.id === 'custom'"
@@ -583,7 +597,7 @@ onMounted(() => {
                       class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition"
                       title="删除自定义"
                     >
-                      删除
+                      {{ $t('mirror.actions.delete') }}
                     </button>
                   </div>
                 </td>
@@ -594,42 +608,42 @@ onMounted(() => {
       </div>
 
       <!-- Footer Info -->
-      <div class="mt-4 p-4 bg-slate-800/50 rounded-lg text-sm text-slate-400">
-        <p>💡 提示：</p>
+      <div class="mt-4 p-4 bg-white dark:bg-slate-800/50 rounded-lg text-sm text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+        <p>{{ $t('mirror.hints.title') }}</p>
         <ul class="list-disc list-inside mt-2 space-y-1">
-          <li>点击"选择"按钮后会自动应用配置到 .env 文件</li>
-          <li>自定义镜像源会被保存到 .user_mirror_config.json</li>
-          <li>点击"测试连接"验证镜像源是否可用</li>
+          <li>{{ $t('mirror.hints.autoApply') }}</li>
+          <li>{{ $t('mirror.hints.customSaved') }}</li>
+          <li>{{ $t('mirror.hints.testConnection') }}</li>
         </ul>
       </div>
     </div>
 
     <!-- Edit/Custom Dialog -->
-    <div v-if="showEditDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full mx-4 border border-slate-700">
-        <h2 class="text-xl font-bold mb-4">
-          {{ isCustomEdit ? '新增自定义镜像源' : '编辑镜像源' }}
+    <div v-if="showEditDialog" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-6 max-w-md w-full mx-4 border border-slate-200 dark:border-slate-700 shadow-2xl">
+        <h2 class="text-xl font-bold mb-4 text-slate-900 dark:text-slate-200">
+          {{ isCustomEdit ? $t('mirror.editDialog.titleNew') : $t('mirror.editDialog.titleEdit') }}
         </h2>
         
         <div class="space-y-4">
           <div>
-            <label class="block text-sm text-slate-400 mb-2">
-              镜像源地址 <span class="text-rose-400">*</span>
+            <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">
+              {{ $t('mirror.editDialog.urlLabel') }} <span class="text-rose-500 dark:text-rose-400">{{ $t('mirror.editDialog.urlRequired') }}</span>
             </label>
             <input
               v-model="editValue"
-              placeholder="例如: https://registry.npmmirror.com"
-              class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+              :placeholder="$t('mirror.editDialog.urlPlaceholder')"
+              class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:outline-none"
             />
           </div>
           
           <div>
-            <label class="block text-sm text-slate-400 mb-2">备注说明</label>
+            <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">{{ $t('mirror.editDialog.descLabel') }}</label>
             <textarea
               v-model="editDescription"
-              placeholder="可选，描述这个镜像源的用途"
+              :placeholder="$t('mirror.editDialog.descPlaceholder')"
               rows="3"
-              class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+              class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:outline-none resize-none"
             ></textarea>
           </div>
         </div>
@@ -637,23 +651,23 @@ onMounted(() => {
         <div class="flex gap-3 mt-6">
           <button
             @click="showEditDialog = false"
-            class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+            class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition"
           >
-            取消
+            {{ $t('common.cancel') }}
           </button>
           <button
             v-if="!isCustomEdit && editingOption?.id === 'custom'"
             @click="removeCustomMirror"
             class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition"
           >
-            删除
+            {{ $t('common.delete') }}
           </button>
           <button
             @click="isCustomEdit ? saveCustomMirror() : saveEdit()"
             :disabled="!editValue.trim()"
             class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition"
           >
-            {{ isCustomEdit ? '保存' : '更新' }}
+            {{ isCustomEdit ? $t('common.save') : $t('common.update') }}
           </button>
         </div>
       </div>

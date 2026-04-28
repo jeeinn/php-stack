@@ -1,0 +1,526 @@
+{
+  "common": {
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "save": "保存",
+    "update": "更新",
+    "close": "关闭",
+    "edit": "编辑",
+    "reset": "重置",
+    "loading": "加载中...",
+    "select": "选择",
+    "test": "测试",
+    "testing": "测试中...",
+    "browse": "浏览",
+    "copy": "复制",
+    "retry": "重试",
+    "start": "启动",
+    "stop": "停止",
+    "version": "v0.1.0",
+    "noOptions": "暂无选项",
+    "selectPlaceholder": "请选择...",
+    "confirmAction": "确认操作"
+  },
+  "sidebar": {
+    "dashboard": "环境管理",
+    "envConfig": "环境配置",
+    "settings": "其他设置",
+    "migration": "环境迁移"
+  },
+  "dashboard": {
+    "title": "运行状态",
+    "refresh": "手动刷新",
+    "refreshing": "刷新中...",
+    "startEnv": "一键启动",
+    "startingEnv": "启动中...",
+    "restartEnv": "一键重启",
+    "restartingEnv": "重启中...",
+    "stopEnv": "一键停止",
+    "stoppingEnv": "停止中...",
+    "dockerError": {
+      "title": "Docker 环境异常",
+      "retry": "重试"
+    },
+    "noEnvFile": {
+      "title": "未检测到环境配置",
+      "description": "首次使用需要先配置 PHP、MySQL、Nginx 等服务，然后才能启动环境。",
+      "action": "去配置环境"
+    },
+    "container": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "start": "启动",
+      "stop": "停止",
+      "config": "配置",
+      "noPorts": "No public ports"
+    },
+    "empty": {
+      "title": "未发现 ps- 前缀的容器",
+      "description": "请先在「环境配置」中配置 PHP、Nginx 等环境"
+    },
+    "startConfirm": {
+      "title": "⚠️ 启动环境提示",
+      "message": "在启动过程中，Docker 可能需要从网络拉取镜像或下载扩展脚本。如果遇到网络连接问题（如 GitHub 访问失败），建议您先配置 {proxy}。",
+      "proxy": "GITHUB_PROXY",
+      "goMirror": "去配置镜像源",
+      "directStart": "直接启动"
+    },
+    "restartConfirm": {
+      "title": "⚠️ 重启环境提示",
+      "message": "重启环境将重新启动所有运行中的容器。{warning}，避免数据丢失。",
+      "warning": "请注意保存当前数据",
+      "action": "确认重启"
+    },
+    "log": {
+      "title": "实时日志",
+      "copy": "📋 复制",
+      "bottom": "⬇️ 底部",
+      "show": "显示",
+      "hide": "隐藏",
+      "empty": "等待操作中...",
+      "copied": "日志已复制到剪贴板",
+      "copyFailed": "复制失败: {error}"
+    },
+    "toast": {
+      "refreshing": "正在刷新容器状态...",
+      "refreshDone": "刷新完成",
+      "refreshFailed": "刷新失败: {error}",
+      "containerUpdated": "容器列表已更新 ({count} 个容器)",
+      "containerNoChange": "容器状态未变化",
+      "dockerUnavailable": "Docker 不可用，已清空容器列表",
+      "dockerCheckFailed": "Docker 检查失败: {error}",
+      "serviceStarting": "正在启动服务: {name}...",
+      "serviceStarted": "服务 {name} 已启动",
+      "serviceStopping": "正在停止服务: {name}...",
+      "serviceStopped": "服务 {name} 已停止",
+      "serviceStartFailed": "启动失败: {error}",
+      "serviceStopFailed": "停止失败: {error}",
+      "configOpening": "正在打开服务配置: {name}...",
+      "configOpened": "已打开服务配置目录: {name}",
+      "configOpenFailed": "打开配置失败: {error}",
+      "envStarting": "🚀 开始一键启动环境...",
+      "envStarted": "✅ 环境启动成功！",
+      "envStartFailed": "❌ 启动失败: {error}",
+      "envRestarting": "🔄 开始一键重启环境...",
+      "envRestarted": "✅ 环境重启成功！",
+      "envRestartFailed": "❌ 重启失败: {error}",
+      "envStopping": "🛑 开始一键停止环境...",
+      "envStopped": "✅ 环境停止成功！",
+      "envStopFailed": "❌ 停止失败: {error}",
+      "portConflictIgnore": "⚠️ 用户选择忽略冲突，继续启动...",
+      "portConflictCancel": "❌ 用户取消启动，请先解决端口冲突"
+    },
+    "portConflict": {
+      "title": "⚠️ 检测到端口冲突",
+      "message": "发现以下端口冲突：\n\n{details}\n\n是否继续启动？（可能会导致容器启动失败）",
+      "continue": "忽略并继续",
+      "cancel": "取消启动"
+    },
+    "startTooltip": {
+      "noEnv": "请先在环境配置页面进行配置",
+      "hasRunning": "有容器正在运行，请使用一键重启"
+    },
+    "restartTooltip": "没有运行中的容器，请使用一键启动",
+    "stopTooltip": "没有运行中的容器"
+  },
+  "envConfig": {
+    "title": "环境配置",
+    "subtitle": "可视化配置 .env 和 docker-compose.yml",
+    "preview": "预览配置",
+    "previewing": "生成中...",
+    "apply": "应用配置",
+    "applying": "应用中...",
+    "startEnv": "一键启动",
+    "startingEnv": "启动中...",
+    "startTooltip": "请先应用配置生成 .env 文件",
+    "php": {
+      "title": "🐘 PHP 服务",
+      "version": "PHP 版本",
+      "versionPlaceholder": "选择 PHP 版本",
+      "extensions": "PHP 扩展配置",
+      "extensionsPanel": "📦 预设扩展库 & 自定义配置",
+      "customExtensions": "✨ 自定义扩展 (空格或逗号分隔)",
+      "customExtPlaceholder": "例如: grpc protobuf",
+      "customExtHint": "💡 由 docker-php-extension-installer 自动处理依赖。",
+      "viewSupported": "查看支持列表"
+    },
+    "mysql": {
+      "title": "🐬 MySQL 服务",
+      "version": "MySQL 版本",
+      "versionPlaceholder": "选择 MySQL 版本",
+      "rootPassword": "MySQL Root 密码",
+      "rootPasswordHint": "留空或输入 \"root\" 将使用默认密码"
+    },
+    "redis": {
+      "title": "🔴 Redis 服务",
+      "version": "Redis 版本",
+      "versionPlaceholder": "选择 Redis 版本",
+      "empty": "点击上方\"+ 添加版本\"按钮添加 Redis 服务"
+    },
+    "nginx": {
+      "title": "🚀 Nginx 服务",
+      "version": "Nginx 版本",
+      "versionPlaceholder": "选择 Nginx 版本",
+      "empty": "点击上方\"+ 添加版本\"按钮添加 Nginx 服务"
+    },
+    "addVersion": "+ 添加版本",
+    "remove": "删除",
+    "hostPort": "宿主机端口",
+    "portConflict": {
+      "title": "端口冲突",
+      "detail": "端口 {port} 冲突：{service1} 和 {service2}"
+    },
+    "portChecker": {
+      "header": "发现 {count} 个端口冲突：\n\n",
+      "item": "{index}. 端口 {port} ({service})\n   被占用容器: {container_name}\n   镜像: {container_image}\n   容器ID: {container_id}\n\n",
+      "solution": "💡 解决方案：\n• 停止冲突容器: docker stop <容器名>\n• 或删除冲突容器: docker rm <容器名>\n• 或在环境配置中修改为其他端口"
+    },
+    "general": {
+      "title": "🔧 通用设置",
+      "workspace": "工作目录",
+      "sourceDir": "项目源码目录",
+      "timezone": "时区",
+      "timezonePlaceholder": "选择时区",
+      "customTimezone": "自定义时区...",
+      "customTimezoneLabel": "自定义: {tz}",
+      "customTimezoneHint": "💡 提示：请输入有效的 IANA 时区标识符，如 \"Europe/Moscow\"、\"Pacific/Auckland\""
+    },
+    "timezone": {
+      "shanghai": "上海 (UTC+8)",
+      "hongkong": "香港 (UTC+8)",
+      "tokyo": "东京 (UTC+9)",
+      "singapore": "新加坡 (UTC+8)",
+      "dubai": "迪拜 (UTC+4)",
+      "london": "伦敦 (UTC+0/+1)",
+      "paris": "巴黎 (UTC+1/+2)",
+      "berlin": "柏林 (UTC+1/+2)",
+      "newYork": "纽约 (UTC-5/-4)",
+      "losAngeles": "洛杉矶 (UTC-8/-7)",
+      "chicago": "芝加哥 (UTC-6/-5)",
+      "sydney": "悉尼 (UTC+10/+11)",
+      "utc": "协调世界时 (UTC)"
+    },
+    "nginxHint": {
+      "title": "Nginx 配置提醒",
+      "description": "检测到您同时启用了 PHP 和 Nginx 服务。Nginx 需要配置正确的 PHP-FPM 上游地址。",
+      "phpAddresses": "📌 PHP 容器地址列表（用于 Nginx 配置）：",
+      "multiNginx": "⚠️ 检测到多个 Nginx 版本：",
+      "port": "端口 {port}",
+      "openConfigDir": "打开配置目录",
+      "configSteps": "配置步骤：",
+      "step1Single": "编辑文件：{path}",
+      "step1Multi": "为每个 Nginx 版本编辑对应的配置文件（见上方列表）",
+      "step2": "找到 {directive} 行（默认值为 {default}）",
+      "step3": "修改为：{example}（选择上面的某个容器地址，如 {hint}）",
+      "step4": "💡 提示：如果使用了多个 PHP 版本，可以为不同的 server 块配置不同的 fastcgi_pass 地址",
+      "dismiss": "我知道了"
+    },
+    "previewModal": {
+      "title": "📄 配置预览",
+      "close": "关闭",
+      "applyConfig": "应用配置"
+    },
+    "confirmOverwrite": {
+      "title": "配置文件已存在",
+      "message": "检测到以下配置文件已存在：\n\n{files}\n\n继续操作将覆盖这些文件，是否继续？",
+      "confirm": "应用配置",
+      "backupLabel": "备份现有配置（自动回滚机制，失败会恢复原状）"
+    },
+    "toast": {
+      "applySuccess": "配置已成功应用！配置文件已生成在{location}。",
+      "applySuccessDev": "项目根目录",
+      "applySuccessProd": "程序所在目录",
+      "backedUp": "\n\n✅ 已备份 {count} 个文件/目录：\n{files}",
+      "backupPartialFail": "\n\n⚠️  注意：部分文件备份失败（可能文件被占用），请关闭相关程序后重试。",
+      "startSuccess": "环境启动成功！\n{result}",
+      "nginxConfigOpened": "已打开 {dir} 配置目录",
+      "nginxConfigFailed": "打开目录失败，请手动打开 services/{dir}/conf.d/"
+    },
+    "error": {
+      "dockerNotRunning": "❌ Docker 未运行\n\n请启动 Docker Desktop 后重试。",
+      "permissionDenied": "❌ 权限不足\n\n请以管理员身份运行或检查 Docker 权限设置。",
+      "portConflict": "⚠️  端口冲突\n\n{error}\n\n请修改冲突服务的端口号。",
+      "readFailed": "❌ 文件读取失败\n\n请检查文件是否存在且有读取权限。",
+      "writeFailed": "❌ 文件写入失败\n\n请检查目录是否有写入权限。",
+      "parseFailed": "❌ 配置文件格式错误\n\n请检查 .env 文件格式是否正确。",
+      "default": "❌ 操作失败\n\n{error}"
+    }
+  },
+  "settings": {
+    "title": "设置项",
+    "tabs": {
+      "mirrors": "镜像源设置",
+      "software": "软件版本映射"
+    },
+    "theme": {
+      "auto": "自动",
+      "light": "明亮",
+      "dark": "暗黑"
+    }
+  },
+  "mirror": {
+    "subtitle": "统一管理 Docker、APT、Composer、NPM 镜像源",
+    "resetAll": "🔄 重置所有自定义",
+    "addCustom": "➕ 新增自定义",
+    "table": {
+      "name": "镜像源名称",
+      "url": "地址",
+      "description": "描述",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "status": {
+      "available": "可用",
+      "default": "默认",
+      "current": "(当前)",
+      "custom": "(自定义)"
+    },
+    "actions": {
+      "select": "选择",
+      "test": "测试",
+      "testing": "测试中...",
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "dockerRegistry": {
+      "warning": "⚠️ Docker Registry 镜像源需要在 Docker Desktop 全局设置中配置",
+      "hint": "由于 Docker 架构限制，无法通过本项目自动配置，请按照下方指引手动配置",
+      "platforms": {
+        "windows": "Windows (Docker Desktop)",
+        "macos": "macOS (Docker Desktop)",
+        "linux": "Linux (systemd)",
+        "recommended": "推荐镜像源"
+      },
+      "steps": {
+        "windows": [
+          "打开 Docker Desktop",
+          "点击右上角齿轮图标 ⚙️ 进入 Settings",
+          "选择左侧 \"Docker Engine\"",
+          "在 JSON 配置中添加或修改以下字段：",
+          "{\n  \"registry-mirrors\": [\n    {urls}\n  ]\n}",
+          "点击 \"Apply & restart\" 重启 Docker"
+        ],
+        "macos": [
+          "打开 Docker Desktop",
+          "点击顶部菜单栏 Docker 图标 → Preferences",
+          "选择左侧 \"Docker Engine\"",
+          "在 JSON 配置中添加或修改以下字段：",
+          "{\n  \"registry-mirrors\": [\n    {urls}\n  ]\n}",
+          "点击 \"Apply & restart\" 重启 Docker"
+        ],
+        "linux": [
+          "创建或编辑 /etc/docker/daemon.json 文件",
+          "添加或修改以下 JSON 配置：",
+          "{\n  \"registry-mirrors\": [\n    {urls}\n  ]\n}",
+          "重启 Docker 服务：sudo systemctl restart docker"
+        ]
+      }
+    },
+    "editDialog": {
+      "titleNew": "新增自定义镜像源",
+      "titleEdit": "编辑镜像源",
+      "urlLabel": "镜像源地址",
+      "urlRequired": "*",
+      "urlPlaceholder": "例如: https://registry.npmmirror.com",
+      "descLabel": "备注说明",
+      "descPlaceholder": "可选，描述这个镜像源的用途"
+    },
+    "hints": {
+      "title": "💡 提示：",
+      "autoApply": "点击\"选择\"按钮后会自动应用配置到 .env 文件",
+      "customSaved": "自定义镜像源会被保存到 .user_mirror_config.json",
+      "testConnection": "点击\"测试连接\"验证镜像源是否可用"
+    },
+    "confirm": {
+      "deleteTitle": "删除确认",
+      "deleteMessage": "确定要删除自定义镜像源吗？",
+      "resetTitle": "重置所有自定义",
+      "resetMessage": "确定要重置所有自定义镜像源配置吗？此操作不可撤销。"
+    },
+    "toast": {
+      "loadFailed": "加载镜像源列表失败: {error}",
+      "selected": "已选择并应用 {name}",
+      "saveFailed": "保存失败: {error}",
+      "updated": "镜像源已更新并应用！",
+      "updateFailed": "更新失败: {error}",
+      "customSaved": "自定义镜像源已保存并应用！",
+      "deleted": "已恢复为默认配置并更新 .env",
+      "deleteFailed": "删除失败: {error}",
+      "resetDone": "已重置所有自定义配置并更新 .env",
+      "resetFailed": "重置失败: {error}",
+      "copied": "已复制到剪贴板！",
+      "copyFailed": "复制失败",
+      "testSuccess": "✅ {name} 连接成功！",
+      "testFailed": "❌ {name} 连接失败，请检查网络或镜像源地址",
+      "testError": "测试失败: {error}",
+      "urlRequired": "请输入镜像源地址"
+    }
+  },
+  "software": {
+    "subtitle": "管理 Docker 镜像版本映射配置",
+    "resetAll": "🔄 重置所有自定义",
+    "table": {
+      "name": "版本名称",
+      "image": "Docker 镜像",
+      "configDir": "配置目录",
+      "status": "状态",
+      "notes": "备注",
+      "actions": "操作"
+    },
+    "status": {
+      "eol": "⚠️ EOL",
+      "active": "✅ 活跃"
+    },
+    "editDialog": {
+      "title": "编辑 Docker 镜像",
+      "versionLabel": "版本名称",
+      "imageLabel": "Docker 镜像",
+      "imagePlaceholder": "例如: php:8.2-fpm-alpine",
+      "descLabel": "备注说明",
+      "descPlaceholder": "可选，描述这个自定义标签的用途"
+    },
+    "hints": {
+      "title": "💡 提示：",
+      "editCustom": "点击\"编辑\"可以自定义 Docker 镜像标签",
+      "reapply": "修改后需要重新应用环境配置才能生效",
+      "eolWarning": "EOL 版本表示已停止维护，建议使用活跃版本"
+    },
+    "confirm": {
+      "deleteTitle": "删除确认",
+      "deleteMessage": "确定要删除 {name} 的自定义配置吗？",
+      "resetTitle": "重置所有自定义",
+      "resetMessage": "确定要重置所有自定义配置吗？此操作不可撤销。"
+    },
+    "toast": {
+      "loadFailed": "加载版本映射失败: {error}",
+      "saved": "保存成功！重新应用配置后生效。",
+      "saveFailed": "保存失败: {error}",
+      "deleted": "已恢复为默认配置",
+      "deleteFailed": "删除失败: {error}",
+      "resetDone": "已重置所有自定义配置",
+      "resetFailed": "重置失败: {error}",
+      "copied": "已复制到剪贴板！",
+      "copyFailed": "复制失败",
+      "copyTooltip": "点击复制: {tag}"
+    }
+  },
+  "migration": {
+    "title": "环境迁移",
+    "tabs": {
+      "backup": "环境备份",
+      "restore": "环境恢复"
+    }
+  },
+  "backup": {
+    "title": "环境备份",
+    "subtitle": "一键导出当前开发环境的完整备份",
+    "options": {
+      "title": "📋 备份选项",
+      "coreConfig": "核心配置文件（.env、docker-compose.yml、services/ 配置）",
+      "includeProjects": "包含项目文件",
+      "includeLogs": "包含日志文件（logs 目录）",
+      "logsWarning": "注意：日志文件可能占用较大备份空间",
+      "patterns": "文件匹配模式（每行一个 glob 模式）",
+      "selectFolder": "选择文件夹",
+      "selectFile": "选择文件",
+      "patternsPlaceholder": "例如：\nwww/project-a/**\n.env",
+      "patternsHint": "💡 提示：为确保跨平台恢复成功，请仅备份项目目录内的文件。"
+    },
+    "progress": {
+      "title": "📊 备份进度"
+    },
+    "action": {
+      "create": "创建备份包 (.zip)",
+      "creating": "备份中..."
+    },
+    "toast": {
+      "success": "备份已成功创建：{path}",
+      "pathError": "路径转换失败: {error}"
+    }
+  },
+  "restore": {
+    "title": "环境恢复",
+    "subtitle": "从备份包恢复完整开发环境",
+    "steps": {
+      "select": "选择文件",
+      "preview": "预览内容",
+      "verify": "校验完整性",
+      "restore": "开始恢复"
+    },
+    "selectFile": {
+      "title": "📁 选择备份文件",
+      "placeholder": "请选择 .zip 备份文件",
+      "browse": "浏览文件",
+      "hint": "💡 支持 PHP-Stack 生成的 .zip 格式备份文件"
+    },
+    "preview": {
+      "title": "📋 预览备份内容",
+      "startPreview": "🔍 开始预览",
+      "previewing": "预览中...",
+      "hint": "💡 预览将显示备份包中的服务配置和文件列表",
+      "summaryTitle": "📋 备份内容摘要",
+      "backupTime": "备份时间",
+      "appVersion": "应用版本",
+      "osInfo": "操作系统",
+      "fileCount": "文件数量",
+      "fileCountValue": "{count} 个文件",
+      "serviceList": "服务列表",
+      "warnings": "备份时的警告",
+      "done": "✓ 预览完成",
+      "next": "下一步：校验 →"
+    },
+    "verify": {
+      "title": "🔒 校验文件完整性",
+      "startVerify": "🛡️ 开始校验",
+      "verifying": "校验中...",
+      "hint": "💡 校验将通过 SHA256 确保备份文件未被篡改",
+      "resultTitle": "🔒 完整性校验结果",
+      "passed": "SHA256 校验通过",
+      "passedHint": "备份包完整无损，可以安全恢复",
+      "failed": "校验失败",
+      "failedHint": "备份包可能已损坏或被篡改，请勿使用",
+      "next": "下一步：开始恢复 →"
+    },
+    "restoreAction": {
+      "title": "🚀 开始恢复环境",
+      "start": "🚀 确认并开始恢复",
+      "restoring": "恢复中...",
+      "verifyFailed": "❌ 备份文件校验失败，无法恢复"
+    },
+    "success": {
+      "title": "环境恢复成功！",
+      "description": "您可以重新启动 Docker 容器以应用新的配置"
+    },
+    "progress": {
+      "title": "📊 恢复进度"
+    },
+    "confirm": {
+      "title": "环境恢复确认",
+      "message": "⚠️ 注意: 现有配置文件将被覆盖，建议先备份当前环境\n\n💡 恢复完成后，点击\"一键启动\"即可运行环境",
+      "start": "开始恢复"
+    },
+    "toast": {
+      "previewDone": "预览完成，请查看备份内容",
+      "verifyPassed": "校验通过，可以开始恢复",
+      "verifyFailed": "校验失败，备份文件可能已损坏",
+      "success": "环境恢复成功！"
+    }
+  },
+  "workspace": {
+    "title": "👋 欢迎使用 PHP-Stack",
+    "description": "为了开始使用，请指定一个文件夹作为您的{bold}。所有的环境配置、数据库数据和项目源码都将保存在这里。",
+    "bold": "工作目录",
+    "pathLabel": "工作目录路径",
+    "pathPlaceholder": "点击右侧按钮选择目录...",
+    "confirmStart": "确认并开始",
+    "error": {
+      "invalidPath": "请选择一个有效的目录作为工作区"
+    },
+    "status": {
+      "loading": "加载中...",
+      "notConfigured": "未配置",
+      "loadFailed": "获取失败"
+    }
+  }
+}

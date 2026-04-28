@@ -78,7 +78,7 @@ describe('EnvConfigPage', () => {
   it('displays the title', async () => {
     const wrapper = mount(EnvConfigPage)
     await flushPromises()
-    expect(wrapper.text()).toContain('环境配置')
+    expect(wrapper.text()).toContain('环境配置') // zh-CN 默认语言
   })
 
   it('has PHP service section', async () => {

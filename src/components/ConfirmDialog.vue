@@ -33,9 +33,9 @@ function getIconConfig() {
   <Teleport to="body">
     <Transition name="confirm">
       <div v-if="state.show" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
           <!-- 标题栏 -->
-          <div class="p-6 border-b border-slate-800">
+          <div class="p-6 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-start gap-3">
               <div :class="['flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center', getIconConfig().color]">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -43,8 +43,8 @@ function getIconConfig() {
                 </svg>
               </div>
               <div class="flex-1">
-                <h3 class="text-lg font-semibold text-slate-100">{{ state.options.title }}</h3>
-                <p class="mt-2 text-sm text-slate-400 whitespace-pre-line">{{ state.options.message }}</p>
+                <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100">{{ state.options.title }}</h3>
+                <p class="mt-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{{ state.options.message }}</p>
               </div>
             </div>
           </div>
@@ -55,17 +55,17 @@ function getIconConfig() {
               <input 
                 type="checkbox" 
                 v-model="state.checkboxValue"
-                class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-slate-900"
               />
-              <span class="text-sm text-slate-300">{{ state.options.checkboxLabel }}</span>
+              <span class="text-sm text-slate-700 dark:text-slate-300">{{ state.options.checkboxLabel }}</span>
             </label>
           </div>
           
           <!-- 按钮栏 -->
-          <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
+          <div class="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
             <button 
               @click="handleCancel" 
-              class="px-5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium transition text-slate-300"
+              class="px-5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg font-medium transition text-slate-700 dark:text-slate-300"
             >
               {{ state.options.cancelText }}
             </button>

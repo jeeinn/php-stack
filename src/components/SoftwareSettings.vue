@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import type { VersionMappings, VersionInfo, ServiceTypeLower } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
+
+const { t } = useI18n();
 
 const versionMappings = ref<VersionMappings | null>(null);
 const loading = ref(false);
@@ -32,7 +35,7 @@ async function loadVersionMappings() {
     // 标记有用户覆盖的版本
     versionMappings.value = data;
   } catch (e) {
-    showToast(`加载版本映射失败: ${e}`, 'error');
+    showToast(t('software.toast.loadFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -48,9 +51,9 @@ function getCurrentVersions(): VersionInfo[] {
 async function copyImageName(fullName: string) {
   try {
     await navigator.clipboard.writeText(fullName);
-    showToast('已复制到剪贴板！', 'success');
+    showToast(t('software.toast.copied'), 'success');
   } catch (e) {
-    showToast('复制失败', 'error');
+    showToast(t('software.toast.copyFailed'), 'error');
   }
 }
 
@@ -76,14 +79,14 @@ async function saveOverride() {
       description: editDescription.value || undefined
     });
     
-    showToast('保存成功！重新应用配置后生效。', 'success');
+    showToast(t('software.toast.saved'), 'success');
     showEditDialog.value = false;
     editingVersion.value = null;
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    showToast(`保存失败: ${e}`, 'error');
+    showToast(t('software.toast.saveFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -92,9 +95,9 @@ async function saveOverride() {
 // 删除用户覆盖
 async function removeOverride(version: VersionInfo) {
   const confirmed = await showConfirm({
-    title: '删除确认',
-    message: `确定要删除 ${version.display_name} 的自定义配置吗？`,
-    confirmText: '删除',
+    title: t('software.confirm.deleteTitle'),
+    message: t('software.confirm.deleteMessage', { name: version.display_name }),
+    confirmText: t('common.delete'),
     type: 'danger'
   });
   
@@ -108,12 +111,12 @@ async function removeOverride(version: VersionInfo) {
       id: version.id
     });
     
-    showToast('已恢复为默认配置', 'success');
+    showToast(t('software.toast.deleted'), 'success');
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    showToast(`删除失败: ${e}`, 'error');
+    showToast(t('software.toast.deleteFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -122,9 +125,9 @@ async function removeOverride(version: VersionInfo) {
 // 重置所有覆盖
 async function resetAllOverrides() {
   const confirmed = await showConfirm({
-    title: '重置所有自定义',
-    message: '确定要重置所有自定义配置吗？此操作不可撤销。',
-    confirmText: '重置',
+    title: t('software.confirm.resetTitle'),
+    message: t('software.confirm.resetMessage'),
+    confirmText: t('common.reset'),
     type: 'danger'
   });
   
@@ -135,12 +138,12 @@ async function resetAllOverrides() {
   try {
     await invoke('reset_all_overrides');
     
-    showToast('已重置所有自定义配置', 'success');
+    showToast(t('software.toast.resetDone'), 'success');
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    showToast(`重置失败: ${e}`, 'error');
+    showToast(t('software.toast.resetFailed', { error: e }), 'error');
   } finally {
     loading.value = false;
   }
@@ -152,16 +155,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col overflow-hidden">
+  <div class="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 transition-colors duration-300">
     <header class="mb-6 flex justify-between items-start">
       <div>
-        <p class="text-slate-400 text-sm">管理 Docker 镜像版本映射配置</p>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">{{ $t('software.subtitle') }}</p>
       </div>
       <button
         @click="resetAllOverrides"
         class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition text-sm"
       >
-        🔄 重置所有自定义
+        {{ $t('software.resetAll') }}
       </button>
     </header>
 
@@ -169,14 +172,14 @@ onMounted(() => {
     <div v-if="loading" class="flex-1 flex items-center justify-center">
       <div class="text-center">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p class="text-slate-400">加载中...</p>
+        <p class="text-slate-500 dark:text-slate-400">{{ $t('common.loading') }}</p>
       </div>
     </div>
 
     <!-- Content -->
     <div v-else-if="versionMappings" class="flex-1 flex flex-col min-h-0">
       <!-- Service Tabs -->
-      <div class="flex gap-2 mb-4 border-b border-slate-700 pb-2 flex-shrink-0">
+      <div class="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex-shrink-0">
         <button
           v-for="(label, service) in serviceLabels"
           :key="service"
@@ -185,7 +188,7 @@ onMounted(() => {
             'px-4 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm',
             selectedService === service
               ? 'bg-blue-600 text-white'
-              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
           ]"
         >
           {{ label }}
@@ -196,65 +199,65 @@ onMounted(() => {
       <div class="flex-1 overflow-auto min-h-0">
         <div class="overflow-x-auto -mx-3 sm:mx-0">
           <table class="w-full text-left border-collapse min-w-[900px]">
-            <thead class="sticky top-0 bg-slate-900 z-10">
-              <tr class="border-b border-slate-700">
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">版本名称</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[200px]">Docker 镜像</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[100px]">配置目录</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">状态</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm min-w-[150px]">备注</th>
-                <th class="py-3 px-3 text-slate-400 font-medium whitespace-nowrap text-sm sticky right-0 bg-slate-900 z-20 w-auto">操作</th>
+            <thead class="sticky top-0 bg-white dark:bg-slate-900 z-10">
+              <tr class="border-b border-slate-200 dark:border-slate-700">
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[120px]">{{ $t('software.table.name') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[200px]">{{ $t('software.table.image') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[100px]">{{ $t('software.table.configDir') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[80px]">{{ $t('software.table.status') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm min-w-[150px]">{{ $t('software.table.notes') }}</th>
+                <th class="py-3 px-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap text-sm sticky right-0 bg-white dark:bg-slate-900 z-20 w-auto">{{ $t('software.table.actions') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr 
                 v-for="version in getCurrentVersions()" 
                 :key="version.id"
-                class="border-b border-slate-800 hover:bg-slate-800/50 transition"
+                class="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
               >
                 <td class="py-3 px-3">
-                  <code class="bg-slate-800 px-2 py-1 rounded text-sm">{{ version.display_name }}</code>
+                  <code class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm text-slate-700 dark:text-slate-300">{{ version.display_name }}</code>
                 </td>
                 <td class="py-3 px-3">
                   <code 
                     @click="copyImageName(version.image_tag)"
-                    class="bg-slate-800 px-2 py-1 rounded text-xs block cursor-pointer hover:bg-slate-700 transition truncate"
+                    class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs block cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition truncate"
                     :title="'点击复制: ' + version.image_tag"
                   >
                     {{ version.image_tag }}
                   </code>
-                  <span v-if="version.has_user_override" class="ml-1 text-xs text-yellow-400">(自定义)</span>
+                  <span v-if="version.has_user_override" class="ml-1 text-xs text-yellow-400">({{ $t('mirror.status.custom') }})</span>
                 </td>
                 <td class="py-3 px-3">
-                  <code class="bg-slate-800 px-2 py-1 rounded text-xs">{{ version.service_dir }}</code>
+                  <code class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs text-slate-700 dark:text-slate-300">{{ version.service_dir }}</code>
                 </td>
                 <td class="py-3 px-3">
                   <span 
                     :class="version.eol ? 'bg-rose-500/20 text-rose-400' : 'bg-green-500/20 text-green-400'"
                     class="px-2 py-1 rounded text-xs font-medium whitespace-nowrap"
                   >
-                    {{ version.eol ? '⚠️ EOL' : '✅ 活跃' }}
+                    {{ version.eol ? $t('software.status.eol') : $t('software.status.active') }}
                   </span>
                 </td>
-                <td class="py-3 px-3 text-slate-400 text-sm truncate" :title="version.description || ''">
+                <td class="py-3 px-3 text-slate-600 dark:text-slate-400 text-sm truncate" :title="version.description || ''">
                   {{ version.description || '-' }}
                 </td>
-                <td class="py-3 px-3 sticky right-0 bg-slate-900 z-10 whitespace-nowrap">
+                <td class="py-3 px-3 sticky right-0 bg-white dark:bg-slate-900 z-10 whitespace-nowrap">
                   <div class="flex items-center gap-2">
                     <button
                       @click="openEditDialog(version)"
                       class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition"
-                      title="编辑"
+                      title=""
                     >
-                      编辑
+                      {{ $t('common.edit') }}
                     </button>
                     <button
                       v-if="version.has_user_override"
                       @click="removeOverride(version)"
                       class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition"
-                      title="删除自定义"
+                      title=""
                     >
-                      删除
+                      {{ $t('common.delete') }}
                     </button>
                   </div>
                 </td>
@@ -265,48 +268,48 @@ onMounted(() => {
       </div>
 
       <!-- Footer Info -->
-      <div class="mt-4 p-4 bg-slate-800/50 rounded-lg text-sm text-slate-400">
-        <p>💡 提示：</p>
+      <div class="mt-4 p-4 bg-white dark:bg-slate-800/50 rounded-lg text-sm text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+        <p>{{ $t('software.hints.title') }}</p>
         <ul class="list-disc list-inside mt-2 space-y-1">
-          <li>点击"编辑"可以自定义 Docker 镜像标签</li>
-          <li>修改后需要重新应用环境配置才能生效</li>
-          <li>EOL 版本表示已停止维护，建议使用活跃版本</li>
+          <li>{{ $t('software.hints.editCustom') }}</li>
+          <li>{{ $t('software.hints.reapply') }}</li>
+          <li>{{ $t('software.hints.eolWarning') }}</li>
         </ul>
       </div>
     </div>
 
     <!-- Edit Dialog -->
-    <div v-if="showEditDialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full mx-4 border border-slate-700">
-        <h2 class="text-xl font-bold mb-4">编辑 Docker 镜像</h2>
+    <div v-if="showEditDialog" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-6 max-w-md w-full mx-4 border border-slate-200 dark:border-slate-700 shadow-2xl">
+        <h2 class="text-xl font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('software.editDialog.title') }}</h2>
         
         <div class="space-y-4">
           <div>
-            <label class="block text-sm text-slate-400 mb-2">版本名称</label>
+            <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">{{ $t('software.editDialog.versionLabel') }}</label>
             <input
               v-if="editingVersion"
               :value="editingVersion.display_name"
               disabled
-              class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-400"
+              class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-500 dark:text-slate-500 cursor-not-allowed"
             />
           </div>
           
           <div>
-            <label class="block text-sm text-slate-400 mb-2">Docker 镜像 <span class="text-rose-400">*</span></label>
+            <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">{{ $t('software.editDialog.imageLabel') }} <span class="text-rose-500 dark:text-rose-400">*</span></label>
             <input
               v-model="editTag"
-              placeholder="例如: php:8.2-fpm-alpine"
-              class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+              :placeholder="$t('software.editDialog.imagePlaceholder')" 
+              class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:outline-none"
             />
           </div>
           
           <div>
-            <label class="block text-sm text-slate-400 mb-2">备注说明</label>
+            <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">{{ $t('software.editDialog.descLabel') }}</label>
             <textarea
               v-model="editDescription"
-              placeholder="可选，描述这个自定义标签的用途"
+              :placeholder="$t('software.editDialog.descPlaceholder')" 
               rows="3"
-              class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+              class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:outline-none resize-none"
             ></textarea>
           </div>
         </div>
@@ -314,16 +317,16 @@ onMounted(() => {
         <div class="flex gap-3 mt-6">
           <button
             @click="showEditDialog = false"
-            class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+            class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition"
           >
-            取消
+            {{ $t('common.cancel') }}
           </button>
           <button
             @click="saveOverride"
             :disabled="!editTag.trim()"
             class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition"
           >
-            保存
+            {{ $t('common.save') }}
           </button>
         </div>
       </div>

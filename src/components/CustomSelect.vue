@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 interface SelectOption {
   value: string;
@@ -16,10 +17,13 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: '请选择...',
+  placeholder: '',
   disabled: false,
   size: 'md',
 });
+
+const { t } = useI18n();
+const resolvedPlaceholder = computed(() => props.placeholder || t('common.selectPlaceholder'));
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
@@ -134,18 +138,18 @@ watch(() => props.modelValue, (newValue) => {
       aria-haspopup="listbox"
       :aria-expanded="isOpen"
       :aria-controls="`select-options-${uniqueId}`"
-      class="w-full bg-slate-800 border border-slate-700 rounded-lg outline-none transition-all duration-200 flex items-center justify-between"
+      class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg outline-none transition-all duration-200 flex items-center justify-between"
       :class="[
         sizeClasses[size],
-        isOpen ? 'ring-2 ring-blue-500 border-blue-500' : 'hover:border-slate-600',
+        isOpen ? 'ring-2 ring-blue-500 border-blue-500' : 'hover:border-slate-400 dark:hover:border-slate-600',
         disabled ? 'cursor-not-allowed' : 'cursor-pointer'
       ]"
     >
       <span 
         class="truncate"
-        :class="selectedLabel ? 'text-slate-200' : 'text-slate-500'"
+        :class="selectedLabel ? 'text-slate-900 dark:text-slate-200' : 'text-slate-500 dark:text-slate-500'"
       >
-        {{ selectedLabel || placeholder }}
+        {{ selectedLabel || resolvedPlaceholder }}
       </span>
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
@@ -157,7 +161,7 @@ watch(() => props.modelValue, (newValue) => {
         stroke-width="2" 
         stroke-linecap="round" 
         stroke-linejoin="round"
-        class="text-slate-400 transition-transform duration-200 flex-shrink-0 ml-2"
+        class="text-slate-500 dark:text-slate-400 transition-transform duration-200 flex-shrink-0 ml-2"
         :class="{ 'rotate-180': isOpen }"
       >
         <polyline points="6 9 12 15 18 9"></polyline>
@@ -177,7 +181,7 @@ watch(() => props.modelValue, (newValue) => {
         v-if="isOpen" 
         :id="`select-options-${uniqueId}`"
         role="listbox"
-        class="absolute z-50 mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-60 overflow-y-auto scrollbar-hide"
+        class="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg shadow-xl max-h-60 overflow-y-auto scrollbar-hide"
       >
         <div 
           v-for="option in options" 
@@ -188,8 +192,8 @@ watch(() => props.modelValue, (newValue) => {
           class="px-3 py-2 text-sm cursor-pointer transition-colors duration-150"
           :class="[
             option.value === modelValue 
-              ? 'bg-blue-600/20 text-blue-400' 
-              : 'text-slate-300 hover:bg-slate-700',
+              ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400' 
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700',
             option.disabled ? 'opacity-50 cursor-not-allowed' : '',
             size === 'sm' ? 'text-xs py-1.5' : size === 'lg' ? 'text-base py-2.5' : ''
           ]"
@@ -200,9 +204,9 @@ watch(() => props.modelValue, (newValue) => {
         <!-- 空状态 -->
         <div 
           v-if="options.length === 0" 
-          class="px-3 py-4 text-center text-slate-500 text-sm"
+          class="px-3 py-4 text-center text-slate-500 dark:text-slate-500 text-sm"
         >
-          暂无选项
+          {{ $t('common.noOptions') }}
         </div>
       </div>
     </Transition>

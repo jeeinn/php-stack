@@ -688,7 +688,7 @@ const goToMirrorSettings = () => {
     </header>
     
     <!-- Nginx 配置提示 -->
-    <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+    <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
       <div class="flex flex-col sm:flex-row items-start gap-3">
         <div class="flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -701,7 +701,7 @@ const goToMirrorSettings = () => {
             {{ $t('envConfig.nginxHint.description') }}
           </p>
           
-          <div class="bg-slate-900 rounded-lg p-3 mb-3 border border-slate-700">
+          <div class="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 mb-3 border border-slate-200 dark:border-slate-700">
             <p class="text-xs text-slate-400 mb-2">{{ $t('envConfig.nginxHint.phpAddresses') }}</p>
             <div class="space-y-1">
               <div v-for="(name, index) in phpContainerNames" :key="index" class="flex items-center gap-2">
@@ -712,8 +712,8 @@ const goToMirrorSettings = () => {
           </div>
           
           <!-- 多 Nginx 版本提示 -->
-          <div v-if="nginxServicesList.length > 1" class="bg-amber-900/20 rounded-lg p-3 mb-3 border border-amber-500/20">
-            <p class="text-xs text-amber-300 mb-2">{{ $t('envConfig.nginxHint.multiNginx') }}</p>
+          <div v-if="nginxServicesList.length > 1" class="bg-amber-100 dark:bg-amber-950/30 rounded-lg p-3 mb-3 border border-amber-200 dark:border-amber-800">
+            <p class="text-xs text-amber-700 dark:text-amber-300 mb-2">{{ $t('envConfig.nginxHint.multiNginx') }}</p>
             <div class="space-y-2">
               <div v-for="(nginx, index) in nginxServicesList" :key="index" class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
                 <div class="flex items-center gap-2">

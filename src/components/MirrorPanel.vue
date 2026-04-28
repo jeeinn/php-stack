@@ -39,15 +39,9 @@ const { tm } = useI18n();
 
 // Docker Registry 平台配置文档（从 i18n 加载，URL 动态生成）
 const dockerRegistryDocs = computed(() => {
-  console.log('[MirrorPanel-debug] dockerRegistryDocs computed triggered');
-  console.log('[MirrorPanel-debug] categories:', categories.value);
-  
   // 从已加载的 categories 中提取 docker_registry 的所有镜像源
   const dockerCategory = categories.value.find(c => c.category_id === 'docker_registry');
-  console.log('[MirrorPanel-debug] dockerCategory:', dockerCategory);
-  
   const mirrors = dockerCategory?.options || [];
-  console.log('[MirrorPanel-debug] mirrors:', mirrors);
   
   // 提取所有非空的 URL（过滤掉官方默认的 empty value）
   const mirrorUrls = mirrors
@@ -56,11 +50,9 @@ const dockerRegistryDocs = computed(() => {
   
   // 格式化 URLs 为 JSON 数组格式
   const formattedUrls = mirrorUrls.map(url => `"${url}"`).join(',\n  ');
-  console.log('[MirrorPanel-debug] formattedUrls:', formattedUrls);
   
   // 如果没有可用的镜像源，使用占位符提示
   const urlsText = formattedUrls || '"https://your-mirror-url"';
-  console.log('[MirrorPanel-debug] urlsText:', urlsText);
   
   // 获取翻译数组
   // 注意：vue-i18n v10 中，t() 函数对数组类型的支持有限
@@ -68,10 +60,6 @@ const dockerRegistryDocs = computed(() => {
   const windowsSteps = tm('mirror.dockerRegistry.steps.windows') as string[] || [];
   const macosSteps = tm('mirror.dockerRegistry.steps.macos') as string[] || [];
   const linuxSteps = tm('mirror.dockerRegistry.steps.linux') as string[] || [];
-  
-  console.log('[MirrorPanel-debug] windowsSteps (via tm):', windowsSteps);
-  console.log('[MirrorPanel-debug] macosSteps (via tm):', macosSteps);
-  console.log('[MirrorPanel-debug] linuxSteps (via tm):', linuxSteps);
   
   // 替换 {urls} 占位符
   const replaceUrls = (step: string) => step.replace('{urls}', urlsText);
@@ -97,7 +85,6 @@ const dockerRegistryDocs = computed(() => {
     }
   ];
   
-  console.log('[MirrorPanel-debug] Final result:', result);
   return result;
 });
 

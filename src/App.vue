@@ -478,7 +478,7 @@ async function copyLogs() {
             <button 
               @click="() => refreshContainers()" 
               :disabled="loading"
-              class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
+              class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition text-white"
             >
               {{ loading ? $t('dashboard.refreshing') : $t('dashboard.refresh') }}
             </button>
@@ -486,7 +486,7 @@ async function copyLogs() {
               <button 
                 @click="handleStartEnvironment"
                 :disabled="!canStart || starting"
-                class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-white"
                 :title="!hasEnvFile ? $t('dashboard.startTooltip.noEnv') : (!canStart ? $t('dashboard.startTooltip.hasRunning') : '')"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -495,7 +495,7 @@ async function copyLogs() {
               <button 
                 @click="handleRestartEnvironment"
                 :disabled="!canRestart || starting"
-                class="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                class="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-white"
                 :title="!canRestart ? $t('dashboard.restartTooltip') : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
@@ -504,7 +504,7 @@ async function copyLogs() {
               <button 
                 @click="handleStopEnvironment"
                 :disabled="!canStop || starting"
-                class="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                class="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-white"
                 :title="!canStop ? $t('dashboard.stopTooltip') : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>

@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BackupPage from './BackupPage.vue';
 import RestorePage from './RestorePage.vue';
+
+const { t } = useI18n();
 
 type TabType = 'backup' | 'restore';
 
 const activeTab = ref<TabType>('backup');
 
 const tabs = [
-  { id: 'backup' as TabType, label: '环境备份', icon: '💾' },
-  { id: 'restore' as TabType, label: '环境恢复', icon: '⬇️' },
+  { id: 'backup' as TabType, labelKey: 'migration.tabs.backup', icon: '💾' },
+  { id: 'restore' as TabType, labelKey: 'migration.tabs.restore', icon: '⬇️' },
 ];
 </script>
 
@@ -18,7 +21,7 @@ const tabs = [
     <!-- 标签页头部 -->
     <div class="flex-shrink-0 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm">
       <div class="px-4 sm:px-6 py-3">
-        <h1 class="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-slate-100">环境迁移</h1>
+        <h1 class="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-slate-100">{{ $t('migration.title') }}</h1>
         
         <!-- 标签切换按钮 -->
         <div class="flex flex-col sm:flex-row gap-2">
@@ -34,7 +37,7 @@ const tabs = [
             ]"
           >
             <span>{{ tab.icon }}</span>
-            <span>{{ tab.label }}</span>
+            <span>{{ $t(tab.labelKey) }}</span>
           </button>
         </div>
       </div>
@@ -42,12 +45,9 @@ const tabs = [
 
     <!-- 标签页内容 -->
     <div class="flex-1 overflow-y-auto scrollbar-hide">
-      <!-- 环境备份 -->
       <div v-if="activeTab === 'backup'" class="p-3 sm:p-6">
         <BackupPage />
       </div>
-
-      <!-- 环境恢复 -->
       <div v-if="activeTab === 'restore'" class="p-3 sm:p-6">
         <RestorePage />
       </div>

@@ -1,0 +1,490 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "save": "Save",
+    "update": "Update",
+    "close": "Close",
+    "edit": "Edit",
+    "reset": "Reset",
+    "loading": "Loading...",
+    "select": "Select",
+    "test": "Test",
+    "testing": "Testing...",
+    "browse": "Browse",
+    "copy": "Copy",
+    "retry": "Retry",
+    "start": "Start",
+    "stop": "Stop",
+    "version": "v0.1.0",
+    "noOptions": "No options available",
+    "selectPlaceholder": "Select...",
+    "confirmAction": "Confirm"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "envConfig": "Environment",
+    "settings": "Settings",
+    "migration": "Migration"
+  },
+  "dashboard": {
+    "title": "Status",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
+    "startEnv": "Start All",
+    "startingEnv": "Starting...",
+    "restartEnv": "Restart All",
+    "restartingEnv": "Restarting...",
+    "stopEnv": "Stop All",
+    "stoppingEnv": "Stopping...",
+    "dockerError": {
+      "title": "Docker Unavailable",
+      "retry": "Retry"
+    },
+    "noEnvFile": {
+      "title": "No Environment Configured",
+      "description": "Please configure PHP, MySQL, Nginx and other services before starting the environment.",
+      "action": "Configure Now"
+    },
+    "container": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "start": "Start",
+      "stop": "Stop",
+      "config": "Config",
+      "noPorts": "No public ports"
+    },
+    "empty": {
+      "title": "No ps- prefixed containers found",
+      "description": "Please configure PHP, Nginx and other services in \"Environment\" first"
+    },
+    "startConfirm": {
+      "title": "⚠️ Start Environment",
+      "message": "During startup, Docker may need to pull images or download extension scripts. If you encounter network issues (e.g. GitHub access failure), consider configuring {proxy} first.",
+      "proxy": "GITHUB_PROXY",
+      "goMirror": "Configure Mirrors",
+      "directStart": "Start Directly"
+    },
+    "restartConfirm": {
+      "title": "⚠️ Restart Environment",
+      "message": "Restarting will restart all running containers. {warning} to avoid data loss.",
+      "warning": "Please save your current work",
+      "action": "Confirm Restart"
+    },
+    "log": {
+      "title": "Live Logs",
+      "copy": "📋 Copy",
+      "bottom": "⬇️ Bottom",
+      "show": "Show",
+      "hide": "Hide",
+      "empty": "Waiting for operations...",
+      "copied": "Logs copied to clipboard",
+      "copyFailed": "Copy failed: {error}"
+    },
+    "toast": {
+      "refreshing": "Refreshing container status...",
+      "refreshDone": "Refresh complete",
+      "refreshFailed": "Refresh failed: {error}",
+      "containerUpdated": "Container list updated ({count} containers)",
+      "containerNoChange": "Container status unchanged",
+      "dockerUnavailable": "Docker unavailable, container list cleared",
+      "dockerCheckFailed": "Docker check failed: {error}",
+      "serviceStarting": "Starting service: {name}...",
+      "serviceStarted": "Service {name} started",
+      "serviceStopping": "Stopping service: {name}...",
+      "serviceStopped": "Service {name} stopped",
+      "serviceStartFailed": "Start failed: {error}",
+      "serviceStopFailed": "Stop failed: {error}",
+      "configOpening": "Opening service config: {name}...",
+      "configOpened": "Opened service config directory: {name}",
+      "configOpenFailed": "Failed to open config: {error}",
+      "envStarting": "🚀 Starting environment...",
+      "envStarted": "✅ Environment started successfully!",
+      "envStartFailed": "❌ Start failed: {error}",
+      "envRestarting": "🔄 Restarting environment...",
+      "envRestarted": "✅ Environment restarted successfully!",
+      "envRestartFailed": "❌ Restart failed: {error}",
+      "envStopping": "🛑 Stopping environment...",
+      "envStopped": "✅ Environment stopped successfully!",
+      "envStopFailed": "❌ Stop failed: {error}",
+      "portConflictIgnore": "⚠️ User chose to ignore conflicts, continuing...",
+      "portConflictCancel": "❌ User cancelled, please resolve port conflicts first"
+    },
+    "portConflict": {
+      "title": "⚠️ Port Conflict Detected",
+      "message": "The following port conflicts were found:\n\n{details}\n\nContinue anyway? (containers may fail to start)",
+      "continue": "Ignore & Continue",
+      "cancel": "Cancel"
+    },
+    "startTooltip": {
+      "noEnv": "Please configure the environment first",
+      "hasRunning": "Containers are running, use Restart All instead"
+    },
+    "restartTooltip": "No running containers, use Start All instead",
+    "stopTooltip": "No running containers"
+  },
+  "envConfig": {
+    "title": "Environment Config",
+    "subtitle": "Visually configure .env and docker-compose.yml",
+    "preview": "Preview",
+    "previewing": "Generating...",
+    "apply": "Apply Config",
+    "applying": "Applying...",
+    "startEnv": "Start All",
+    "startingEnv": "Starting...",
+    "startTooltip": "Please apply config to generate .env file first",
+    "php": {
+      "title": "🐘 PHP Services",
+      "version": "PHP Version",
+      "versionPlaceholder": "Select PHP version",
+      "extensions": "PHP Extensions",
+      "extensionsPanel": "📦 Preset Extensions & Custom Config",
+      "customExtensions": "✨ Custom Extensions (space or comma separated)",
+      "customExtPlaceholder": "e.g. grpc protobuf",
+      "customExtHint": "💡 Dependencies handled automatically by docker-php-extension-installer.",
+      "viewSupported": "View supported list"
+    },
+    "mysql": {
+      "title": "🐬 MySQL Services",
+      "version": "MySQL Version",
+      "versionPlaceholder": "Select MySQL version",
+      "rootPassword": "MySQL Root Password",
+      "rootPasswordHint": "Leave empty or enter \"root\" to use default password"
+    },
+    "redis": {
+      "title": "🔴 Redis Services",
+      "version": "Redis Version",
+      "versionPlaceholder": "Select Redis version",
+      "empty": "Click \"+ Add Version\" above to add a Redis service"
+    },
+    "nginx": {
+      "title": "🚀 Nginx Services",
+      "version": "Nginx Version",
+      "versionPlaceholder": "Select Nginx version",
+      "empty": "Click \"+ Add Version\" above to add an Nginx service"
+    },
+    "addVersion": "+ Add Version",
+    "remove": "Remove",
+    "hostPort": "Host Port",
+    "portConflict": {
+      "title": "Port Conflict",
+      "detail": "Port {port} conflict: {service1} and {service2}"
+    },
+    "general": {
+      "title": "🔧 General Settings",
+      "workspace": "Workspace",
+      "sourceDir": "Source Directory",
+      "timezone": "Timezone",
+      "timezonePlaceholder": "Select timezone",
+      "customTimezone": "Custom timezone...",
+      "customTimezoneLabel": "Custom: {tz}",
+      "customTimezoneHint": "💡 Tip: Enter a valid IANA timezone identifier, e.g. \"Europe/Moscow\", \"Pacific/Auckland\""
+    },
+    "timezone": {
+      "shanghai": "Shanghai (UTC+8)",
+      "hongkong": "Hong Kong (UTC+8)",
+      "tokyo": "Tokyo (UTC+9)",
+      "singapore": "Singapore (UTC+8)",
+      "dubai": "Dubai (UTC+4)",
+      "london": "London (UTC+0/+1)",
+      "paris": "Paris (UTC+1/+2)",
+      "berlin": "Berlin (UTC+1/+2)",
+      "newYork": "New York (UTC-5/-4)",
+      "losAngeles": "Los Angeles (UTC-8/-7)",
+      "chicago": "Chicago (UTC-6/-5)",
+      "sydney": "Sydney (UTC+10/+11)",
+      "utc": "Coordinated Universal Time (UTC)"
+    },
+    "nginxHint": {
+      "title": "Nginx Configuration Reminder",
+      "description": "PHP and Nginx services are both enabled. Nginx needs the correct PHP-FPM upstream address.",
+      "phpAddresses": "📌 PHP container addresses (for Nginx config):",
+      "multiNginx": "⚠️ Multiple Nginx versions detected:",
+      "port": "Port {port}",
+      "openConfigDir": "Open Config Dir",
+      "configSteps": "Configuration Steps:",
+      "step1Single": "Edit file: {path}",
+      "step1Multi": "Edit the config file for each Nginx version (see list above)",
+      "step2": "Find the {directive} line (default: {default})",
+      "step3": "Change to: {example} (pick one of the addresses above, e.g. {hint})",
+      "step4": "💡 Tip: With multiple PHP versions, you can set different fastcgi_pass addresses for different server blocks",
+      "dismiss": "Got it"
+    },
+    "previewModal": {
+      "title": "📄 Config Preview"
+    },
+    "confirmOverwrite": {
+      "title": "Config Files Exist",
+      "message": "The following config files already exist:\n\n{files}\n\nContinuing will overwrite them. Proceed?",
+      "confirm": "Apply Config",
+      "backupLabel": "Backup existing config (auto-rollback on failure)"
+    },
+    "toast": {
+      "applySuccess": "Config applied successfully! Files generated in {location}.",
+      "applySuccessDev": "project root",
+      "applySuccessProd": "application directory",
+      "backedUp": "\n\n✅ Backed up {count} file(s)/directory(s):\n{files}",
+      "backupPartialFail": "\n\n⚠️  Note: Some files failed to backup (may be in use). Please close related programs and retry.",
+      "startSuccess": "Environment started!\n{result}",
+      "nginxConfigOpened": "Opened {dir} config directory",
+      "nginxConfigFailed": "Failed to open directory, please manually open services/{dir}/conf.d/"
+    },
+    "error": {
+      "dockerNotRunning": "❌ Docker Not Running\n\nPlease start Docker Desktop and try again.",
+      "permissionDenied": "❌ Permission Denied\n\nPlease run as administrator or check Docker permissions.",
+      "portConflict": "⚠️  Port Conflict\n\n{error}\n\nPlease change the conflicting service port.",
+      "readFailed": "❌ File Read Failed\n\nPlease check if the file exists and has read permissions.",
+      "writeFailed": "❌ File Write Failed\n\nPlease check if the directory has write permissions.",
+      "parseFailed": "❌ Config File Format Error\n\nPlease check the .env file format.",
+      "default": "❌ Operation Failed\n\n{error}"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "mirrors": "Mirror Sources",
+      "software": "Version Mappings"
+    }
+  },
+  "mirror": {
+    "subtitle": "Manage Docker, APT, Composer, NPM mirror sources",
+    "resetAll": "🔄 Reset All Custom",
+    "addCustom": "➕ Add Custom",
+    "table": {
+      "name": "Mirror Name",
+      "url": "URL",
+      "description": "Description",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "available": "Available",
+      "default": "Default",
+      "current": "(Active)",
+      "custom": "(Custom)"
+    },
+    "actions": {
+      "select": "Select",
+      "test": "Test",
+      "testing": "Testing...",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "dockerRegistry": {
+      "warning": "⚠️ Docker Registry mirrors must be configured in Docker Desktop global settings",
+      "hint": "Due to Docker architecture limitations, this cannot be auto-configured. Please follow the guide below.",
+      "platforms": {
+        "windows": "Windows (Docker Desktop)",
+        "macos": "macOS (Docker Desktop)",
+        "linux": "Linux (systemd)",
+        "recommended": "Recommended Mirrors"
+      }
+    },
+    "editDialog": {
+      "titleNew": "Add Custom Mirror",
+      "titleEdit": "Edit Mirror",
+      "urlLabel": "Mirror URL",
+      "urlRequired": "*",
+      "urlPlaceholder": "e.g. https://registry.npmmirror.com",
+      "descLabel": "Description",
+      "descPlaceholder": "Optional, describe the purpose of this mirror"
+    },
+    "hints": {
+      "title": "💡 Tips:",
+      "autoApply": "Clicking \"Select\" will automatically apply the config to .env file",
+      "customSaved": "Custom mirrors are saved to .user_mirror_config.json",
+      "testConnection": "Click \"Test\" to verify mirror availability"
+    },
+    "confirm": {
+      "deleteTitle": "Delete Confirmation",
+      "deleteMessage": "Are you sure you want to delete the custom mirror?",
+      "resetTitle": "Reset All Custom",
+      "resetMessage": "Are you sure you want to reset all custom mirror configurations? This cannot be undone."
+    },
+    "toast": {
+      "loadFailed": "Failed to load mirror list: {error}",
+      "selected": "Selected and applied {name}",
+      "saveFailed": "Save failed: {error}",
+      "updated": "Mirror updated and applied!",
+      "updateFailed": "Update failed: {error}",
+      "customSaved": "Custom mirror saved and applied!",
+      "deleted": "Restored to default config and updated .env",
+      "deleteFailed": "Delete failed: {error}",
+      "resetDone": "All custom configs reset and .env updated",
+      "resetFailed": "Reset failed: {error}",
+      "copied": "Copied to clipboard!",
+      "copyFailed": "Copy failed",
+      "testSuccess": "✅ {name} connection successful!",
+      "testFailed": "❌ {name} connection failed, please check network or mirror URL",
+      "testError": "Test failed: {error}",
+      "urlRequired": "Please enter a mirror URL"
+    }
+  },
+  "software": {
+    "subtitle": "Manage Docker image version mapping configuration",
+    "resetAll": "🔄 Reset All Custom",
+    "table": {
+      "name": "Version",
+      "image": "Docker Image",
+      "configDir": "Config Dir",
+      "status": "Status",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "status": {
+      "eol": "⚠️ EOL",
+      "active": "✅ Active"
+    },
+    "editDialog": {
+      "title": "Edit Docker Image",
+      "versionLabel": "Version Name",
+      "imageLabel": "Docker Image",
+      "imagePlaceholder": "e.g. php:8.2-fpm-alpine",
+      "descLabel": "Description",
+      "descPlaceholder": "Optional, describe the purpose of this custom tag"
+    },
+    "hints": {
+      "title": "💡 Tips:",
+      "editCustom": "Click \"Edit\" to customize Docker image tags",
+      "reapply": "Changes take effect after re-applying environment config",
+      "eolWarning": "EOL versions are no longer maintained, consider using active versions"
+    },
+    "confirm": {
+      "deleteTitle": "Delete Confirmation",
+      "deleteMessage": "Are you sure you want to delete the custom config for {name}?",
+      "resetTitle": "Reset All Custom",
+      "resetMessage": "Are you sure you want to reset all custom configurations? This cannot be undone."
+    },
+    "toast": {
+      "loadFailed": "Failed to load version mappings: {error}",
+      "saved": "Saved! Re-apply environment config to take effect.",
+      "saveFailed": "Save failed: {error}",
+      "deleted": "Restored to default config",
+      "deleteFailed": "Delete failed: {error}",
+      "resetDone": "All custom configs reset",
+      "resetFailed": "Reset failed: {error}",
+      "copied": "Copied to clipboard!",
+      "copyFailed": "Copy failed",
+      "copyTooltip": "Click to copy: {tag}"
+    }
+  },
+  "migration": {
+    "title": "Migration",
+    "tabs": {
+      "backup": "Backup",
+      "restore": "Restore"
+    }
+  },
+  "backup": {
+    "title": "Environment Backup",
+    "subtitle": "Export a complete backup of your development environment",
+    "options": {
+      "title": "📋 Backup Options",
+      "coreConfig": "Core config files (.env, docker-compose.yml, services/ configs)",
+      "includeProjects": "Include project files",
+      "includeLogs": "Include log files (logs directory)",
+      "logsWarning": "Note: Log files may significantly increase backup size",
+      "patterns": "File match patterns (one glob pattern per line)",
+      "selectFolder": "Select Folder",
+      "selectFile": "Select File",
+      "patternsPlaceholder": "e.g.:\nwww/project-a/**\n.env",
+      "patternsHint": "💡 Tip: Only backup files within the project directory for cross-platform restore compatibility."
+    },
+    "progress": {
+      "title": "📊 Backup Progress"
+    },
+    "action": {
+      "create": "Create Backup (.zip)",
+      "creating": "Backing up..."
+    },
+    "toast": {
+      "success": "Backup created: {path}",
+      "pathError": "Path conversion failed: {error}"
+    }
+  },
+  "restore": {
+    "title": "Environment Restore",
+    "subtitle": "Restore a complete development environment from backup",
+    "steps": {
+      "select": "Select File",
+      "preview": "Preview",
+      "verify": "Verify",
+      "restore": "Restore"
+    },
+    "selectFile": {
+      "title": "📁 Select Backup File",
+      "placeholder": "Select a .zip backup file",
+      "browse": "Browse",
+      "hint": "💡 Supports .zip backup files generated by PHP-Stack"
+    },
+    "preview": {
+      "title": "📋 Preview Backup Contents",
+      "startPreview": "🔍 Start Preview",
+      "previewing": "Previewing...",
+      "hint": "💡 Preview will show service configurations and file list from the backup",
+      "summaryTitle": "📋 Backup Summary",
+      "backupTime": "Backup Time",
+      "appVersion": "App Version",
+      "osInfo": "OS Info",
+      "fileCount": "File Count",
+      "fileCountValue": "{count} files",
+      "serviceList": "Services",
+      "warnings": "Backup Warnings",
+      "done": "✓ Preview Complete",
+      "next": "Next: Verify →"
+    },
+    "verify": {
+      "title": "🔒 Verify File Integrity",
+      "startVerify": "🛡️ Start Verification",
+      "verifying": "Verifying...",
+      "hint": "💡 Verification uses SHA256 to ensure the backup file has not been tampered with",
+      "resultTitle": "🔒 Integrity Check Result",
+      "passed": "SHA256 Verification Passed",
+      "passedHint": "Backup is intact and safe to restore",
+      "failed": "Verification Failed",
+      "failedHint": "Backup may be corrupted or tampered with, do not use",
+      "next": "Next: Restore →"
+    },
+    "restoreAction": {
+      "title": "🚀 Start Restore",
+      "start": "🚀 Confirm & Restore",
+      "restoring": "Restoring...",
+      "verifyFailed": "❌ Backup verification failed, cannot restore"
+    },
+    "success": {
+      "title": "Environment Restored!",
+      "description": "You can restart Docker containers to apply the new configuration"
+    },
+    "progress": {
+      "title": "📊 Restore Progress"
+    },
+    "confirm": {
+      "title": "Restore Confirmation",
+      "message": "⚠️ Warning: Existing config files will be overwritten. Consider backing up first.\n\n💡 After restore, click \"Start All\" to run the environment.",
+      "start": "Start Restore"
+    },
+    "toast": {
+      "previewDone": "Preview complete, check backup contents",
+      "verifyPassed": "Verification passed, ready to restore",
+      "verifyFailed": "Verification failed, backup may be corrupted",
+      "success": "Environment restored successfully!"
+    }
+  },
+  "workspace": {
+    "title": "👋 Welcome to PHP-Stack",
+    "description": "To get started, please select a folder as your {bold}. All environment configs, database data, and project source code will be stored here.",
+    "bold": "workspace directory",
+    "pathLabel": "Workspace Path",
+    "pathPlaceholder": "Click the button to select a directory...",
+    "confirmStart": "Confirm & Start",
+    "error": {
+      "invalidPath": "Please select a valid directory as workspace"
+    },
+    "status": {
+      "loading": "Loading...",
+      "notConfigured": "Not configured",
+      "loadFailed": "Load failed"
+    }
+  }
+}

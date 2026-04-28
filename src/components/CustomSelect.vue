@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 interface SelectOption {
   value: string;
@@ -16,10 +17,13 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: '请选择...',
+  placeholder: '',
   disabled: false,
   size: 'md',
 });
+
+const { t } = useI18n();
+const resolvedPlaceholder = computed(() => props.placeholder || t('common.selectPlaceholder'));
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
@@ -145,7 +149,7 @@ watch(() => props.modelValue, (newValue) => {
         class="truncate"
         :class="selectedLabel ? 'text-slate-200' : 'text-slate-500'"
       >
-        {{ selectedLabel || placeholder }}
+        {{ selectedLabel || resolvedPlaceholder }}
       </span>
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
@@ -202,7 +206,7 @@ watch(() => props.modelValue, (newValue) => {
           v-if="options.length === 0" 
           class="px-3 py-4 text-center text-slate-500 text-sm"
         >
-          暂无选项
+          {{ $t('common.noOptions') }}
         </div>
       </div>
     </Transition>

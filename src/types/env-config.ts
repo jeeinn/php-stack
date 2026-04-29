@@ -36,6 +36,8 @@ export interface EnvConfig {
   source_dir: string;
   timezone: string;
   mysql_root_password?: string;  // MySQL root密码（可选）
+  puid?: number;                 // Host user ID for file permissions (Linux only)
+  pgid?: number;                 // Host group ID for file permissions (Linux only)
 }
 
 export interface MirrorSourceOption {

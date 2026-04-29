@@ -54,4 +54,14 @@ RUN if [ -n "$COMPOSER_MIRROR" ] && [ "$COMPOSER_MIRROR" != "https://packagist.o
     fi
 
 # Set work directory
+ARG PUID=1000
+ARG PGID=1000
+
+# Dynamically adjust www-data user ID to match host
+RUN if [ "${PUID}" != "1000" ] || [ "${PGID}" != "1000" ]; then \
+      groupmod -o -g ${PGID} www-data && \
+      usermod -o -u ${PUID} -g ${PGID} www-data && \
+      echo "Adjusted www-data to UID=${PUID}, GID=${PGID}"; \
+    fi
+
 WORKDIR /www

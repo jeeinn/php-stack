@@ -1,0 +1,58 @@
+# 自动检测文本文件并规范化换行符
+* text=auto
+
+# 明确标记特定文件类型
+*.rs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.vue text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件 - 不进行换行符转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.rar binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Cargo.lock 应该保持一致的换行符
+Cargo.lock text eol=lf
+
+# 确保 Docker 相关文件使用 LF
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+
+# 确保配置文件使用 LF
+.env text eol=lf
+.editorconfig text eol=lf
+.eslintrc.* text eol=lf
+.prettierrc* text eol=lf

@@ -36,6 +36,44 @@ pub struct EnvConfig {
 
 pub struct ConfigGenerator;
 
+/// 检测宿主机当前用户的 UID/GID
+/// 
+/// - Linux: 精确检测当前用户 ID（唯一需要精确映射的平台）
+/// - Windows/macOS: 返回默认值 1000，依赖 Docker Desktop 的权限转换层
+fn detect_host_uid_gid() -> Result<(u32, u32), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        
+        let uid_output = Command::new("id")
+            .arg("-u")
+            .output()
+            .map_err(|e| format!("Failed to get UID: {}", e))?;
+        let uid = String::from_utf8_lossy(&uid_output.stdout)
+            .trim()
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid UID: {}", e))?;
+        
+        let gid_output = Command::new("id")
+            .arg("-g")
+            .output()
+            .map_err(|e| format!("Failed to get GID: {}", e))?;
+        let gid = String::from_utf8_lossy(&gid_output.stdout)
+            .trim()
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid GID: {}", e))?;
+        
+        Ok((uid, gid))
+    }
+    
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Windows/macOS 下 Docker Desktop 自动处理权限转换
+        // 使用默认值保持配置一致性
+        Ok((1000, 1000))
+    }
+}
+
 /// Backup state enum for two-phase commit
 enum BackupState {
     NothingToBackup,
@@ -107,6 +145,12 @@ impl ConfigGenerator {
         env.set("SOURCE_DIR", &config.source_dir);
         env.set("TZ", &config.timezone);
         env.set("DATA_DIR", "./data");
+
+        // Detect and set PUID/PGID for file permissions
+        // On Linux: precise detection; On Windows/macOS: defaults to 1000
+        let (uid, gid) = detect_host_uid_gid().unwrap_or((1000, 1000));
+        env.set("PUID", &uid.to_string());
+        env.set("PGID", &gid.to_string());
 
         for service in &config.services {
             // service.version is now a manifest ID (e.g., "php82", "mysql80", "redis72", "nginx125")
@@ -287,6 +331,9 @@ impl ConfigGenerator {
                     lines.push("        DEBIAN_MIRROR_DOMAIN: \"${APT_MIRROR:-deb.debian.org}\"".to_string());
                     lines.push("        COMPOSER_MIRROR: \"${COMPOSER_MIRROR:-https://packagist.org}\"".to_string());
                     lines.push("        GITHUB_PROXY: \"${GITHUB_PROXY:-}\"".to_string());
+                    // File permissions configuration
+                    lines.push("        PUID: \"${PUID:-1000}\"".to_string());
+                    lines.push("        PGID: \"${PGID:-1000}\"".to_string());
                     lines.push(format!("    container_name: ps-{service_dir}"));
                     lines.push("    expose:".to_string());
                     lines.push("      - 9000".to_string());
@@ -358,6 +405,9 @@ impl ConfigGenerator {
                     lines.push("      args:".to_string());
                     // Pass the full image tag to Dockerfile's NGINX_BASE_IMAGE ARG
                     lines.push(format!("        NGINX_BASE_IMAGE: \"${{{env_prefix}_VERSION}}\""));
+                    // File permissions configuration
+                    lines.push("        PUID: \"${PUID:-1000}\"".to_string());
+                    lines.push("        PGID: \"${PGID:-1000}\"".to_string());
                     lines.push(format!("    container_name: ps-{service_dir}"));
                     lines.push("    ports:".to_string());
                     lines.push(format!("      - \"${{{env_prefix}_HTTP_HOST_PORT}}:80\""));

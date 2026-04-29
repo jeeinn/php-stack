@@ -405,9 +405,6 @@ impl ConfigGenerator {
                     lines.push("      args:".to_string());
                     // Pass the full image tag to Dockerfile's NGINX_BASE_IMAGE ARG
                     lines.push(format!("        NGINX_BASE_IMAGE: \"${{{env_prefix}_VERSION}}\""));
-                    // File permissions configuration
-                    lines.push("        PUID: \"${PUID:-1000}\"".to_string());
-                    lines.push("        PGID: \"${PGID:-1000}\"".to_string());
                     lines.push(format!("    container_name: ps-{service_dir}"));
                     lines.push("    ports:".to_string());
                     lines.push(format!("      - \"${{{env_prefix}_HTTP_HOST_PORT}}:80\""));

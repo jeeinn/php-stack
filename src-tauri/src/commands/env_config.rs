@@ -10,9 +10,17 @@ fn check_compose_progress_support() -> bool {
     use std::process::Command;
     
     // 执行 docker compose version
-    let output = Command::new("docker")
-        .args(["compose", "version"])
-        .output();
+    let mut cmd = Command::new("docker");
+    cmd.args(["compose", "version"]);
+    
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+        cmd.creation_flags(0x08000200);
+    }
+    
+    let output = cmd.output();
     
     match output {
         Ok(output) => {
@@ -396,7 +404,8 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        down_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+        down_cmd.creation_flags(0x08000200);
     }
     
     let down_output = down_cmd.output().map_err(|e| {
@@ -535,7 +544,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+            // CREATE_NEW_PROCESS_GROUP: 创建新的进程组，避免继承父进程的控制台
+            // CREATE_NO_WINDOW: 不创建新窗口
+            // 这样既能流式读取日志，又不会显示黑窗口
+            compose_cmd.creation_flags(0x08000200);
         }
         
         // Use spawn() for streaming output instead of blocking output()
@@ -658,7 +671,8 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            compose_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+            compose_cmd.creation_flags(0x08000200);
         }
         
         let output = compose_cmd.output().map_err(|e| {
@@ -708,7 +722,9 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            logs_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+            // 与 docker compose up -d 保持一致，确保流式日志正常读取
+            logs_cmd.creation_flags(0x08000200);
         }
         
         let mut child = logs_cmd.spawn().map_err(|e| {
@@ -856,7 +872,8 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        restart_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+        restart_cmd.creation_flags(0x08000200);
     }
     
     let output = restart_cmd.output().map_err(|e| {
@@ -918,7 +935,8 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        stop_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
+        stop_cmd.creation_flags(0x08000200);
     }
     
     let output = stop_cmd.output().map_err(|e| {

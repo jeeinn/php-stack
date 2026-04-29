@@ -30,7 +30,8 @@ const commonExtensions = [
 ];
 
 const customExtInput = ref('');
-const isExtensionsPanelOpen = ref(false);
+// 为每个 PHP 服务维护独立的扩展面板展开状态
+const phpExtensionsPanelState = ref<Record<number, boolean>>({});
 
 // Common timezones for selection
 const commonTimezones = [
@@ -277,6 +278,12 @@ async function loadExistingConfig() {
         extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
       }];
       
+      // 初始化 PHP 服务的扩展面板状态（全部关闭）
+      phpExtensionsPanelState.value = {};
+      phpServices.value.forEach((_, idx) => {
+        phpExtensionsPanelState.value[idx] = false;
+      });
+      
       mysqlServices.value = mysqlSvcs.length > 0 ? mysqlSvcs : [{
         service_type: 'MySQL',
         version: 'mysql80',
@@ -311,6 +318,8 @@ async function loadExistingConfig() {
         host_port: 9000,
         extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
       }];
+      // 初始化默认 PHP 服务的扩展面板状态
+      phpExtensionsPanelState.value = { 0: false };
       mysqlServices.value = [{
         service_type: 'MySQL',
         version: 'mysql80',
@@ -326,6 +335,8 @@ async function loadExistingConfig() {
       host_port: 9000,
       extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
     }];
+    // 初始化默认 PHP 服务的扩展面板状态
+    phpExtensionsPanelState.value = { 0: false };
     mysqlServices.value = [{
       service_type: 'MySQL',
       version: 'mysql80',
@@ -391,17 +402,33 @@ function addPhpVersion() {
   const usedVersions = phpServices.value.map(s => s.version);
   const available = phpVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
+  const newIndex = phpServices.value.length;
   phpServices.value.push({
     service_type: 'PHP',
     version: available[0].id,
     host_port: 9000 + phpServices.value.length,
     extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'curl'],
   });
+  // 初始化新添加的 PHP 服务的扩展面板状态为关闭
+  phpExtensionsPanelState.value[newIndex] = false;
 }
 
 function removePhpVersion(index: number) {
   if (phpServices.value.length <= 1) return;
   phpServices.value.splice(index, 1);
+  // 清理已删除服务的状态
+  delete phpExtensionsPanelState.value[index];
+  // 重新索引后续服务的状态
+  const newState: Record<number, boolean> = {};
+  Object.keys(phpExtensionsPanelState.value).forEach(key => {
+    const numKey = Number(key);
+    if (numKey > index) {
+      newState[numKey - 1] = phpExtensionsPanelState.value[numKey];
+    } else {
+      newState[numKey] = phpExtensionsPanelState.value[numKey];
+    }
+  });
+  phpExtensionsPanelState.value = newState;
 }
 
 // Add MySQL version
@@ -803,16 +830,16 @@ const goToMirrorSettings = () => {
             <!-- 统一折叠面板 -->
             <div class="border border-slate-200 dark:border-slate-700/50 rounded-lg overflow-hidden">
               <button 
-                @click="isExtensionsPanelOpen = !isExtensionsPanelOpen"
+                @click="phpExtensionsPanelState[idx] = !phpExtensionsPanelState[idx]"
                 class="w-full flex justify-between items-center px-3 py-2 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
               >
                 <span class="text-xs font-medium text-slate-700 dark:text-slate-300">{{ $t('envConfig.php.extensionsPanel') }}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-500 transition-transform duration-200" :class="{ 'rotate-180': isExtensionsPanelOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-500 transition-transform duration-200" :class="{ 'rotate-180': phpExtensionsPanelState[idx] }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div v-show="isExtensionsPanelOpen" class="p-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700/50 space-y-3">
+              <div v-show="phpExtensionsPanelState[idx]" class="p-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700/50 space-y-3">
                 <!-- 平铺扩展列表 -->
                 <div class="max-h-64 overflow-y-auto pr-1 custom-scrollbar">
                   <div class="flex flex-wrap gap-2">

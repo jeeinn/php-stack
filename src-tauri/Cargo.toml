@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.0"
+version = "0.3.1"
 description = "PHP-Stack - PHP Development Environment Manager"
 authors = ["jeeinn"]
 license = ""

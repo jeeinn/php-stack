@@ -51,3 +51,7 @@ path = "tests/integration/backup_restore_integration.rs"
 [[test]]
 name = "config_generation_integration"
 path = "tests/integration/config_generation_integration.rs"
+
+[[test]]
+name = "workspace_commands_integration"
+path = "tests/integration/workspace_commands_integration.rs"

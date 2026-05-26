@@ -857,7 +857,6 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
 
     /// 测试 load_existing_config 解析多版本 Redis

@@ -25,6 +25,7 @@ dist-ssr
 .lingma
 .kiro
 .vscode
+.claude
 
 # Generated files (runtime generated, not templates)
 workspace.json

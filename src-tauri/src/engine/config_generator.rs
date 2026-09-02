@@ -249,7 +249,7 @@ impl ConfigGenerator {
         }
 
         // Merge mirror configuration from .user_mirror_config.json
-        if let Ok(user_mirror_config) = UserMirrorConfig::load(&project_root) {
+        if let Ok(user_mirror_config) = UserMirrorConfig::load(project_root) {
             // APT Mirror
             if let Some(apt_cat) = user_mirror_config.get_category("apt") {
                 if apt_cat.enabled && !apt_cat.source.is_empty() {

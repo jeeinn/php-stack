@@ -12,7 +12,7 @@ fn get_compose_logs(project_root: &std::path::Path, skip_lines: usize) -> Result
     use std::process::Command;
     
     let mut logs_cmd = Command::new("docker");
-    logs_cmd.args(&["compose", "logs", "--tail", "100"])
+    logs_cmd.args(["compose", "logs", "--tail", "100"])
         .current_dir(project_root);
     
     #[cfg(windows)]
@@ -91,9 +91,9 @@ fn extract_service_name(line: &str, keyword: &str) -> Option<String> {
     if let Some(pos) = line.find(keyword) {
         let after_keyword = &line[pos + keyword.len()..];
         // 提取第一个单词作为服务名
-        let service = after_keyword.trim().split_whitespace().next()?;
+        let service = after_keyword.split_whitespace().next()?;
         // 去除可能的特殊字符
-        let clean_service = service.trim_end_matches(|c| c == '.' || c == ':' || c == ' ');
+        let clean_service = service.trim_end_matches(['.', ':', ' ']);
         if !clean_service.is_empty() {
             return Some(clean_service.to_string());
         }
@@ -136,7 +136,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     
     // 解析 PHP 服务（支持多版本）
     // 查找所有 PHPxx_VERSION 格式的键
-    for (key, _value) in &env_map {
+    for key in env_map.keys() {
         if key.ends_with("_VERSION") && key.starts_with("PHP") {
             // 提取前缀，如 PHP82_VERSION → PHP82
             let prefix = &key[..key.len() - 8]; // 去掉 "_VERSION"
@@ -172,7 +172,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     
     // 解析 MySQL 服务（支持多版本）
     let mut mysql_index = 0;
-    for (key, _value) in &env_map {
+    for key in env_map.keys() {
         if key.ends_with("_VERSION") && key.starts_with("MYSQL") && !key.contains("ROOT") && !key.contains("USER") && !key.contains("PASSWORD") {
             let prefix = &key[..key.len() - 8];
             let index_part = &key[5..key.len() - 8];
@@ -205,7 +205,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     }
     
     // 解析 Redis 服务（支持多版本）
-    for (key, _value) in &env_map {
+    for key in env_map.keys() {
         if key.ends_with("_VERSION") && key.starts_with("REDIS") {
             let prefix = &key[..key.len() - 8];
             let index_part = &key[5..key.len() - 8];
@@ -234,7 +234,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     }
     
     // 解析 Nginx 服务（支持多版本）
-    for (key, _value) in &env_map {
+    for key in env_map.keys() {
         if key.ends_with("_VERSION") && key.starts_with("NGINX") {
             let prefix = &key[..key.len() - 8];
             let index_part = &key[6..key.len() - 8]; // NGINX 是 5 个字母 + 1 = 6
@@ -527,7 +527,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     ui_log!(app_handle, info, "commands::start_environment", "");
     
     let mut compose_cmd = Command::new("docker");
-    compose_cmd.args(&["compose", "up", "-d"])
+    compose_cmd.args(["compose", "up", "-d"])
         .current_dir(&project_root)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -551,8 +551,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     
     // stdout 线程：读取容器创建信息
     let app_stdout = app_handle.clone();
-    let stdout_thread = if let Some(stdout) = stdout_opt {
-        Some(std::thread::spawn(move || {
+    let stdout_thread = stdout_opt.map(|stdout| std::thread::spawn(move || {
             use std::io::{BufRead, BufReader};
             let reader = BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
@@ -560,14 +559,12 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     ui_log!(&app_stdout, info, "commands::start_environment", "   {}", line);
                 }
             }
-        }))
-    } else { None };
+        }));
     
     // stderr 线程：读取 build/pull 进度（Docker Compose 的进度信息输出到 stderr）
     let app_stderr = app_handle.clone();
     let stderr_lines_clone = stderr_lines_shared.clone();
-    let stderr_thread = if let Some(stderr) = stderr_opt {
-        Some(std::thread::spawn(move || {
+    let stderr_thread = stderr_opt.map(|stderr| std::thread::spawn(move || {
             use std::io::{BufRead, BufReader};
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
@@ -584,8 +581,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     }
                 }
             }
-        }))
-    } else { None };
+        }));
     
     // 等待 up -d 进程完成
     let status = child.wait().map_err(|e| {

@@ -1,7 +1,7 @@
-/// 镜像源配置模块
-/// 
-/// 统一管理 Docker、APT、Composer、PyPI、NPM 等镜像源配置
-/// 配置存储在 .env 文件中，支持动态加载和保存
+//! 镜像源配置模块
+//!
+//! 统一管理 Docker、APT、Composer、PyPI、NPM 等镜像源配置
+//! 配置存储在 .env 文件中，支持动态加载和保存
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -103,7 +103,7 @@ impl MirrorSource {
     }
     
     /// 从字符串解析
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_key(s: &str) -> Self {
         match s {
             "aliyun" => MirrorSource::Aliyun,
             "tsinghua" => MirrorSource::Tsinghua,
@@ -132,16 +132,16 @@ impl MirrorConfig {
         let env_map = Self::parse_env_file(&env_content);
         
         Ok(Self {
-            apt_mirror: MirrorSource::from_str(
+            apt_mirror: MirrorSource::from_key(
                 env_map.get("APT_MIRROR").map(|s| s.as_str()).unwrap_or("default")
             ),
-            composer_mirror: MirrorSource::from_str(
+            composer_mirror: MirrorSource::from_key(
                 env_map.get("COMPOSER_MIRROR").map(|s| s.as_str()).unwrap_or("default")
             ),
-            pypi_mirror: MirrorSource::from_str(
+            pypi_mirror: MirrorSource::from_key(
                 env_map.get("PYPI_MIRROR").map(|s| s.as_str()).unwrap_or("default")
             ),
-            npm_mirror: MirrorSource::from_str(
+            npm_mirror: MirrorSource::from_key(
                 env_map.get("NPM_MIRROR").map(|s| s.as_str()).unwrap_or("default")
             ),
             http_proxy: env_map.get("HTTP_PROXY").cloned(),
@@ -311,10 +311,10 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_mirror_source_from_str() {
-        assert_eq!(MirrorSource::from_str("aliyun"), MirrorSource::Aliyun);
-        assert_eq!(MirrorSource::from_str("tsinghua"), MirrorSource::Tsinghua);
-        assert_eq!(MirrorSource::from_str("invalid"), MirrorSource::Default);
+    fn test_mirror_source_from_key() {
+        assert_eq!(MirrorSource::from_key("aliyun"), MirrorSource::Aliyun);
+        assert_eq!(MirrorSource::from_key("tsinghua"), MirrorSource::Tsinghua);
+        assert_eq!(MirrorSource::from_key("invalid"), MirrorSource::Default);
     }
     
     #[test]

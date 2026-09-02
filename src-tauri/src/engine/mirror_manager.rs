@@ -1,7 +1,7 @@
-/// 统一镜像源管理器
-///
-/// 在 mirror_config.rs 基础上，增加预设方案管理、连接测试和统一 .env 集成。
-/// 通过 env_parser.rs 读写 .env 文件中的镜像源配置。
+//! 统一镜像源管理器
+//!
+//! 在 mirror_config.rs 基础上，增加预设方案管理、连接测试和统一 .env 集成。
+//! 通过 env_parser.rs 读写 .env 文件中的镜像源配置。
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;

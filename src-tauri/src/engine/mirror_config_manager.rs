@@ -1,7 +1,7 @@
-/// 用户自定义镜像源配置管理器
-///
-/// 类似于 UserOverrideManager，管理用户对镜像源的自定义配置。
-/// 配置文件：.user_mirror_config.json
+//! 用户自定义镜像源配置管理器
+//!
+//! 类似于 UserOverrideManager，管理用户对镜像源的自定义配置。
+//! 配置文件：.user_mirror_config.json
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

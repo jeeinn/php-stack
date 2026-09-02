@@ -435,67 +435,93 @@ impl ConfigGenerator {
         lines.join("\n")
     }
 
-    /// Copy template file from src-tauri/services to project services directory
-    fn copy_template_file(template_name: &str, dest_path: &Path) -> Result<(), String> {
-        // Get the executable directory
-        let exe_dir = std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {e}"))?
-            .parent()
-            .ok_or("无法获取程序所在目录")?
-            .to_path_buf();
-        
-        // Determine template source path
-        let template_path = if cfg!(debug_assertions) {
-            // Development mode: src-tauri/services/
-            // current_exe() -> src-tauri/target/debug/app.exe
-            exe_dir
-                .parent()       // target/debug/ -> target/
-                .and_then(|p| p.parent())   // target/ -> src-tauri/
-                .map(|p| p.join("services").join(template_name))
-        } else {
-            // Production mode: executable_dir/services/
-            Some(exe_dir.join("services").join(template_name))
-        };
-        
-        let template_path = template_path
-            .ok_or("无法定位模板目录")?;
-        
-        if !template_path.exists() {
-            return Err(format!("模板文件不存在: {}", template_path.display()));
+    /// 获取服务模板目录（services/ 模板所在基础目录）的候选列表。
+    ///
+    /// 查找顺序：
+    /// 1. exe 同级目录下的 services/ —— 安装版布局：NSIS/MSI 安装器会将
+    ///    tauri.conf.json 中 bundle.resources（services/**）释放到安装目录（exe 旁）；
+    ///    本地 `tauri build` 产物同样会将资源复制到 src-tauri/target/<profile>/services/。
+    /// 2. src-tauri/services/ —— 开发模式（exe 位于 src-tauri/target/<profile>/ 下）；
+    ///    也覆盖 `--no-bundle` 构建后直接运行 target/release/app.exe 的场景。
+    /// 3. src-tauri/services/（再上溯一级）—— 覆盖 cargo test 等测试二进制
+    ///    （位于 src-tauri/target/<profile>/deps/ 下）的场景。
+    fn template_base_candidates() -> Vec<PathBuf> {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                // 1. 安装版 / tauri build 产物布局（exe 同级 services/）
+                candidates.push(exe_dir.join("services"));
+                // 2. 开发布局：exe_dir 为 src-tauri/target/<profile>/，上两级即 src-tauri/
+                if let Some(src_tauri) = exe_dir.parent().and_then(|p| p.parent()) {
+                    candidates.push(src_tauri.join("services"));
+                }
+                // 3. 测试二进制布局：exe_dir 为 src-tauri/target/<profile>/deps/
+                if let Some(src_tauri) = exe_dir.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+                    candidates.push(src_tauri.join("services"));
+                }
+            }
         }
-        
+        candidates
+    }
+
+    /// 在所有候选目录中定位模板文件，返回第一个命中的完整路径。
+    fn locate_template_file(template_name: &str) -> Result<PathBuf, String> {
+        let candidates = Self::template_base_candidates();
+        let searched: Vec<String> = candidates
+            .iter()
+            .map(|base| base.join(template_name).display().to_string())
+            .collect();
+
+        candidates
+            .into_iter()
+            .map(|base| base.join(template_name))
+            .find(|p| p.exists())
+            .ok_or_else(|| {
+                format!(
+                    "模板文件不存在: {template_name}（已查找: {}）。\
+                     安装版请确认安装目录下 services/ 资源完整；\
+                     开发/构建产物请从 src-tauri/target/<profile>/ 下运行，\
+                     或使用安装包安装后运行",
+                    searched.join(", ")
+                )
+            })
+    }
+
+    /// Copy template file from the services template directory to the project
+    /// services directory (user workspace).
+    ///
+    /// 释放语义：模板文件在「应用配置」时释放到用户 workspace 下的 services/ 目录；
+    /// **目标文件已存在时一律跳过** —— 用户对已释放配置/模板的修改不会被覆盖。
+    /// 需要恢复默认模板时，删除对应文件后重新应用配置即可。
+    fn copy_template_file(template_name: &str, dest_path: &Path) -> Result<(), String> {
+        // 目标已存在：保留用户文件，不覆盖
+        if dest_path.exists() {
+            app_log!(
+                info,
+                "engine::config_generator",
+                "目标文件已存在，跳过模板释放（保留用户配置）: {}",
+                dest_path.display()
+            );
+            return Ok(());
+        }
+
+        let template_path = Self::locate_template_file(template_name)?;
+
         // Create destination directory if needed
         if let Some(parent) = dest_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("创建目录失败: {e}"))?;
         }
-        
-        // Skip if destination exists and is identical to template
-        if dest_path.exists() {
-            use std::io::Read;
-            let mut template_file = std::fs::File::open(&template_path)
-                .map_err(|e| format!("打开模板文件失败: {e}"))?;
-            let mut dest_file = std::fs::File::open(dest_path)
-                .map_err(|e| format!("打开目标文件失败: {e}"))?;
-            
-            let mut template_buf = Vec::new();
-            let mut dest_buf = Vec::new();
-            
-            template_file.read_to_end(&mut template_buf)
-                .map_err(|e| format!("读取模板文件失败: {e}"))?;
-            dest_file.read_to_end(&mut dest_buf)
-                .map_err(|e| format!("读取目标文件失败: {e}"))?;
-            
-            if template_buf == dest_buf {
-                // Files are identical, skip copy
-                return Ok(());
-            }
-        }
-        
-        // Copy file (will overwrite if different)
-        std::fs::copy(&template_path, dest_path)
-            .map_err(|e| format!("复制文件 {} 到 {} 失败: {e}", template_path.display(), dest_path.display()))?;
-        
+
+        // Copy file (destination is guaranteed not to exist at this point)
+        std::fs::copy(&template_path, dest_path).map_err(|e| {
+            format!(
+                "复制文件 {} 到 {} 失败: {e}",
+                template_path.display(),
+                dest_path.display()
+            )
+        })?;
+
         Ok(())
     }
 
@@ -503,21 +529,6 @@ impl ConfigGenerator {
     /// Checks if the exact `service_dir` template exists; if not, falls back to a default.
     /// Returns `(template_dir, is_fallback)`.
     fn resolve_template_dir(service_type: &ServiceType, service_dir: &str) -> (String, bool) {
-        // Get the template base path (src-tauri/services/ in dev, executable_dir/services/ in prod)
-        let template_base = if cfg!(debug_assertions) {
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // target/debug/
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // target/
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))  // src-tauri/
-                .map(|p| p.join("services"))
-        } else {
-            std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .map(|p| p.join("services"))
-        };
-
         // Determine the key file to check for template existence
         let key_file = match service_type {
             ServiceType::PHP => "Dockerfile",
@@ -526,12 +537,12 @@ impl ConfigGenerator {
             ServiceType::Nginx => "Dockerfile",
         };
 
-        // Check if the exact service_dir template exists
-        if let Some(ref base) = template_base {
-            let exact_path = base.join(service_dir).join(key_file);
-            if exact_path.exists() {
-                return (service_dir.to_string(), false);
-            }
+        // Check if the exact service_dir template exists in any candidate base dir
+        let exact_found = Self::template_base_candidates().iter().any(|base| {
+            base.join(service_dir).join(key_file).exists()
+        });
+        if exact_found {
+            return (service_dir.to_string(), false);
         }
 
         // Fall back to a sensible default per service type
@@ -958,6 +969,45 @@ mod tests {
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
         }
+    }
+
+    #[test]
+    fn test_locate_template_file_finds_php_template() {
+        // 回归：模板解析候选链应能在开发/测试环境（测试二进制位于 target/<profile>/deps/）
+        // 定位 src-tauri/services/ 下的模板
+        let path = ConfigGenerator::locate_template_file("php85/Dockerfile")
+            .expect("应能定位 php85/Dockerfile 模板");
+        assert!(path.ends_with("php85/Dockerfile"), "实际路径: {path:?}");
+    }
+
+    #[test]
+    fn test_copy_template_file_skips_existing_dest() {
+        // 回归：目标文件已存在时必须跳过（保留用户修改），不得用模板覆盖
+        let dir = tempfile::tempdir().expect("创建临时目录失败");
+        let dest = dir.path().join("php.ini");
+        std::fs::write(&dest, "; user customized\n").unwrap();
+
+        ConfigGenerator::copy_template_file("php85/php.ini", &dest)
+            .expect("目标已存在时 copy_template_file 应直接成功");
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert_eq!(
+            content, "; user customized\n",
+            "已存在的用户文件不应被模板覆盖"
+        );
+    }
+
+    #[test]
+    fn test_copy_template_file_copies_when_missing() {
+        // 回归：目标文件不存在时应正常释放模板
+        let dir = tempfile::tempdir().expect("创建临时目录失败");
+        let dest = dir.path().join("Dockerfile");
+
+        ConfigGenerator::copy_template_file("php85/Dockerfile", &dest)
+            .expect("模板释放应成功");
+
+        assert!(dest.exists(), "目标文件应被释放创建");
+        assert!(!std::fs::read_to_string(&dest).unwrap().is_empty());
     }
 
     #[test]

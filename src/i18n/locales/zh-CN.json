@@ -49,7 +49,7 @@
     },
     "container": {
       "running": "Running",
-      "stopped": "Stopped",
+      "stopped": "已停用",
       "start": "启动",
       "stop": "停止",
       "config": "配置",

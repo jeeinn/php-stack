@@ -788,7 +788,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     Ok("环境重启成功".to_string())
 }
 
-/// 一键停止环境（docker compose down）
+/// 一键停止环境（docker compose stop）
 #[tauri::command]
 pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
     use std::process::Command;
@@ -809,11 +809,11 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     
     ui_log!(app_handle, info, "commands::stop_environment", "✅ docker-compose.yml 存在");
     
-    // 使用 docker compose down 停止并删除容器
-    ui_log!(app_handle, info, "commands::stop_environment", "🔧 执行: docker compose down");
+    // 使用 docker compose stop 停止容器（保留容器，前端可显示"已停用"状态）
+    ui_log!(app_handle, info, "commands::stop_environment", "🔧 执行: docker compose stop");
     
     let mut stop_cmd = Command::new("docker");
-    stop_cmd.args(["compose", "down"])
+    stop_cmd.args(["compose", "stop"])
         .current_dir(&project_root);
     
     #[cfg(windows)]
@@ -824,7 +824,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     }
     
     let output = stop_cmd.output().map_err(|e| {
-            let err_msg = format!("执行 docker compose down 失败: {e}");
+            let err_msg = format!("执行 docker compose stop 失败: {e}");
             ui_log!(app_handle, info, "commands::stop_environment", "❌ {}", err_msg);
             err_msg
         })?;

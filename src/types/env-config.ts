@@ -64,10 +64,11 @@ export interface MirrorPreset {
 }
 
 export interface BackupOptions {
-  include_database: boolean;
+  // 数据库/vhost 备份暂缓：涉及跨平台备份恢复、本地库容量未知、备份进度不可控
+  // include_database: boolean;
   include_projects: boolean;
   project_patterns: string[];
-  include_vhosts: boolean;
+  // include_vhosts: boolean;
   include_logs: boolean;
 }
 

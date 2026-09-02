@@ -10,8 +10,8 @@ import { showToast, addLog } from '../composables/useToast';
 const { t } = useI18n();
 
 const options = ref<BackupOptions>({
-  include_database: false,
-  include_vhosts: false,
+  // include_database: false,
+  // include_vhosts: false,
   include_projects: false,
   project_patterns: [],
   include_logs: false,

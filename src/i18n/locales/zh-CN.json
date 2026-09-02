@@ -48,7 +48,7 @@
       "action": "去配置环境"
     },
     "container": {
-      "running": "Running",
+      "running": "运行中",
       "stopped": "已停用",
       "start": "启动",
       "stop": "停止",

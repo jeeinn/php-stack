@@ -55,3 +55,7 @@ path = "tests/integration/config_generation_integration.rs"
 [[test]]
 name = "workspace_commands_integration"
 path = "tests/integration/workspace_commands_integration.rs"
+
+[[test]]
+name = "docker_manager_integration"
+path = "tests/integration/docker_manager_integration.rs"

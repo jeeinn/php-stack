@@ -14,13 +14,17 @@
     - `manager.rs`: 使用 `bollard` 处理容器列表、启停逻辑。
     - `mirror.rs`: 处理 Docker 和 PHP 镜像源切换。
   - `engine/`: 核心业务引擎。
-    - `env_parser.rs`: **.env 文件解析器与格式化器**（v0.1.0 新增）
-    - `config_generator.rs`: **可视化配置生成器**（v0.1.0 新增）
-    - `mirror_manager.rs`: **统一镜像源管理器**（v0.1.0 新增）
-    - `backup_manifest.rs`: **备份清单数据模型**（v0.1.0 新增）
-    - `backup_engine.rs`: **增强备份引擎**（v0.1.0 新增）
-    - `restore_engine.rs`: **恢复引擎**（v0.1.0 新增）
-    - `export.rs`: 旧版导出引擎（保留向后兼容）
+    - `env_parser.rs`: **.env 文件解析器与格式化器**（v0.1.0）
+    - `config_generator.rs`: **可视化配置生成器**（v0.1.0）
+    - `mirror_manager.rs`: **统一镜像源管理器**（v0.1.0）
+    - `backup_manifest.rs`: **备份清单数据模型**（v0.1.0）
+    - `backup_engine.rs`: **增强备份引擎**（v0.1.0）
+    - `restore_engine.rs`: **恢复引擎**（v0.1.0）
+    - `version_manifest.rs`: **服务版本清单管理器**（v0.2.0）
+    - `user_override_manager.rs`: **用户版本覆盖管理器**（v0.2.0）
+    - `mirror_config_manager.rs`: **用户镜像源配置管理器**（v0.2.0）
+    - `workspace_manager.rs`: **工作目录管理器**（v0.3.0）
+    - `mirror_config.rs`: 镜像源配置（向后兼容）
   - `commands/`: 暴露给前端的 `#[tauri::command]` 接口，按业务域拆分为子模块。
     - `mod.rs`: 模块声明、`get_project_root()` 共享函数、re-export 所有命令。
     - `docker.rs`: 容器 CRUD 操作（check_docker、list/start/stop/restart_container）。
@@ -57,10 +61,12 @@
 - **实现状态**: ✅ 完成
 - **核心功能**:
   - ZIP 格式备份包，包含 `manifest.json`
-  - 可选：数据库导出（mysqldump）、项目文件（glob 模式）、vhost 配置、日志
+  - 打包 `.env`、`docker-compose.yml`、`services/` 配置、用户自定义配置（镜像源/版本覆盖）
+  - 可选：项目文件（glob 模式）、日志
   - SHA256 文件完整性校验
   - Tauri 事件进度通知
   - 部分失败容错处理
+  - ⚠️ 数据库导出（mysqldump）尚未实现，属待完善项
 
 ### 4. 环境恢复（RestorePage）
 - **需求覆盖**: 需求 4.1-4.10
@@ -69,13 +75,37 @@
   - 备份包预览（manifest 解析、文件统计）
   - SHA256 完整性验证
   - 端口冲突检测与自动分配
-  - 配置文件还原、数据库 SQL 执行
+  - 配置文件、项目文件、SQL 文件还原（SQL 导入执行待完善）
   - 进度通知与错误汇总
 
 ### 5. 基础设施模块
 - **env_parser.rs**: .env 文件可靠读写，保留注释和空行（Property 9, 10）
 - **backup_manifest.rs**: Manifest 序列化/反序列化（Property 11, 12）
-- **测试覆盖**: 77 个测试全部通过（74 单元测试 + 3 集成测试），包括属性测试（proptest）
+- **测试覆盖**: 后端单元测试 + 3 个集成测试（backup_restore、config_generation、workspace_commands）+ 前端 8 个组件测试（Vitest），含属性测试（proptest）
+
+## ✅ v0.2.0 / v0.3.0 新增功能
+
+### 1. 前端国际化（i18n）
+- 中/英双语支持，运行时动态切换（vue-i18n）
+- 后端日志英文化
+
+### 2. 主题预设系统
+- 自动 / 明亮 / 暗黑三种模式，全组件适配
+
+### 3. 工作区与版本管理
+- `workspace_manager.rs`: 多工作区切换，配置持久化到 `workspace.json`
+- `version_manifest.rs`: 服务版本清单（PHP/MySQL/Redis/Nginx）查询与推荐版本
+- `user_override_manager.rs`: 用户自定义镜像覆盖
+- `mirror_config_manager.rs`: 用户镜像源配置持久化
+
+### 4. 跨平台权限映射（v0.3.1）
+- PUID/PGID 用户映射，解决 Docker 挂载目录权限问题
+
+### 5. 其他改进
+- 自定义下拉选择组件（CustomSelect），支持搜索过滤和键盘导航
+- 后端命令按业务域拆分为 5 个子模块
+- GitHub Actions 多平台自动发布工作流
+- 环境启动逻辑重构，流式日志输出
 
 ## 🛠️ 开发规范
 
@@ -142,7 +172,8 @@
 - 功能：生成包含 manifest 的 ZIP 备份包
 - 特性：
   - SHA256 文件完整性校验
-  - 可选：数据库导出、项目文件、vhost 配置、日志
+  - 打包 `.env`、`docker-compose.yml`、`services/` 配置、用户自定义配置
+  - 可选：项目文件（glob 模式）、日志
   - Tauri 事件进度通知
   - 部分失败容错处理
 
@@ -153,7 +184,7 @@
   - 备份预览（manifest 解析）
   - SHA256 完整性验证
   - 端口冲突检测与自动分配
-  - 配置文件、数据库、项目文件还原
+  - 配置文件、项目文件还原（数据库 SQL 导入待完善）
 
 ### 7. 备份清单（v0.1.0 新增）
 - 位置：`src-tauri/src/engine/backup_manifest.rs`
@@ -162,6 +193,28 @@
   - serde_json 序列化/反序列化
   - 必需字段验证（version、timestamp、services）
   - 往返一致性保证
+
+### 8. 服务版本清单（v0.2.0 新增）
+- 位置：`src-tauri/src/engine/version_manifest.rs`
+- 功能：管理 PHP/MySQL/Redis/Nginx 的服务版本清单
+- 特性：
+  - 按服务类型查询可用版本
+  - 推荐版本查询
+  - 版本 ID 校验
+
+### 9. 用户版本覆盖管理器（v0.2.0 新增）
+- 位置：`src-tauri/src/engine/user_override_manager.rs`
+- 功能：持久化用户自定义镜像覆盖配置
+- 特性：
+  - 按服务类型 + 版本 ID 保存/查询覆盖
+  - 配置持久化到 `.user_version_overrides.json`
+
+### 10. 工作目录管理器（v0.3.0 新增）
+- 位置：`src-tauri/src/engine/workspace_manager.rs`
+- 功能：管理工作目录配置
+- 特性：
+  - 工作目录持久化到 `workspace.json`
+  - 加载/保存工作目录
 
 ## 📚 文档规范
 
@@ -255,19 +308,25 @@
 
 ## 🗺️ 后续开发重点 (给下个 Agent 的 Tip)
 
-### v0.1.0 已完成的功能
-✅ **环境可视化配置** - 完整实现需求 1.1-1.9
+### 已完成的功能（v0.1.0 ~ v0.3.1）
+✅ **环境可视化配置** - 完整实现需求 1.1-1.9，支持多 PHP 版本独立服务
 ✅ **统一镜像源管理** - 完整实现需求 2.1-2.7
 ✅ **环境备份** - 完整实现需求 3.1-3.8, 6.1-6.4
 ✅ **环境恢复** - 完整实现需求 4.1-4.10
-✅ **基础设施模块** - env_parser、backup_manifest、测试框架
+✅ **前端国际化（i18n）** - 中/英双语，运行时切换
+✅ **主题预设** - 自动/明亮/暗黑三种模式
+✅ **工作区与版本管理** - 多工作区、版本清单、用户覆盖
+✅ **跨平台权限映射** - PUID/PGID 用户映射
+✅ **测试框架** - 单元测试 + 集成测试 + 组件测试
 
-### 当前版本定位（v0.1.0 内测发布版）
+### 当前版本定位（v0.3.1）
 
-**核心定位**: PHP-Stack v0.1.0 是一个**环境配置管理与迁移工具**，专注于：
+**核心定位**: PHP-Stack v0.3.1 是一个**环境配置管理与迁移工具**，专注于：
 - ✅ 可视化配置生成（替代手动编辑 .env 和 docker-compose.yml）
 - ✅ 镜像源统一管理（加速国内开发体验）
 - ✅ 环境备份与恢复（快速迁移开发环境到新机器）
+- ✅ 国际化与主题（中英双语 + 明暗主题）
+- ✅ 工作区与版本管理（多工作区、版本覆盖）
 
 **不包含的功能**（未来版本可能考虑）:
 - ❌ 软件管理中心（多版本一键安装）- 用户需自行准备 Docker 镜像
@@ -280,18 +339,18 @@
 
 ### 待完善功能
 
-#### v1.3 - 一键导入恢复优化（低优先级）
-- **目标**：完善 restore_engine.rs 中的 mysqldump 执行逻辑
-- **当前状态**：✅ 核心框架已实现，数据库导出为占位符
+#### 数据库备份/恢复（低优先级）
+- **目标**：完善备份/恢复引擎中的数据库导出与导入
+- **当前状态**：备份不导出数据库（`BackupOptions` 无 `include_database`），恢复仅提取 SQL 文件到本地、不执行导入
 - **待完善**：
   - 完整的 mysqldump 执行（使用 bollard exec API）
-  - 更智能的环境差异处理
+  - SQL 导入执行（mysql client 或 bollard exec）
   - 事务性恢复（失败时回滚）
-- **优先级**: 低（当前版本可使用手动方式恢复数据库）
+- **优先级**: 低（当前版本可使用手动方式备份/恢复数据库）
 
 ### 开发建议
-1. **稳定优先**: v0.1.0 作为内测发布版，重点是稳定性和用户体验优化
+1. **稳定优先**: v0.3.1 重点是稳定性和用户体验优化
 2. **Bug 修复**: 优先处理用户反馈的问题和边界情况
 3. **性能优化**: 大文件备份的流式处理、增量备份支持
 4. **文档完善**: 用户手册、常见问题、最佳实践指南
-5. **国际化**: 如需支持多语言，可添加 i18n 支持
+5. **测试补全**: 继续补全前端组件测试与后端集成测试（当前分支 `optimize/tests-and-warnings` 进行中）

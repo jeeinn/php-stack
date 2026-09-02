@@ -292,18 +292,6 @@ impl RestoreEngine {
         Ok(extracted)
     }
 
-    /// Read SOURCE_DIR from the restored .env file.
-    /// Note: Currently unused as we restore projects directly to project_root.
-    /// Kept for potential future use or fallback scenarios.
-    #[allow(dead_code)]
-    fn read_source_dir_from_env(project_root: &Path) -> Option<String> {
-        let env_path = project_root.join(".env");
-        let content = std::fs::read_to_string(&env_path).ok()?;
-        use super::env_parser::EnvFile;
-        let env_file = EnvFile::parse(&content).ok()?;
-        env_file.get("SOURCE_DIR").map(|s| s.to_string())
-    }
-
     /// Restore .env file from backup.
     fn restore_env_file<R: Read + std::io::Seek>(
         archive: &mut zip::ZipArchive<R>,

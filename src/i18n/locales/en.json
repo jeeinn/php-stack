@@ -245,6 +245,12 @@
       "writeFailed": "❌ File Write Failed\n\nPlease check if the directory has write permissions.",
       "parseFailed": "❌ Config File Format Error\n\nPlease check the .env file format.",
       "default": "❌ Operation Failed\n\n{error}"
+    },
+    "versionList": {
+      "loadFailed": "Failed to load service versions",
+      "loadFailedHint": "Version dropdowns will be empty. Check that services/version_manifest.json exists in your workspace and is valid JSON — you can also add new versions there yourself. Click Retry once fixed.",
+      "retry": "Retry",
+      "retrying": "Retrying…"
     }
   },
   "settings": {

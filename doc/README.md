@@ -17,8 +17,10 @@ doc/
 │   ├── WORKFLOWS.md            # 核心工作流程
 │   ├── LOGGING.md              # 日志系统
 │   ├── DECISIONS.md            # 技术决策 (ADR)
+│   ├── SERVICE_TEMPLATE_SOURCING.md # 服务模板官方来源方案 ⭐️新增
 │   └── EXTENSION_GUIDE.md      # 扩展指南
 ├── guides/                      # 📖 使用指南（活跃）
+│   ├── ADDING_SERVICE_VERSION.md # 如何添加新的服务版本 ⭐️新增
 │   ├── MIRROR_GUIDE.md         # 镜像源配置指南
 │   ├── QUICK_REFERENCE.md      # 快速参考
 │   ├── TESTING_GUIDE.md        # 测试规范指南
@@ -47,6 +49,7 @@ doc/
 1. 阅读根目录 [README.md](../README.md) 了解项目概况
 2. 查看 [guides/MIRROR_GUIDE.md](guides/MIRROR_GUIDE.md) 学习镜像源配置
 3. 参考 [guides/QUICK_REFERENCE.md](guides/QUICK_REFERENCE.md) 快速上手
+4. 需要新版本？见 [guides/ADDING_SERVICE_VERSION.md](guides/ADDING_SERVICE_VERSION.md) 自行添加 ⭐️新增
 4. 阅读 [guides/TESTING_QUICK_REF.md](guides/TESTING_QUICK_REF.md) 了解测试命令
 
 ### 开发者必读

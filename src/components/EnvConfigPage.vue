@@ -20,11 +20,6 @@ const mysqlVersions = ref<VersionInfo[]>([]);
 const redisVersions = ref<VersionInfo[]>([]);
 const nginxVersions = ref<VersionInfo[]>([]);
 
-// 版本清单加载状态：失败时不回退到内置硬编码列表，而是展示可操作的错误态，
-// 避免用户自己在 version_manifest.json 里加的版本"看起来没生效"。
-const versionLoadError = ref(false);
-const versionLoadRetrying = ref(false);
-
 // PHP 扩展预设列表（扁平化）
 const commonExtensions = [
   'pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache', 'zip', 'bcmath', 'intl',
@@ -178,25 +173,35 @@ async function loadVersionMappings() {
       nginxVersions.value = mappings.nginx;
       console.log('[EnvConfig] Nginx 版本:', nginxVersions.value);
     }
-
-    // 加载成功：清除上一次可能残留的错误态（用户修正清单后重试成功时）
-    versionLoadError.value = false;
   } catch (e) {
     console.error('[EnvConfig] 加载版本映射失败:', e);
-    // 不再回退到内置的硬编码列表：那份列表会与 services/version_manifest.json 脱节，
-    // 导致用户自行添加的版本"看起来没生效"。改为展示可操作的错误态，
-    // 引导用户检查清单文件后重试。
-    versionLoadError.value = true;
-  } finally {
-    versionLoadRetrying.value = false;
+    // 使用默认值作为后备
+    phpVersions.value = [
+      { id: 'php56', display_name: 'PHP 5.6', image_tag: 'php:5.6-fpm', service_dir: 'php56', default_port: 9000, show_port: false, eol: true },
+      { id: 'php74', display_name: 'PHP 7.4', image_tag: 'php:7.4-fpm', service_dir: 'php74', default_port: 9000, show_port: false, eol: true },
+      { id: 'php80', display_name: 'PHP 8.0', image_tag: 'php:8.0-fpm', service_dir: 'php80', default_port: 9000, show_port: false, eol: true },
+      { id: 'php81', display_name: 'PHP 8.1', image_tag: 'php:8.1-fpm', service_dir: 'php81', default_port: 9000, show_port: false, eol: false },
+      { id: 'php82', display_name: 'PHP 8.2', image_tag: 'php:8.2-fpm', service_dir: 'php82', default_port: 9000, show_port: false, eol: false },
+      { id: 'php83', display_name: 'PHP 8.3', image_tag: 'php:8.3-fpm', service_dir: 'php83', default_port: 9000, show_port: false, eol: false },
+      { id: 'php84', display_name: 'PHP 8.4', image_tag: 'php:8.4-fpm', service_dir: 'php84', default_port: 9000, show_port: false, eol: false },
+    ];
+    mysqlVersions.value = [
+      { id: 'mysql57', display_name: 'MySQL 5.7', image_tag: 'mysql:5.7', service_dir: 'mysql57', default_port: 3306, show_port: true, eol: true },
+      { id: 'mysql80', display_name: 'MySQL 8.0', image_tag: 'mysql:8.0', service_dir: 'mysql80', default_port: 3306, show_port: true, eol: false },
+      { id: 'mysql84', display_name: 'MySQL 8.4 LTS', image_tag: 'mysql:8.4', service_dir: 'mysql84', default_port: 3306, show_port: true, eol: false },
+    ];
+    redisVersions.value = [
+      { id: 'redis62', display_name: 'Redis 6.2', image_tag: 'redis:6.2-alpine', service_dir: 'redis62', default_port: 6379, show_port: true, eol: true },
+      { id: 'redis70', display_name: 'Redis 7.0', image_tag: 'redis:7.0-alpine', service_dir: 'redis70', default_port: 6379, show_port: true, eol: false },
+      { id: 'redis72', display_name: 'Redis 7.2', image_tag: 'redis:7.2-alpine', service_dir: 'redis72', default_port: 6379, show_port: true, eol: false },
+      { id: 'redis82', display_name: 'Redis 8.2', image_tag: 'redis:8.2-alpine', service_dir: 'redis82', default_port: 6379, show_port: true, eol: false },
+    ];
+    nginxVersions.value = [
+      { id: 'nginx124', display_name: 'Nginx 1.24', image_tag: 'nginx:1.24-alpine', service_dir: 'nginx124', default_port: 80, show_port: true, eol: true },
+      { id: 'nginx125', display_name: 'Nginx 1.25', image_tag: 'nginx:1.25-alpine', service_dir: 'nginx125', default_port: 80, show_port: true, eol: false },
+      { id: 'nginx127', display_name: 'Nginx 1.27', image_tag: 'nginx:1.27-alpine', service_dir: 'nginx127', default_port: 80, show_port: true, eol: false },
+    ];
   }
-}
-
-// 重试加载版本映射（用户修正 services/version_manifest.json 后点击）
-async function retryLoadVersionMappings() {
-  if (versionLoadRetrying.value) return;
-  versionLoadRetrying.value = true;
-  await loadVersionMappings();
 }
 
 // 错误信息格式化
@@ -709,23 +714,6 @@ const goToMirrorSettings = () => {
       </div>
     </header>
     
-    <!-- 版本清单加载失败提示：不回退硬编码列表，引导用户修正清单后重试 -->
-    <div v-if="versionLoadError" class="mb-4 p-4 sm:p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div class="flex-1">
-          <p class="text-sm font-medium text-amber-900 dark:text-amber-200">{{ $t('envConfig.versionList.loadFailed') }}</p>
-          <p class="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">{{ $t('envConfig.versionList.loadFailedHint') }}</p>
-        </div>
-        <button
-          @click="retryLoadVersionMappings"
-          :disabled="versionLoadRetrying"
-          class="w-full sm:w-auto shrink-0 px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {{ versionLoadRetrying ? $t('envConfig.versionList.retrying') : $t('envConfig.versionList.retry') }}
-        </button>
-      </div>
-    </div>
-
     <!-- Nginx 配置提示 -->
     <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
       <div class="flex flex-col sm:flex-row items-start gap-3">

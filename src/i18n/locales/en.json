@@ -245,12 +245,6 @@
       "writeFailed": "❌ File Write Failed\n\nPlease check if the directory has write permissions.",
       "parseFailed": "❌ Config File Format Error\n\nPlease check the .env file format.",
       "default": "❌ Operation Failed\n\n{error}"
-    },
-    "versionList": {
-      "loadFailed": "Failed to load service versions",
-      "loadFailedHint": "Version dropdowns will be empty. The list is built into the app rather than read from your workspace, so repeated failure usually means an incomplete installation — reinstall, then click Retry.",
-      "retry": "Retry",
-      "retrying": "Retrying…"
     }
   },
   "settings": {

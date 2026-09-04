@@ -245,12 +245,6 @@
       "writeFailed": "❌ 文件写入失败\n\n请检查目录是否有写入权限。",
       "parseFailed": "❌ 配置文件格式错误\n\n请检查 .env 文件格式是否正确。",
       "default": "❌ 操作失败\n\n{error}"
-    },
-    "versionList": {
-      "loadFailed": "无法加载服务版本清单",
-      "loadFailedHint": "版本下拉框将为空。该清单内置于程序中，并非工作区文件；持续失败通常意味着安装不完整，请重新安装后点击重试。",
-      "retry": "重试",
-      "retrying": "重试中…"
     }
   },
   "settings": {

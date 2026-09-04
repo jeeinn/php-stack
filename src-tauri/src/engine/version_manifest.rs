@@ -32,75 +32,34 @@ pub enum ServiceType {
     Nginx,
 }
 
-/// 清单溯源信息 —— 记录模板与版本数据的来源，便于后续核对与自动同步。
-///
-/// 这是给维护者看的元信息，不影响运行时行为：所有字段均为可选，
-/// 缺失时解析照常成功。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ManifestProvenance {
-    /// 清单最后更新时间（YYYY-MM-DD）
-    #[serde(default)]
-    pub updated_at: Option<String>,
-    /// 各类数据的上游来源，如 {"versions": "...", "eol": "..."}
-    #[serde(default)]
-    pub sources: Option<HashMap<String, String>>,
-    /// 配置基线的提取方式说明
-    #[serde(default)]
-    pub config_baseline: Option<String>,
-    /// 补充说明
-    #[serde(default)]
-    pub notes: Option<String>,
-}
-
-/// `version_manifest.json` 的整体结构。
-///
-/// 服务类型显式列出（而非直接反序列化为 `HashMap<String, HashMap<..>>`），
-/// 这样 `_provenance` 这类元信息键不会因类型不匹配导致整份清单解析失败。
-#[derive(Debug, Deserialize)]
-struct ManifestFile {
-    #[serde(default)]
-    _provenance: Option<ManifestProvenance>,
-    #[serde(default)]
-    php: HashMap<String, VersionEntry>,
-    #[serde(default)]
-    mysql: HashMap<String, VersionEntry>,
-    #[serde(default)]
-    redis: HashMap<String, VersionEntry>,
-    #[serde(default)]
-    nginx: HashMap<String, VersionEntry>,
-}
-
 /// 版本清单管理器
 pub struct VersionManifest {
     /// 所有服务的版本映射，key 为 ID（如 "php82"）
     versions: HashMap<ServiceType, HashMap<String, VersionEntry>>,
-    /// 清单溯源信息（可选）
-    provenance: Option<ManifestProvenance>,
 }
 
 impl VersionManifest {
     /// 从嵌入的 JSON 数据加载版本清单
     pub fn new() -> Self {
         let json_data = include_str!("../../services/version_manifest.json");
-        // 解析为显式结构：`_provenance` 等元信息键不会再因类型不匹配导致整份解析失败
-        let file: ManifestFile =
+        let raw: HashMap<String, HashMap<String, VersionEntry>> =
             serde_json::from_str(json_data).expect("Failed to parse version_manifest.json");
 
         let mut versions = HashMap::new();
-        versions.insert(ServiceType::Php, file.php);
-        versions.insert(ServiceType::Mysql, file.mysql);
-        versions.insert(ServiceType::Redis, file.redis);
-        versions.insert(ServiceType::Nginx, file.nginx);
 
-        Self {
-            versions,
-            provenance: file._provenance,
+        // 转换键为 ServiceType 枚举
+        for (service_key, service_versions) in raw {
+            let service_type = match service_key.as_str() {
+                "php" => ServiceType::Php,
+                "mysql" => ServiceType::Mysql,
+                "redis" => ServiceType::Redis,
+                "nginx" => ServiceType::Nginx,
+                _ => continue,
+            };
+            versions.insert(service_type, service_versions);
         }
-    }
 
-    /// 清单溯源信息（若清单中未声明则为 None）
-    pub fn provenance(&self) -> Option<&ManifestProvenance> {
-        self.provenance.as_ref()
+        Self { versions }
     }
 
     // ─── 新 API ───────────────────────────────────────────────

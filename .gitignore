@@ -42,6 +42,3 @@ logs/
 # Ignore runtime services directory (but keep src-tauri/services templates)
 services*/
 !src-tauri/services/
-
-# Local helper scripts (underscore-prefixed, agent-internal)
-scripts/_*.sh

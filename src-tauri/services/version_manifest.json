@@ -1,17 +1,4 @@
 {
-  "_provenance": {
-    "updated_at": "2026-09-04",
-    "sources": {
-      "versions": "docker-library/official-images → library/{php,mysql,redis,nginx}（唯一稳定的 tag 清单入口）",
-      "eol": "endoflife.date/api/{php,mysql,redis,nginx}.json",
-      "redis.conf": "raw.githubusercontent.com/redis/redis/{branch}/redis.conf",
-      "php.ini": "docker create php:X.Y-fpm + docker cp /usr/local/etc/php/php.ini-production",
-      "mysql.cnf": "docker create mysql:X.Y + docker cp /etc/my.cnf",
-      "nginx.conf": "docker create nginx:X.Y-alpine + docker cp /etc/nginx/nginx.conf"
-    },
-    "config_baseline": "精简 overlay 风格：只显式写出「官方默认值 + Docker 化调整」（bind 0.0.0.0 / protected-mode no / logfile 空字符串 / daemonize no），省略的项由服务自身内置默认值兜底。每份配置头部均带来源与 docker 校验命令。",
-    "notes": "Docker Hub API (hub.docker.com/v2) 实测不可达，故不作为数据来源。Redis 8.x 的构建仓库已迁至 redis/docker-library-redis，逐个解析 docker-library/* 不可靠，只有 official-images 的 library/* 是统一入口。Dockerfile 为本项目自研（PUID/PGID 映射、扩展安装、镜像源注入），不从上游复制。"
-  },
   "php": {
     "php85": {
       "display_name": "PHP 8.5",

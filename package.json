@@ -13,7 +13,9 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "sync:dockerfile": "node scripts/sync-php-dockerfile.mjs",
-    "check:dockerfile": "node scripts/sync-php-dockerfile.mjs --check"
+    "check:dockerfile": "node scripts/sync-php-dockerfile.mjs --check",
+    "sync:manifest": "node scripts/sync-version-manifest.mjs --apply",
+    "check:manifest": "node scripts/sync-version-manifest.mjs --check"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

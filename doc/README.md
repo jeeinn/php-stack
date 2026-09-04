@@ -23,6 +23,7 @@ doc/
 │   ├── ADDING_SERVICE_VERSION.md # 如何添加新的服务版本 ⭐️新增
 │   ├── MIRROR_GUIDE.md         # 镜像源配置指南
 │   ├── QUICK_REFERENCE.md      # 快速参考
+│   ├── SYNC_VERSION_MANIFEST.md # 版本清单同步工作流 ⭐️新增
 │   ├── TESTING_GUIDE.md        # 测试规范指南
 │   ├── TEST_RESTRUCTURE.md     # 测试重构说明
 │   └── TESTING_QUICK_REF.md    # 测试快速参考
@@ -50,7 +51,8 @@ doc/
 2. 查看 [guides/MIRROR_GUIDE.md](guides/MIRROR_GUIDE.md) 学习镜像源配置
 3. 参考 [guides/QUICK_REFERENCE.md](guides/QUICK_REFERENCE.md) 快速上手
 4. 需要新版本？见 [guides/ADDING_SERVICE_VERSION.md](guides/ADDING_SERVICE_VERSION.md) 自行添加 ⭐️新增
-4. 阅读 [guides/TESTING_QUICK_REF.md](guides/TESTING_QUICK_REF.md) 了解测试命令
+4. 维护者同步上游：见 [guides/SYNC_VERSION_MANIFEST.md](guides/SYNC_VERSION_MANIFEST.md) ⭐️新增
+5. 阅读 [guides/TESTING_QUICK_REF.md](guides/TESTING_QUICK_REF.md) 了解测试命令
 
 ### 开发者必读
 1. [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) - 理解系统架构

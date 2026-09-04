@@ -119,3 +119,27 @@ export interface ContainerPortConflict {
   container_image: string;
   container_id: string;
 }
+
+// ==================== Phase 3: 镜像探测 / 拉取 / 配置提取 ====================
+
+/// 后端 `ImageStatus` 序列化形态：`{"status": "present|missing", "tag": "...", "size": "..."}`
+export interface ImagePresence {
+  status: 'present' | 'missing';
+  tag: string;
+  size?: string | null;
+}
+
+/// 后端 `ExtractOutcome` 序列化形态
+export interface ExtractResult {
+  outcome: 'extracted' | 'skippedexists' | 'failed';
+  dest?: string;
+  bytes?: number;
+  reason?: string;
+}
+
+/// 后端 `PullImageResult` 序列化形态
+export interface PullImageResultItem {
+  tag: string;
+  success: boolean;
+  error?: string;
+}

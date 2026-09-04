@@ -248,7 +248,7 @@
     },
     "versionList": {
       "loadFailed": "Failed to load service versions",
-      "loadFailedHint": "Version dropdowns will be empty. Check that services/version_manifest.json exists in your workspace and is valid JSON — you can also add new versions there yourself. Click Retry once fixed.",
+      "loadFailedHint": "Version dropdowns will be empty. The list is built into the app rather than read from your workspace, so repeated failure usually means an incomplete installation — reinstall, then click Retry.",
       "retry": "Retry",
       "retrying": "Retrying…"
     }

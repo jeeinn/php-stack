@@ -11,7 +11,7 @@ ARG GITHUB_PROXY
 
 ENV TZ=${TZ}
 
-# Set debian mirror (for domestic acceleration)
+# Set debian mirror
 RUN DEBIAN_HOST=$(echo "${DEBIAN_MIRROR_DOMAIN:-deb.debian.org}" | sed 's|https\?://||' | cut -d'/' -f1) && \
     if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i "s|deb.debian.org|${DEBIAN_HOST}|g" /etc/apt/sources.list.d/debian.sources; \

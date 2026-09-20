@@ -179,7 +179,7 @@ describe('YourComponent', () => {
 ## 📚 详细文档
 
 完整的测试规范和最佳实践请参考：
-- [TESTING_GUIDE.md](../doc/guides/TESTING_GUIDE.md) - 测试规范指南
+- [TESTING_GUIDE.md](./TESTING_GUIDE.md) - 测试规范指南
 - [AGENTS.md](../AGENTS.md) - AI Agent开发指南（已更新测试部分）
 
 ## ⚠️ 注意事项

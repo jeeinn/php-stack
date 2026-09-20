@@ -1,7 +1,7 @@
 # PHP-Stack 文档中心
 
-> **版本**: v0.2.0  
-> **最后更新**: 2026-04-27
+> **版本**: v0.3.1  
+> **最后更新**: 2026-09-20
 
 本文档中心整理了 PHP-Stack 项目的所有技术文档，按类别组织以便于查找和维护。
 
@@ -10,8 +10,9 @@
 ## 📁 文档目录结构
 
 ```
-doc/
+docs/
 ├── README.md                    # 📖 本文档 - 文档中心索引
+├── IMPROVEMENT_REPORT.md        # 📋 改进建议报告（2026-09 全量评审）
 ├── architecture/                # 🏗️ 架构设计文档（稳定）
 │   ├── ARCHITECTURE.md         # 系统架构
 │   ├── WORKFLOWS.md            # 核心工作流程
@@ -65,10 +66,10 @@ doc/
 
 | 文档类型 | 存放位置 | 说明 |
 |---------|---------|------|
-| 架构设计 | `doc/architecture/` | 系统架构、工作流程、技术决策（长期稳定） |
-| 使用指南 | `doc/guides/` | 用户手册、快速参考、测试指南（持续更新） |
-| 历史归档 | `doc/history/` | 实施总结、测试报告、修复记录等（带日期前缀 YYYY-MM-DD_） |
-| 临时实现 | `doc/implementation/` | **仅**在功能开发过程中临时存放，完成后立即归档到 history/ |
+| 架构设计 | `docs/architecture/` | 系统架构、工作流程、技术决策（长期稳定） |
+| 使用指南 | `docs/guides/` | 用户手册、快速参考、测试指南（持续更新） |
+| 历史归档 | `docs/history/` | 实施总结、测试报告、修复记录等（带日期前缀 YYYY-MM-DD_） |
+| 临时实现 | `docs/implementation/` | **仅**在功能开发过程中临时存放，完成后立即归档到 history/ |
 | 项目说明 | 根目录 | README.md, CHANGELOG.md |
 | 开发指南 | 根目录 | AGENTS.md |
 
@@ -80,16 +81,16 @@ doc/
 
 ### 文档生命周期
 
-1. **开发阶段**: 新功能开发时，相关文档可临时存放在 `doc/implementation/`
-2. **功能完成**: 功能实现后，立即将文档移动到 `doc/history/` 并添加日期前缀
+1. **开发阶段**: 新功能开发时，相关文档可临时存放在 `docs/implementation/`
+2. **功能完成**: 功能实现后，立即将文档移动到 `docs/history/` 并添加日期前缀
 3. **日常维护**: 架构文档和使用指南直接在原位置更新
-4. **过时文档**: 不再适用的文档移至 `doc/history/` 并标注状态
+4. **过时文档**: 不再适用的文档移至 `docs/history/` 并标注状态
 5. **重复文档**: 合并内容后删除冗余版本
 6. **更新索引**: 重要文档变更后，检查是否需要更新本文档
 
 ### implementation/ 目录使用说明
 
-**重要**: `doc/implementation/` 目录**仅用于**功能开发过程中的临时文档存放。
+**重要**: `docs/implementation/` 目录**仅用于**功能开发过程中的临时文档存放。
 
 **使用流程**:
 ```
@@ -102,10 +103,10 @@ doc/
 **示例**:
 ```bash
 # 开发过程中
-doc/implementation/FEATURE_DESIGN.md
+docs/implementation/FEATURE_DESIGN.md
 
 # 功能完成后
-Move-Item doc/implementation/FEATURE_DESIGN.md doc/history/2026-04-27_FEATURE_DESIGN.md
+Move-Item docs/implementation/FEATURE_DESIGN.md docs/history/2026-04-27_FEATURE_DESIGN.md
 ```
 
 ---

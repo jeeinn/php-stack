@@ -133,7 +133,7 @@
    - **测试位置**: 与被测试代码同级目录下的 `__tests__/` 文件夹
    - **文件命名**: `{模块名}.spec.ts`
    - 运行测试：`npm run test` 或 `npm run test:run`
-   - 详细规范参见：[doc/guides/TESTING_GUIDE.md](doc/guides/TESTING_GUIDE.md)
+   - 详细规范参见：[docs/guides/TESTING_GUIDE.md](docs/guides/TESTING_GUIDE.md)
 
 ## 📋 关键模块逻辑
 
@@ -220,14 +220,14 @@
 
 ### 文档分类与存放位置
 
-项目文档统一存放在 `doc/` 目录下，按以下规则分类：
+项目文档统一存放在 `docs/` 目录下，按以下规则分类：
 
-#### 1. `doc/architecture/` - 架构设计文档
+#### 1. `docs/architecture/` - 架构设计文档
 - **用途**: 系统架构、设计决策、技术方案
 - **示例**: `ARCHITECTURE.md`
 - **何时使用**: 记录重要的架构决策和技术方案
 
-#### 2. `doc/guides/` - 使用指南和教程
+#### 2. `docs/guides/` - 使用指南和教程
 - **用途**: 用户指南、开发指南、快速参考
 - **示例**: 
   - `TESTING_GUIDE.md` - 测试指南
@@ -235,7 +235,7 @@
   - `QUICK_REFERENCE.md` - 快速参考
 - **何时使用**: 编写面向用户或开发者的操作指南
 
-#### 3. `doc/history/` - 历史记录和修复报告
+#### 3. `docs/history/` - 历史记录和修复报告
 - **用途**: 开发日志、Bug 修复记录、历史决策
 - **命名格式**: `YYYY-MM-DD_标题.md`
 - **示例**: 
@@ -247,7 +247,7 @@
   - 重要问题排查过程
   - 每日开发日志
 
-#### 4. `doc/history/` - 历史记录和归档文档
+#### 4. `docs/history/` - 历史记录和归档文档
 - **用途**: 功能实施总结、优化进度、测试结果、问题修复记录，更新文档时不需要更新此目录下的文档
 - **示例**: 
   - `2026-04-17_IMPLEMENTATION_SUMMARY.md` - 实施总结
@@ -261,7 +261,7 @@
   - Bug 修复记录
   - 所有需要归档的文档
 
-#### 5. `doc/README.md` - 文档索引
+#### 5. `docs/README.md` - 文档索引
 - **用途**: 文档目录和导航
 - **维护**: 新增文档后更新此索引
 
@@ -290,9 +290,9 @@
 
 4. **更新原则**:
    - 修改代码后及时更新相关文档
-   - Bug 修复后记录到 `doc/history/`
-   - 新功能完成后编写实施总结到 `doc/history/`（带日期前缀）
-   - 所有文档最终都归档到 `doc/history/`
+   - Bug 修复后记录到 `docs/history/`
+   - 新功能完成后编写实施总结到 `docs/history/`（带日期前缀）
+   - 所有文档最终都归档到 `docs/history/`
 
 ## 🚀 Agent 任务接入建议
 

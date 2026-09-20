@@ -29,6 +29,28 @@ pub struct RestoreResult {
 
 pub struct RestoreEngine;
 
+/// 校验 ZIP 条目名是否安全（zip-slip 路径遍历防护）
+///
+/// 拒绝三类条目：
+/// - 绝对路径（`/etc/passwd`、Windows 盘符 `C:\...` 或 UNC `\\...`）
+/// - 包含父目录引用（`../`）
+/// - 根目录组件
+fn is_safe_entry_name(name: &str) -> bool {
+    let path = std::path::Path::new(name);
+    if path.is_absolute() {
+        return false;
+    }
+    for comp in path.components() {
+        match comp {
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
 impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
@@ -98,6 +120,18 @@ impl RestoreEngine {
         let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
         let mut archive =
             zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+
+        // Step 0: 安全校验——拒绝包含路径遍历条目的备份包，在任何写盘操作之前拦截
+        for i in 0..archive.len() {
+            let name = archive
+                .by_index(i)
+                .map_err(|e| format!("读取 ZIP 条目失败: {e}"))?
+                .name()
+                .to_string();
+            if !is_safe_entry_name(&name) {
+                return Err(format!("备份包包含非法路径条目，已拒绝恢复: {name}"));
+            }
+        }
 
         // Step 1: Read manifest
         Self::emit_progress(app_handle, "解析备份包...", 5);
@@ -331,6 +365,61 @@ mod tests {
     use std::fs;
     use std::io::Write;
     use zip::write::FileOptions;
+
+    /// Feature: restore-security, Property: 恶意条目名必须被拒绝
+    #[test]
+    fn test_is_safe_entry_name_rejects_traversal() {
+        assert!(!is_safe_entry_name("../evil.txt"));
+        assert!(!is_safe_entry_name("a/../../evil.txt"));
+        assert!(!is_safe_entry_name("/etc/passwd"));
+        assert!(!is_safe_entry_name("C:\\Windows\\evil.txt"));
+        assert!(!is_safe_entry_name("\\\\server\\share\\evil.txt"));
+    }
+
+    #[test]
+    fn test_is_safe_entry_name_accepts_normal_paths() {
+        assert!(is_safe_entry_name(".env"));
+        assert!(is_safe_entry_name("docker-compose.yml"));
+        assert!(is_safe_entry_name("services/php82/php.ini"));
+        assert!(is_safe_entry_name("projects/www/test/index.php"));
+        assert!(is_safe_entry_name("services/php82/sub/dir/conf.d/default.conf"));
+    }
+
+    /// Feature: restore-security, Property: 含路径遍历条目的 ZIP 必须整体拒绝且不写盘
+    #[test]
+    fn test_restore_rejects_zip_slip() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let restore_dir = tmp_dir.path().join("restored");
+        fs::create_dir_all(&restore_dir).expect("创建恢复目录失败");
+
+        // 构造含 ../ 逃逸条目的恶意 ZIP
+        let malicious_zip = tmp_dir.path().join("malicious.zip");
+        let file = fs::File::create(&malicious_zip).expect("创建恶意 ZIP 失败");
+        let mut zip = zip::ZipWriter::new(file);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("../../escaped.txt", zip_options).unwrap();
+        zip.write_all(b"pwned").unwrap();
+        zip.finish().unwrap();
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(RestoreEngine::restore(
+            malicious_zip.to_str().unwrap(),
+            &restore_dir,
+            None,
+        ));
+
+        assert!(result.is_err(), "含路径遍历条目的备份包必须被拒绝");
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("../../escaped.txt"),
+            "错误信息应指出非法条目，实际: {err_msg}"
+        );
+
+        // 逃逸目标（restore_dir 的上级）不应出现被写入的文件
+        let escaped = tmp_dir.path().join("escaped.txt");
+        assert!(!escaped.exists(), "逃逸文件不应被写入磁盘");
+    }
 
     /// Helper: create a test backup ZIP with manifest and some files.
     fn create_test_backup(dir: &Path) -> String {

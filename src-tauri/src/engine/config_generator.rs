@@ -1,13 +1,13 @@
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::io::Write;
 use chrono::Local;
+use serde::{Deserialize, Serialize};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use zip::write::FileOptions;
 
 use super::env_parser::EnvFile;
-use super::version_manifest::{VersionManifest, ServiceType as VmServiceType};
-use super::user_override_manager::UserOverrideManager;
 use super::mirror_config_manager::UserMirrorConfig;
+use super::user_override_manager::UserOverrideManager;
+use super::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -31,20 +31,20 @@ pub struct EnvConfig {
     pub services: Vec<ServiceEntry>,
     pub source_dir: String,
     pub timezone: String,
-    pub mysql_root_password: Option<String>,  // MySQL root密码（可选）
+    pub mysql_root_password: Option<String>, // MySQL root密码（可选）
 }
 
 pub struct ConfigGenerator;
 
 /// 检测宿主机当前用户的 UID/GID
-/// 
+///
 /// - Linux: 精确检测当前用户 ID（唯一需要精确映射的平台）
 /// - Windows/macOS: 返回默认值 1000，依赖 Docker Desktop 的权限转换层
 fn detect_host_uid_gid() -> Result<(u32, u32), String> {
     #[cfg(target_os = "linux")]
     {
         use std::process::Command;
-        
+
         let uid_output = Command::new("id")
             .arg("-u")
             .output()
@@ -53,7 +53,7 @@ fn detect_host_uid_gid() -> Result<(u32, u32), String> {
             .trim()
             .parse::<u32>()
             .map_err(|e| format!("Invalid UID: {}", e))?;
-        
+
         let gid_output = Command::new("id")
             .arg("-g")
             .output()
@@ -62,10 +62,10 @@ fn detect_host_uid_gid() -> Result<(u32, u32), String> {
             .trim()
             .parse::<u32>()
             .map_err(|e| format!("Invalid GID: {}", e))?;
-        
+
         Ok((uid, gid))
     }
-    
+
     #[cfg(not(target_os = "linux"))]
     {
         // Windows/macOS 下 Docker Desktop 自动处理权限转换
@@ -130,7 +130,11 @@ impl ConfigGenerator {
     ///
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql84").
     /// `project_root` is the user's workspace directory where `.user_version_overrides.json` resides.
-    pub fn generate_env(config: &EnvConfig, existing_env: Option<&EnvFile>, project_root: &Path) -> EnvFile {
+    pub fn generate_env(
+        config: &EnvConfig,
+        existing_env: Option<&EnvFile>,
+        project_root: &Path,
+    ) -> EnvFile {
         let mut env = if let Some(existing) = existing_env {
             existing.clone()
         } else {
@@ -192,19 +196,13 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     // Use entry.image_tag directly (e.g., "php:8.2-fpm")
-                    env.set(
-                        &format!("{env_prefix}_VERSION"),
-                        &entry.image_tag,
-                    );
+                    env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
                     env.set(
                         &format!("{env_prefix}_HOST_PORT"),
                         &service.host_port.to_string(),
                     );
                     if let Some(exts) = &service.extensions {
-                        env.set(
-                            &format!("{env_prefix}_EXTENSIONS"),
-                            &exts.join(","),
-                        );
+                        env.set(&format!("{env_prefix}_EXTENSIONS"), &exts.join(","));
                     }
                     env.set(
                         &format!("{env_prefix}_PHP_CONF_FILE"),
@@ -221,28 +219,61 @@ impl ConfigGenerator {
                 }
                 ServiceType::MySQL => {
                     env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
-                    env.set(&format!("{env_prefix}_HOST_PORT"), &service.host_port.to_string());
-                    
+                    env.set(
+                        &format!("{env_prefix}_HOST_PORT"),
+                        &service.host_port.to_string(),
+                    );
+
                     // 设置MySQL root密码（优先使用用户配置的密码）
                     let root_password = config.mysql_root_password.as_deref().unwrap_or("root");
                     env.set("MYSQL_ROOT_PASSWORD", root_password);
-                    
-                    env.set(&format!("{env_prefix}_CONF_FILE"), &format!("./services/{service_dir}/mysql.cnf"));
-                    env.set(&format!("{env_prefix}_DATA_DIR"), &format!("./data/{service_dir}"));
-                    env.set(&format!("{env_prefix}_LOG_DIR"), &format!("./logs/{service_dir}"));
+
+                    env.set(
+                        &format!("{env_prefix}_CONF_FILE"),
+                        &format!("./services/{service_dir}/mysql.cnf"),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_DATA_DIR"),
+                        &format!("./data/{service_dir}"),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_LOG_DIR"),
+                        &format!("./logs/{service_dir}"),
+                    );
                 }
                 ServiceType::Redis => {
                     env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
-                    env.set(&format!("{env_prefix}_HOST_PORT"), &service.host_port.to_string());
-                    env.set(&format!("{env_prefix}_CONF_FILE"), &format!("./services/{service_dir}/redis.conf"));
-                    env.set(&format!("{env_prefix}_DATA_DIR"), &format!("./data/{service_dir}"));
+                    env.set(
+                        &format!("{env_prefix}_HOST_PORT"),
+                        &service.host_port.to_string(),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_CONF_FILE"),
+                        &format!("./services/{service_dir}/redis.conf"),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_DATA_DIR"),
+                        &format!("./data/{service_dir}"),
+                    );
                 }
                 ServiceType::Nginx => {
                     env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
-                    env.set(&format!("{env_prefix}_HTTP_HOST_PORT"), &service.host_port.to_string());
-                    env.set(&format!("{env_prefix}_BUILD_CONTEXT"), &format!("./services/{service_dir}"));
-                    env.set(&format!("{env_prefix}_CONF_FILE"), &format!("./services/{service_dir}/nginx.conf"));
-                    env.set(&format!("{env_prefix}_CONFD_DIR"), &format!("./services/{service_dir}/conf.d"));
+                    env.set(
+                        &format!("{env_prefix}_HTTP_HOST_PORT"),
+                        &service.host_port.to_string(),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_BUILD_CONTEXT"),
+                        &format!("./services/{service_dir}"),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_CONF_FILE"),
+                        &format!("./services/{service_dir}/nginx.conf"),
+                    );
+                    env.set(
+                        &format!("{env_prefix}_CONFD_DIR"),
+                        &format!("./services/{service_dir}/conf.d"),
+                    );
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
                 }
             }
@@ -256,21 +287,21 @@ impl ConfigGenerator {
                     env.set("APT_MIRROR", &apt_cat.source);
                 }
             }
-            
+
             // Composer Mirror
             if let Some(composer_cat) = user_mirror_config.get_category("composer") {
                 if composer_cat.enabled && !composer_cat.source.is_empty() {
                     env.set("COMPOSER_MIRROR", &composer_cat.source);
                 }
             }
-            
+
             // NPM Mirror
             if let Some(npm_cat) = user_mirror_config.get_category("npm") {
                 if npm_cat.enabled && !npm_cat.source.is_empty() {
                     env.set("NPM_MIRROR", &npm_cat.source);
                 }
             }
-            
+
             // GitHub Proxy
             if let Some(github_cat) = user_mirror_config.get_category("github_proxy") {
                 if github_cat.enabled && !github_cat.source.is_empty() {
@@ -323,13 +354,23 @@ impl ConfigGenerator {
                     lines.push(format!("      context: ./services/{service_dir}"));
                     lines.push("      args:".to_string());
                     // Pass the full image tag to Dockerfile's PHP_BASE_IMAGE ARG
-                    lines.push(format!("        PHP_BASE_IMAGE: \"${{{env_prefix}_VERSION}}\""));
-                    lines.push(format!("        PHP_EXTENSIONS: \"${{{env_prefix}_EXTENSIONS}}\""));
+                    lines.push(format!(
+                        "        PHP_BASE_IMAGE: \"${{{env_prefix}_VERSION}}\""
+                    ));
+                    lines.push(format!(
+                        "        PHP_EXTENSIONS: \"${{{env_prefix}_EXTENSIONS}}\""
+                    ));
                     lines.push("        TZ: \"${TZ}\"".to_string());
                     // 镜像源配置（Debian APT 加速，适用于所有 PHP 版本）
                     // 注意：所有 PHP Dockerfile 现已统一使用 Debian 基础镜像（与 version_manifest.json 一致）
-                    lines.push("        DEBIAN_MIRROR_DOMAIN: \"${APT_MIRROR:-deb.debian.org}\"".to_string());
-                    lines.push("        COMPOSER_MIRROR: \"${COMPOSER_MIRROR:-https://packagist.org}\"".to_string());
+                    lines.push(
+                        "        DEBIAN_MIRROR_DOMAIN: \"${APT_MIRROR:-deb.debian.org}\""
+                            .to_string(),
+                    );
+                    lines.push(
+                        "        COMPOSER_MIRROR: \"${COMPOSER_MIRROR:-https://packagist.org}\""
+                            .to_string(),
+                    );
                     lines.push("        GITHUB_PROXY: \"${GITHUB_PROXY:-}\"".to_string());
                     // File permissions configuration
                     lines.push("        PUID: \"${PUID:-1000}\"".to_string());
@@ -345,9 +386,7 @@ impl ConfigGenerator {
                     lines.push(format!(
                         "      - ${{{env_prefix}_FPM_CONF_FILE}}:/usr/local/etc/php-fpm.d/www.conf"
                     ));
-                    lines.push(format!(
-                        "      - ${{{env_prefix}_LOG_DIR}}:/var/log/php"
-                    ));
+                    lines.push(format!("      - ${{{env_prefix}_LOG_DIR}}:/var/log/php"));
                     lines.push("    restart: always".to_string());
                     lines.push("    networks:".to_string());
                     lines.push("      - php-stack-network".to_string());
@@ -389,11 +428,11 @@ impl ConfigGenerator {
                     lines.push(format!(
                         "      - ${{{env_prefix}_CONF_FILE}}:/etc/redis.conf:ro"
                     ));
-                    lines.push(format!(
-                        "      - ${{{env_prefix}_DATA_DIR}}:/data/:rw"
-                    ));
+                    lines.push(format!("      - ${{{env_prefix}_DATA_DIR}}:/data/:rw"));
                     lines.push("    restart: always".to_string());
-                    lines.push("    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]".to_string());
+                    lines.push(
+                        "    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]".to_string(),
+                    );
                     lines.push("    networks:".to_string());
                     lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
@@ -404,7 +443,9 @@ impl ConfigGenerator {
                     lines.push(format!("      context: ${{{env_prefix}_BUILD_CONTEXT}}"));
                     lines.push("      args:".to_string());
                     // Pass the full image tag to Dockerfile's NGINX_BASE_IMAGE ARG
-                    lines.push(format!("        NGINX_BASE_IMAGE: \"${{{env_prefix}_VERSION}}\""));
+                    lines.push(format!(
+                        "        NGINX_BASE_IMAGE: \"${{{env_prefix}_VERSION}}\""
+                    ));
                     // File permissions configuration
                     lines.push("        PUID: \"${PUID:-1000}\"".to_string());
                     lines.push("        PGID: \"${PGID:-1000}\"".to_string());
@@ -456,7 +497,11 @@ impl ConfigGenerator {
                     candidates.push(src_tauri.join("services"));
                 }
                 // 3. 测试二进制布局：exe_dir 为 src-tauri/target/<profile>/deps/
-                if let Some(src_tauri) = exe_dir.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+                if let Some(src_tauri) = exe_dir
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent())
+                {
                     candidates.push(src_tauri.join("services"));
                 }
             }
@@ -509,8 +554,7 @@ impl ConfigGenerator {
 
         // Create destination directory if needed
         if let Some(parent) = dest_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("创建目录失败: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
         }
 
         // Copy file (destination is guaranteed not to exist at this point)
@@ -538,9 +582,9 @@ impl ConfigGenerator {
         };
 
         // Check if the exact service_dir template exists in any candidate base dir
-        let exact_found = Self::template_base_candidates().iter().any(|base| {
-            base.join(service_dir).join(key_file).exists()
-        });
+        let exact_found = Self::template_base_candidates()
+            .iter()
+            .any(|base| base.join(service_dir).join(key_file).exists());
         if exact_found {
             return (service_dir.to_string(), false);
         }
@@ -593,11 +637,15 @@ impl ConfigGenerator {
                 .unwrap_or_else(|| id.clone());
 
             // Resolve template directory: check if exact service_dir template exists, else fallback
-            let (template_dir, is_fallback) = Self::resolve_template_dir(&service.service_type, &service_dir_name);
+            let (template_dir, is_fallback) =
+                Self::resolve_template_dir(&service.service_type, &service_dir_name);
             if is_fallback {
-                app_log!(info, "engine::config_generator",
+                app_log!(
+                    info,
+                    "engine::config_generator",
                     "模板目录 services/{} 不存在，使用 {} 作为模板源",
-                    service_dir_name, template_dir
+                    service_dir_name,
+                    template_dir
                 );
             }
 
@@ -665,8 +713,12 @@ impl ConfigGenerator {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
-                    std::fs::create_dir_all(root.join(format!("services/{service_dir_name}/conf.d")))
-                        .map_err(|e| format!("创建 services/{service_dir_name}/conf.d/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(
+                        root.join(format!("services/{service_dir_name}/conf.d")),
+                    )
+                    .map_err(|e| {
+                        format!("创建 services/{service_dir_name}/conf.d/ 目录失败: {e}")
+                    })?;
 
                     // Copy Dockerfile from template
                     Self::copy_template_file(
@@ -700,11 +752,11 @@ impl ConfigGenerator {
     /// Returns BackupState or error if pre-check fails
     fn precheck_backup(project_root: &Path) -> Result<BackupState, String> {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
-        
+
         // List of files/directories to backup
         let items_to_backup = vec![".env", "docker-compose.yml", "services"];
         let mut existing_items = Vec::new();
-        
+
         // Check which items exist
         for item in &items_to_backup {
             let path = project_root.join(item);
@@ -712,22 +764,22 @@ impl ConfigGenerator {
                 existing_items.push((*item).to_string());
             }
         }
-        
+
         if existing_items.is_empty() {
             return Ok(BackupState::NothingToBackup);
         }
-        
+
         // Pre-check: verify backup zip file doesn't exist (avoid overwriting old backups)
         let backup_zip_name = format!("config_backup_{timestamp}.zip");
         let backup_zip_path = project_root.join(&backup_zip_name);
-        
+
         if backup_zip_path.exists() {
             return Err(format!("备份文件已存在，请删除后重试: {backup_zip_name}"));
         }
-        
-        Ok(BackupState::Ready { 
-            timestamp, 
-            items: existing_items 
+
+        Ok(BackupState::Ready {
+            timestamp,
+            items: existing_items,
         })
     }
 
@@ -739,22 +791,27 @@ impl ConfigGenerator {
             BackupState::Ready { timestamp, items } => {
                 let backup_zip_name = format!("config_backup_{timestamp}.zip");
                 let backup_zip_path = project_root.join(&backup_zip_name);
-                
-                app_log!(info, "engine::config_generator", "开始创建配置备份: {}", backup_zip_name);
-                
+
+                app_log!(
+                    info,
+                    "engine::config_generator",
+                    "开始创建配置备份: {}",
+                    backup_zip_name
+                );
+
                 // Create ZIP file
                 let file = std::fs::File::create(&backup_zip_path)
                     .map_err(|e| format!("创建备份文件失败: {e}"))?;
                 let mut zip = zip::ZipWriter::new(file);
                 let zip_options = FileOptions::<()>::default()
                     .compression_method(zip::CompressionMethod::Deflated);
-                
+
                 let mut backed_up_count = 0;
-                
+
                 // Add each item to the ZIP
                 for item in &items {
                     let item_path = project_root.join(item);
-                    
+
                     if item_path.is_file() {
                         // Add single file
                         match std::fs::read(&item_path) {
@@ -763,35 +820,61 @@ impl ConfigGenerator {
                                     .map_err(|e| format!("添加文件到ZIP失败: {e}"))?;
                                 zip.write_all(&content)
                                     .map_err(|e| format!("写入文件内容失败: {e}"))?;
-                                app_log!(info, "engine::config_generator", "已添加到备份: {}", item);
+                                app_log!(
+                                    info,
+                                    "engine::config_generator",
+                                    "已添加到备份: {}",
+                                    item
+                                );
                                 backed_up_count += 1;
                             }
                             Err(e) => {
-                                app_log!(error, "engine::config_generator", "读取文件 {} 失败: {}", item, e);
+                                app_log!(
+                                    error,
+                                    "engine::config_generator",
+                                    "读取文件 {} 失败: {}",
+                                    item,
+                                    e
+                                );
                                 // Continue with other files, don't fail entire backup
                             }
                         }
                     } else if item_path.is_dir() {
                         // Add directory recursively
-                        match Self::add_dir_to_zip_recursive(&mut zip, &item_path, item, zip_options) {
+                        match Self::add_dir_to_zip_recursive(
+                            &mut zip,
+                            &item_path,
+                            item,
+                            zip_options,
+                        ) {
                             Ok(count) => {
-                                app_log!(info, "engine::config_generator", "已添加目录 {} ({} 个文件)", item, count);
+                                app_log!(
+                                    info,
+                                    "engine::config_generator",
+                                    "已添加目录 {} ({} 个文件)",
+                                    item,
+                                    count
+                                );
                                 backed_up_count += count;
                             }
                             Err(e) => {
-                                app_log!(error, "engine::config_generator", "添加目录 {} 失败: {}", item, e);
+                                app_log!(
+                                    error,
+                                    "engine::config_generator",
+                                    "添加目录 {} 失败: {}",
+                                    item,
+                                    e
+                                );
                                 // Continue with other items
                             }
                         }
                     }
                 }
-                
+
                 // Add user custom configuration files (same as backup_engine.rs)
-                let user_config_files = vec![
-                    ".user_mirror_config.json",
-                    ".user_version_overrides.json",
-                ];
-                
+                let user_config_files =
+                    vec![".user_mirror_config.json", ".user_version_overrides.json"];
+
                 for config_file in &user_config_files {
                     let config_path = project_root.join(config_file);
                     if config_path.exists() {
@@ -801,33 +884,54 @@ impl ConfigGenerator {
                                     .map_err(|e| format!("添加用户配置文件到ZIP失败: {e}"))?;
                                 zip.write_all(&content)
                                     .map_err(|e| format!("写入用户配置文件失败: {e}"))?;
-                                app_log!(info, "engine::config_generator", "已添加用户配置: {}", config_file);
+                                app_log!(
+                                    info,
+                                    "engine::config_generator",
+                                    "已添加用户配置: {}",
+                                    config_file
+                                );
                                 backed_up_count += 1;
                             }
                             Err(e) => {
-                                app_log!(warn, "engine::config_generator", "读取用户配置文件 {} 失败: {}", config_file, e);
+                                app_log!(
+                                    warn,
+                                    "engine::config_generator",
+                                    "读取用户配置文件 {} 失败: {}",
+                                    config_file,
+                                    e
+                                );
                                 // Continue with other config files
                             }
                         }
                     }
                 }
-                
+
                 // Finish ZIP file
                 zip.finish().map_err(|e| format!("完成ZIP文件失败: {e}"))?;
-                
+
                 if backed_up_count == 0 {
                     // No files were successfully added, delete the empty ZIP
                     let _ = std::fs::remove_file(&backup_zip_path);
-                    app_log!(warn, "engine::config_generator", "没有文件被成功备份，已删除空ZIP文件");
+                    app_log!(
+                        warn,
+                        "engine::config_generator",
+                        "没有文件被成功备份，已删除空ZIP文件"
+                    );
                     return Ok(vec![]);
                 }
-                
-                app_log!(info, "engine::config_generator", "备份完成: {} (共 {} 个文件/目录项)", backup_zip_name, items.len());
+
+                app_log!(
+                    info,
+                    "engine::config_generator",
+                    "备份完成: {} (共 {} 个文件/目录项)",
+                    backup_zip_name,
+                    items.len()
+                );
                 Ok(vec![backup_zip_name])
             }
         }
     }
-    
+
     /// Recursively add directory contents to ZIP
     fn add_dir_to_zip_recursive(
         zip: &mut zip::ZipWriter<std::fs::File>,
@@ -836,13 +940,11 @@ impl ConfigGenerator {
         options: FileOptions<()>,
     ) -> Result<usize, String> {
         let mut file_count = 0;
-        
-        for entry in std::fs::read_dir(dir_path)
-            .map_err(|e| format!("读取目录失败: {e}"))?
-        {
+
+        for entry in std::fs::read_dir(dir_path).map_err(|e| format!("读取目录失败: {e}"))? {
             let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 if let Some(file_name) = path.file_name() {
                     let zip_path = format!("{}/{}", zip_base_path, file_name.to_string_lossy());
@@ -855,19 +957,26 @@ impl ConfigGenerator {
                             file_count += 1;
                         }
                         Err(e) => {
-                            app_log!(warn, "engine::config_generator", "跳过文件 {:?}: {}", path, e);
+                            app_log!(
+                                warn,
+                                "engine::config_generator",
+                                "跳过文件 {:?}: {}",
+                                path,
+                                e
+                            );
                         }
                     }
                 }
             } else if path.is_dir() {
                 if let Some(dir_name) = path.file_name() {
                     let sub_zip_path = format!("{}/{}", zip_base_path, dir_name.to_string_lossy());
-                    let sub_count = Self::add_dir_to_zip_recursive(zip, &path, &sub_zip_path, options)?;
+                    let sub_count =
+                        Self::add_dir_to_zip_recursive(zip, &path, &sub_zip_path, options)?;
                     file_count += sub_count;
                 }
             }
         }
-        
+
         Ok(file_count)
     }
 
@@ -876,10 +985,10 @@ impl ConfigGenerator {
     /// Contains: .env, docker-compose.yml, services/, .user_mirror_config.json, .user_version_overrides.json
     pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
         app_log!(info, "engine::config_generator", "开始预检查备份...");
-        
+
         // Phase 1: Pre-check
         let backup_state = Self::precheck_backup(project_root)?;
-        
+
         // Phase 2: Execute with rollback
         app_log!(info, "engine::config_generator", "执行备份...");
         Self::execute_backup(backup_state, project_root)
@@ -887,7 +996,11 @@ impl ConfigGenerator {
 
     /// Apply config: write .env, docker-compose.yml, create directories.
     /// If enable_backup is true, backup existing config files before overwriting.
-    pub async fn apply(config: &EnvConfig, project_root: &Path, enable_backup: bool) -> Result<Vec<String>, String> {
+    pub async fn apply(
+        config: &EnvConfig,
+        project_root: &Path,
+        enable_backup: bool,
+    ) -> Result<Vec<String>, String> {
         // Validate first
         Self::validate(config)?;
 
@@ -910,18 +1023,20 @@ impl ConfigGenerator {
 
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
-        
+
         // Generate .npmrc file in workspace path if NPM mirror is configured
         let npm_mirror = env_file.get("NPM_MIRROR").unwrap_or("");
         if !npm_mirror.is_empty() && npm_mirror != "https://registry.npmjs.org" {
             // 从 workspace.json 获取工作区路径
-            let workspace_path = if let Some(workspace_config) = crate::engine::workspace_manager::WorkspaceManager::load_workspace()? {
+            let workspace_path = if let Some(workspace_config) =
+                crate::engine::workspace_manager::WorkspaceManager::load_workspace()?
+            {
                 PathBuf::from(workspace_config.workspace_path)
             } else {
                 // 如果没有配置 workspace，使用项目根目录作为后备
                 project_root.to_path_buf()
             };
-            
+
             let npmrc_content = format!("registry={npm_mirror}\n");
             let npmrc_path = workspace_path.join(".npmrc");
             std::fs::write(&npmrc_path, npmrc_content)
@@ -930,7 +1045,6 @@ impl ConfigGenerator {
 
         Ok(backed_up_files)
     }
-
 }
 
 #[cfg(test)]
@@ -1003,8 +1117,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("创建临时目录失败");
         let dest = dir.path().join("Dockerfile");
 
-        ConfigGenerator::copy_template_file("php85/Dockerfile", &dest)
-            .expect("模板释放应成功");
+        ConfigGenerator::copy_template_file("php85/Dockerfile", &dest).expect("模板释放应成功");
 
         assert!(dest.exists(), "目标文件应被释放创建");
         assert!(!std::fs::read_to_string(&dest).unwrap().is_empty());
@@ -1099,7 +1212,8 @@ mod tests {
             mysql_root_password: None,
         };
 
-        let env = ConfigGenerator::generate_env(&config, Some(&existing_env), &std::env::temp_dir());
+        let env =
+            ConfigGenerator::generate_env(&config, Some(&existing_env), &std::env::temp_dir());
         let map = env.to_map();
 
         // Custom variable preserved

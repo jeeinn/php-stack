@@ -33,10 +33,9 @@ impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
     pub fn preview(zip_path: &str) -> Result<RestorePreview, String> {
-        let file = std::fs::File::open(zip_path)
-            .map_err(|e| format!("打开备份文件失败: {e}"))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+        let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
 
         // Read manifest.json
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
@@ -61,10 +60,9 @@ impl RestoreEngine {
     /// For each file in manifest.files, read from ZIP and compute SHA256,
     /// compare with recorded hash.
     pub fn verify_integrity(zip_path: &str) -> Result<bool, String> {
-        let file = std::fs::File::open(zip_path)
-            .map_err(|e| format!("打开备份文件失败: {e}"))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+        let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
 
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
 
@@ -97,10 +95,9 @@ impl RestoreEngine {
         let mut restored_files: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
 
-        let file = std::fs::File::open(zip_path)
-            .map_err(|e| format!("打开备份文件失败: {e}"))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+        let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
 
         // Step 1: Read manifest
         Self::emit_progress(app_handle, "解析备份包...", 5);
@@ -115,7 +112,11 @@ impl RestoreEngine {
 
         // Step 3: Extract docker-compose.yml
         Self::emit_progress(app_handle, "恢复 Docker 配置...", 25);
-        match Self::extract_file_to_path(&mut archive, "docker-compose.yml", &project_root.join("docker-compose.yml")) {
+        match Self::extract_file_to_path(
+            &mut archive,
+            "docker-compose.yml",
+            &project_root.join("docker-compose.yml"),
+        ) {
             Ok(()) => restored_files.push("docker-compose.yml".to_string()),
             Err(e) => errors.push(format!("恢复 docker-compose.yml 失败: {e}")),
         }
@@ -129,7 +130,7 @@ impl RestoreEngine {
 
         // Step 4.5: Restore user custom configuration files
         Self::emit_progress(app_handle, "恢复用户自定义配置...", 45);
-        
+
         // .user_mirror_config.json - User mirror source configuration
         match Self::extract_file_to_path(
             &mut archive,
@@ -141,7 +142,7 @@ impl RestoreEngine {
                 // Not a critical error, file may not exist in backup
             }
         }
-        
+
         // .user_version_overrides.json - User version override configuration
         match Self::extract_file_to_path(
             &mut archive,
@@ -179,11 +180,7 @@ impl RestoreEngine {
 
         // Step 7: Extract database/ SQL files
         Self::emit_progress(app_handle, "恢复数据库文件...", 85);
-        match Self::extract_prefix(
-            &mut archive,
-            "database/",
-            &project_root.join("database"),
-        ) {
+        match Self::extract_prefix(&mut archive, "database/", &project_root.join("database")) {
             Ok(files) => restored_files.extend(files),
             Err(e) => errors.push(format!("恢复数据库文件失败: {e}")),
         }
@@ -199,7 +196,6 @@ impl RestoreEngine {
             errors,
         })
     }
-
 
     /// Read manifest.json from a ZIP archive.
     fn read_manifest_from_archive<R: Read + std::io::Seek>(
@@ -233,8 +229,7 @@ impl RestoreEngine {
             .map_err(|e| format!("读取文件内容 '{zip_entry}' 失败: {e}"))?;
 
         if let Some(parent) = target_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("创建目录失败: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
         }
 
         std::fs::write(target_path, &content)
@@ -307,8 +302,7 @@ impl RestoreEngine {
             .map_err(|e| format!("读取 .env 内容失败: {e}"))?;
 
         let env_path = project_root.join(".env");
-        std::fs::write(&env_path, content)
-            .map_err(|e| format!("写入 .env 失败: {e}"))?;
+        std::fs::write(&env_path, content).map_err(|e| format!("写入 .env 失败: {e}"))?;
 
         Ok(())
     }
@@ -327,7 +321,6 @@ impl RestoreEngine {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -367,7 +360,8 @@ mod tests {
         let php_ini_hash = BackupEngine::compute_sha256(php_ini_content);
 
         // Add user custom configuration files
-        let user_mirror_config_content = b"{\"apt\":{\"source\":\"http://mirrors.aliyun.com/debian/\",\"enabled\":true}}";
+        let user_mirror_config_content =
+            b"{\"apt\":{\"source\":\"http://mirrors.aliyun.com/debian/\",\"enabled\":true}}";
         zip.start_file(".user_mirror_config.json", zip_options)
             .unwrap();
         zip.write_all(user_mirror_config_content).unwrap();
@@ -385,7 +379,10 @@ mod tests {
         files.insert("docker-compose.yml".to_string(), compose_hash);
         files.insert("services/php82/php.ini".to_string(), php_ini_hash);
         files.insert(".user_mirror_config.json".to_string(), user_mirror_hash);
-        files.insert(".user_version_overrides.json".to_string(), user_version_hash);
+        files.insert(
+            ".user_version_overrides.json".to_string(),
+            user_version_hash,
+        );
 
         let mut ports = HashMap::new();
         ports.insert(3306, 3306);
@@ -466,10 +463,7 @@ mod tests {
             services: Vec::new(),
             options: BackupOptions {
                 include_projects: true,
-                project_patterns: vec![
-                    "www/test/**".to_string(),
-                    "www/readme.md".to_string(),
-                ],
+                project_patterns: vec!["www/test/**".to_string(), "www/readme.md".to_string()],
                 include_logs: false,
             },
             files,
@@ -509,8 +503,7 @@ mod tests {
         let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
         let zip_path = create_test_backup(tmp_dir.path());
 
-        let result =
-            RestoreEngine::verify_integrity(&zip_path).expect("验证完整性失败");
+        let result = RestoreEngine::verify_integrity(&zip_path).expect("验证完整性失败");
         assert!(result, "Valid backup should pass integrity check");
     }
 
@@ -557,10 +550,7 @@ mod tests {
 
         let result = RestoreEngine::verify_integrity(backup_path.to_str().unwrap())
             .expect("验证完整性调用失败");
-        assert!(
-            !result,
-            "Tampered backup should fail integrity check"
-        );
+        assert!(!result, "Tampered backup should fail integrity check");
     }
 
     #[test]
@@ -573,11 +563,7 @@ mod tests {
         fs::create_dir_all(&restore_dir).expect("创建恢复目录失败");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(RestoreEngine::restore(
-            &zip_path,
-            &restore_dir,
-            None,
-        ));
+        let result = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None));
 
         let restore_result = result.expect("恢复操作失败");
         assert!(
@@ -608,8 +594,7 @@ mod tests {
             php_ini_path.exists(),
             "services/php82/php.ini should be restored"
         );
-        let php_ini_content =
-            fs::read_to_string(&php_ini_path).expect("读取 php.ini 失败");
+        let php_ini_content = fs::read_to_string(&php_ini_path).expect("读取 php.ini 失败");
         assert!(
             php_ini_content.contains("memory_limit=256M"),
             "php.ini should contain memory_limit"
@@ -664,11 +649,7 @@ mod tests {
         fs::create_dir_all(&restore_dir).expect("创建恢复目录失败");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(RestoreEngine::restore(
-            &zip_path,
-            &restore_dir,
-            None,
-        ));
+        let result = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None));
 
         let restore_result = result.expect("恢复操作失败");
         assert!(

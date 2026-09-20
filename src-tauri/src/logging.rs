@@ -12,38 +12,38 @@ pub fn init_logging(app_data_dir: &PathBuf) -> Result<(), String> {
     // 确保目录存在
     std::fs::create_dir_all(app_data_dir)
         .map_err(|e| format!("无法创建应用数据目录 {}: {}", app_data_dir.display(), e))?;
-    
+
     let log_path = app_data_dir.join("php-stack.log");
-    
+
     // 每次启动时覆盖写入（truncate）
     let file = OpenOptions::new()
         .create(true)
         .write(true)
-        .truncate(true)  // 关键：覆盖旧日志
+        .truncate(true) // 关键：覆盖旧日志
         .open(&log_path)
         .map_err(|e| format!("无法创建日志文件 {}: {}", log_path.display(), e))?;
-    
+
     // 保存文件句柄到全局变量
     *LOG_FILE.lock().unwrap() = Some(file);
-    
+
     // 配置 tracing subscriber
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,app=debug"));
-    
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,app=debug"));
+
     // 自定义格式化器：添加时间前缀
     let formatter = fmt::format()
         .with_target(false)
         .with_level(true)
         .with_timer(CustomTimer)
         .compact();
-    
+
     // 输出到控制台
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .event_format(formatter)
         .with_writer(std::io::stdout)
         .init();
-    
+
     Ok(())
 }
 

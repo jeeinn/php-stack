@@ -52,25 +52,14 @@ pub fn verify_backup(zip_path: String) -> Result<bool, String> {
 
 /// 执行环境恢复
 #[tauri::command]
-pub async fn execute_restore(
-    zip_path: String,
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn execute_restore(zip_path: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     let project_root = get_project_root()?;
-    let result = RestoreEngine::restore(
-        &zip_path,
-        &project_root,
-        Some(&app_handle),
-    )
-    .await?;
+    let result = RestoreEngine::restore(&zip_path, &project_root, Some(&app_handle)).await?;
 
     if result.success {
         Ok(())
     } else {
-        Err(format!(
-            "恢复完成但存在错误:\n{}",
-            result.errors.join("\n")
-        ))
+        Err(format!("恢复完成但存在错误:\n{}", result.errors.join("\n")))
     }
 }
 
@@ -84,13 +73,18 @@ pub fn select_project_folder() -> Result<Option<String>, String> {
 
 /// 将绝对路径转换为相对于项目根目录的路径
 #[tauri::command]
-pub fn convert_to_relative_path(absolute_path: String, is_directory: bool) -> Result<String, String> {
+pub fn convert_to_relative_path(
+    absolute_path: String,
+    is_directory: bool,
+) -> Result<String, String> {
     let project_root = get_project_root()?;
     let abs_path = std::path::PathBuf::from(&absolute_path);
-    
+
     // 使用 pathdiff 计算相对路径，它会自动处理跨平台差异（如 Windows 盘符）
     match pathdiff::diff_paths(&abs_path, &project_root) {
-        Some(relative) if relative.as_os_str().is_empty() || relative == std::path::PathBuf::from(".") => {
+        Some(relative)
+            if relative.as_os_str().is_empty() || relative == std::path::PathBuf::from(".") =>
+        {
             Err("不能选择项目根目录本身，请选择其子文件或子文件夹".to_string())
         }
         Some(relative) => {
@@ -102,7 +96,7 @@ pub fn convert_to_relative_path(absolute_path: String, is_directory: bool) -> Re
                     project_root.display()
                 ));
             }
-            
+
             // 统一转换为正斜杠
             let normalized = rel_str.replace('\\', "/");
             if is_directory {

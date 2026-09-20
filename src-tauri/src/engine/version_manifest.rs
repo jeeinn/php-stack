@@ -79,13 +79,11 @@ impl VersionManifest {
         prefix: &str,
     ) -> Option<(&String, &VersionEntry)> {
         let prefix_lower = prefix.to_lowercase();
-        self.versions
-            .get(service_type)
-            .and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|(_, entry)| entry.service_dir == prefix_lower)
-            })
+        self.versions.get(service_type).and_then(|entries| {
+            entries
+                .iter()
+                .find(|(_, entry)| entry.service_dir == prefix_lower)
+        })
     }
 
     /// 获取指定服务的所有可用版本条目，按版本号降序排列
@@ -130,12 +128,12 @@ impl VersionManifest {
         self.get_entry(service_type, id)
             .filter(|entry| entry.eol)
             .and_then(|entry| {
-                entry.description.as_ref().map(|desc| {
-                    format!("⚠️ {desc} - 建议使用更新版本")
-                })
+                entry
+                    .description
+                    .as_ref()
+                    .map(|desc| format!("⚠️ {desc} - 建议使用更新版本"))
             })
     }
-
 }
 
 /// 从 ID 中提取版本数字用于排序（如 "php82" → (8, 2), "nginx128" → (1, 28)）

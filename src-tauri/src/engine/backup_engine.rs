@@ -1,9 +1,9 @@
+use glob::glob;
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{Write, Seek};
+use std::io::{Seek, Write};
 use std::path::Path;
 use zip::write::FileOptions;
-use sha2::{Sha256, Digest};
-use glob::glob;
 
 use super::backup_manifest::{BackupManifest, BackupOptions};
 use crate::app_log;
@@ -26,8 +26,7 @@ impl BackupEngine {
         project_root: &Path,
         app_handle: Option<&tauri::AppHandle>,
     ) -> Result<(), String> {
-        let file = fs::File::create(save_path)
-            .map_err(|e| format!("创建备份文件失败: {e}"))?;
+        let file = fs::File::create(save_path).map_err(|e| format!("创建备份文件失败: {e}"))?;
         let mut zip = zip::ZipWriter::new(file);
         let mut manifest = BackupManifest::new();
         manifest.options = options.clone();
@@ -36,8 +35,7 @@ impl BackupEngine {
         Self::emit_progress(app_handle, "打包环境配置...", 10);
         let env_path = project_root.join(".env");
         if env_path.exists() {
-            let content = fs::read(&env_path)
-                .map_err(|e| format!("读取 .env 失败: {e}"))?;
+            let content = fs::read(&env_path).map_err(|e| format!("读取 .env 失败: {e}"))?;
             Self::add_file_to_zip(&mut zip, ".env", &content, &mut manifest)?;
         }
 
@@ -47,12 +45,7 @@ impl BackupEngine {
         if compose_path.exists() {
             let content = fs::read(&compose_path)
                 .map_err(|e| format!("读取 docker-compose.yml 失败: {e}"))?;
-            Self::add_file_to_zip(
-                &mut zip,
-                "docker-compose.yml",
-                &content,
-                &mut manifest,
-            )?;
+            Self::add_file_to_zip(&mut zip, "docker-compose.yml", &content, &mut manifest)?;
         }
 
         // Step 3: Pack services/ configs (30%)
@@ -64,7 +57,7 @@ impl BackupEngine {
 
         // Step 3.5: Pack user custom configuration files (35%)
         Self::emit_progress(app_handle, "打包用户自定义配置...", 35);
-        
+
         // .user_mirror_config.json - User mirror source configuration
         let user_mirror_config_path = project_root.join(".user_mirror_config.json");
         if user_mirror_config_path.exists() {
@@ -77,7 +70,7 @@ impl BackupEngine {
                 &mut manifest,
             )?;
         }
-        
+
         // .user_version_overrides.json - User version override configuration
         let user_version_overrides_path = project_root.join(".user_version_overrides.json");
         if user_version_overrides_path.exists() {
@@ -97,22 +90,31 @@ impl BackupEngine {
             for pattern in &options.project_patterns {
                 // 将相对路径模式转换为绝对路径模式
                 let mut normalized_pattern = pattern.clone();
-                
+
                 // 如果模式以 /** 结尾，添加 /* 以匹配文件
                 // 例如："www/AAA/**" -> "www/AAA/**/*"
                 if normalized_pattern.ends_with("/**") {
                     normalized_pattern.push_str("/*");
                 }
-                
+
                 let abs_pattern = if std::path::Path::new(&normalized_pattern).is_absolute() {
                     normalized_pattern
                 } else {
-                    project_root.join(&normalized_pattern).to_string_lossy().replace('\\', "/")
+                    project_root
+                        .join(&normalized_pattern)
+                        .to_string_lossy()
+                        .replace('\\', "/")
                 };
-                
+
                 // 记录尝试的模式（用于调试）
-                app_log!(debug, "engine::backup", "尝试匹配模式: {} -> {}", pattern, abs_pattern);
-                
+                app_log!(
+                    debug,
+                    "engine::backup",
+                    "尝试匹配模式: {} -> {}",
+                    pattern,
+                    abs_pattern
+                );
+
                 match glob(&abs_pattern) {
                     Ok(entries) => {
                         let mut matched_count = 0;
@@ -123,11 +125,17 @@ impl BackupEngine {
                                     match fs::read(&path) {
                                         Ok(content) => {
                                             // 计算相对于项目根目录的路径
-                                            let relative_path = pathdiff::diff_paths(&path, project_root)
-                                                .map(|p| p.to_string_lossy().replace('\\', "/"))
-                                                .unwrap_or_else(|| path.display().to_string());
+                                            let relative_path =
+                                                pathdiff::diff_paths(&path, project_root)
+                                                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                                                    .unwrap_or_else(|| path.display().to_string());
                                             let zip_path = format!("projects/{relative_path}");
-                                            app_log!(debug, "engine::backup", "添加文件: {}", zip_path);
+                                            app_log!(
+                                                debug,
+                                                "engine::backup",
+                                                "添加文件: {}",
+                                                zip_path
+                                            );
                                             Self::add_file_to_zip(
                                                 &mut zip,
                                                 &zip_path,
@@ -154,7 +162,13 @@ impl BackupEngine {
                                 }
                             }
                         }
-                        app_log!(info, "engine::backup", "模式 '{}' 匹配到 {} 个文件", pattern, matched_count);
+                        app_log!(
+                            info,
+                            "engine::backup",
+                            "模式 '{}' 匹配到 {} 个文件",
+                            pattern,
+                            matched_count
+                        );
                     }
                     Err(e) => {
                         let error_msg = format!("Glob 模式错误 '{pattern}': {e}");
@@ -178,15 +192,16 @@ impl BackupEngine {
         // Step 8: Write manifest.json (95%)
         Self::emit_progress(app_handle, "生成备份清单...", 95);
         let manifest_json = manifest.serialize()?;
-        let zip_options = FileOptions::<()>::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("manifest.json", zip_options)
             .map_err(|e| format!("创建 manifest 条目失败: {e}"))?;
         zip.write_all(manifest_json.as_bytes())
             .map_err(|e| format!("写入 manifest 失败: {e}"))?;
 
         // Finish ZIP
-        zip.finish().map_err(|e| format!("完成 ZIP 文件失败: {e}"))?;
+        zip.finish()
+            .map_err(|e| format!("完成 ZIP 文件失败: {e}"))?;
 
         Self::emit_progress(app_handle, "备份完成", 100);
         Ok(())
@@ -220,8 +235,8 @@ impl BackupEngine {
         content: &[u8],
         manifest: &mut BackupManifest,
     ) -> Result<(), String> {
-        let zip_options = FileOptions::<()>::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(zip_path, zip_options)
             .map_err(|e| format!("创建 ZIP 条目失败: {e}"))?;
         zip.write_all(content)
@@ -242,9 +257,7 @@ impl BackupEngine {
         if !src_dir.exists() {
             return Ok(());
         }
-        for entry in
-            fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {e}"))?
-        {
+        for entry in fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {e}"))? {
             let entry = entry.map_err(|e| format!("读取目录条目失败: {e}"))?;
             let path = entry.path();
             let name = path.file_name().unwrap().to_string_lossy();
@@ -293,8 +306,7 @@ mod tests {
         let project_root = tmp_dir.path();
 
         // Create .env and docker-compose.yml in the temp project root
-        fs::write(project_root.join(".env"), "PHP82_VERSION=8.2.27\n")
-            .expect("写入 .env 失败");
+        fs::write(project_root.join(".env"), "PHP82_VERSION=8.2.27\n").expect("写入 .env 失败");
         fs::write(
             project_root.join("docker-compose.yml"),
             "version: '3'\nservices:\n  php:\n    image: php:8.2\n",
@@ -304,8 +316,7 @@ mod tests {
         // Create a services/ directory with a config file
         let services_dir = project_root.join("services/php82");
         fs::create_dir_all(&services_dir).expect("创建 services 目录失败");
-        fs::write(services_dir.join("php.ini"), "memory_limit=256M\n")
-            .expect("写入 php.ini 失败");
+        fs::write(services_dir.join("php.ini"), "memory_limit=256M\n").expect("写入 php.ini 失败");
 
         // Create user custom configuration files
         fs::write(

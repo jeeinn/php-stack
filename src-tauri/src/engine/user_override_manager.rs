@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-use super::version_manifest::{VersionEntry, ServiceType, VersionManifest};
+use super::version_manifest::{ServiceType, VersionEntry, VersionManifest};
 use crate::app_log;
 
 /// 用户自定义的版本覆盖配置
@@ -28,7 +28,7 @@ impl UserOverrideManager {
     pub fn new(project_root: &Path) -> Self {
         let default_manifest = VersionManifest::new();
         let user_overrides = Self::load_user_overrides(project_root);
-        
+
         Self {
             default_manifest,
             user_overrides,
@@ -41,21 +41,32 @@ impl UserOverrideManager {
     ) -> HashMap<ServiceType, HashMap<String, UserVersionOverride>> {
         // 使用 project_root 作为配置文件存放位置（与 .env 同级）
         let overrides_path = project_root.join(".user_version_overrides.json");
-        
+
         if !overrides_path.exists() {
-            app_log!(info, "engine::user_override", "未找到用户覆盖配置文件，使用默认配置");
+            app_log!(
+                info,
+                "engine::user_override",
+                "未找到用户覆盖配置文件，使用默认配置"
+            );
             return HashMap::new();
         }
 
-        app_log!(info, "engine::user_override", "加载用户覆盖配置: {:?}", overrides_path);
+        app_log!(
+            info,
+            "engine::user_override",
+            "加载用户覆盖配置: {:?}",
+            overrides_path
+        );
 
         match std::fs::read_to_string(&overrides_path) {
             Ok(content) => {
-                match serde_json::from_str::<HashMap<String, HashMap<String, UserVersionOverride>>>(&content) {
+                match serde_json::from_str::<HashMap<String, HashMap<String, UserVersionOverride>>>(
+                    &content,
+                ) {
                     Ok(raw) => {
                         let mut result = HashMap::new();
                         let mut override_count = 0;
-                        
+
                         for (service_key, versions) in raw {
                             let service_type = match service_key.as_str() {
                                 "php" => ServiceType::Php,
@@ -65,11 +76,21 @@ impl UserOverrideManager {
                                 _ => continue,
                             };
                             override_count += versions.len();
-                            app_log!(info, "engine::user_override", "{service_key}: {} 个版本覆盖", versions.len());
+                            app_log!(
+                                info,
+                                "engine::user_override",
+                                "{service_key}: {} 个版本覆盖",
+                                versions.len()
+                            );
                             result.insert(service_type, versions);
                         }
-                        
-                        app_log!(info, "engine::user_override", "加载成功，共 {} 个服务类型，{override_count} 个版本覆盖", result.len());
+
+                        app_log!(
+                            info,
+                            "engine::user_override",
+                            "加载成功，共 {} 个服务类型，{override_count} 个版本覆盖",
+                            result.len()
+                        );
                         result
                     }
                     Err(e) => {
@@ -87,22 +108,22 @@ impl UserOverrideManager {
 
     /// 获取合并后的版本条目（用户覆盖 > 默认配置）
     /// 用户覆盖仅替换 image_tag（和可选的 description），其他字段保持 manifest 默认值
-    pub fn get_merged_entry(
-        &self,
-        service_type: &ServiceType,
-        id: &str,
-    ) -> Option<VersionEntry> {
+    pub fn get_merged_entry(&self, service_type: &ServiceType, id: &str) -> Option<VersionEntry> {
         // 1. 检查用户是否有覆盖配置
         if let Some(user_override) = self
             .user_overrides
             .get(service_type)
             .and_then(|entries| entries.get(id))
         {
-            app_log!(info, "engine::user_override", "{} {} 使用自定义标签: {}",
+            app_log!(
+                info,
+                "engine::user_override",
+                "{} {} 使用自定义标签: {}",
                 format!("{service_type:?}").to_lowercase(),
-                id, 
-                user_override.image_tag);
-            
+                id,
+                user_override.image_tag
+            );
+
             // 2. 获取默认配置作为基础
             if let Some(default_info) = self.default_manifest.get_entry(service_type, id) {
                 // 3. 返回合并后的配置（用户覆盖的 image_tag 优先）
@@ -113,7 +134,10 @@ impl UserOverrideManager {
                     default_port: default_info.default_port,
                     show_port: default_info.show_port,
                     eol: default_info.eol,
-                    description: user_override.description.clone().or_else(|| default_info.description.clone()),
+                    description: user_override
+                        .description
+                        .clone()
+                        .or_else(|| default_info.description.clone()),
                 });
             }
         }
@@ -141,8 +165,7 @@ impl UserOverrideManager {
         let json = serde_json::to_string_pretty(&self.user_overrides)
             .map_err(|e| format!("序列化失败: {e}"))?;
 
-        std::fs::write(&overrides_path, json)
-            .map_err(|e| format!("写入文件失败: {e}"))?;
+        std::fs::write(&overrides_path, json).map_err(|e| format!("写入文件失败: {e}"))?;
 
         Ok(())
     }
@@ -163,8 +186,7 @@ impl UserOverrideManager {
         let json = serde_json::to_string_pretty(&self.user_overrides)
             .map_err(|e| format!("序列化失败: {e}"))?;
 
-        std::fs::write(&overrides_path, json)
-            .map_err(|e| format!("写入文件失败: {e}"))?;
+        std::fs::write(&overrides_path, json).map_err(|e| format!("写入文件失败: {e}"))?;
 
         Ok(())
     }
@@ -172,12 +194,11 @@ impl UserOverrideManager {
     /// 重置所有用户覆盖（恢复到默认配置）
     pub fn reset_all_overrides(&mut self, project_root: &Path) -> Result<(), String> {
         self.user_overrides.clear();
-        
+
         // 删除配置文件（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         if overrides_path.exists() {
-            std::fs::remove_file(&overrides_path)
-                .map_err(|e| format!("删除文件失败: {e}"))?;
+            std::fs::remove_file(&overrides_path).map_err(|e| format!("删除文件失败: {e}"))?;
         }
 
         Ok(())
@@ -208,7 +229,7 @@ mod tests {
     fn test_get_default_when_no_override() {
         let temp_dir = env::temp_dir();
         let manager = UserOverrideManager::new(&temp_dir);
-        
+
         let info = manager.get_merged_entry(&ServiceType::Mysql, "mysql80");
         assert!(info.is_some());
         let info = info.unwrap();

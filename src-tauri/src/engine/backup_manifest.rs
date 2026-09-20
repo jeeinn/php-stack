@@ -48,8 +48,7 @@ impl Default for BackupManifest {
 impl BackupManifest {
     /// 序列化为格式化的 JSON 字符串（缩进 2 空格）
     pub fn serialize(&self) -> Result<String, String> {
-        serde_json::to_string_pretty(self)
-            .map_err(|e| format!("序列化 manifest 失败: {e}"))
+        serde_json::to_string_pretty(self).map_err(|e| format!("序列化 manifest 失败: {e}"))
     }
 
     /// 从 JSON 字符串反序列化，缺少必需字段时返回描述性错误
@@ -94,7 +93,6 @@ impl BackupManifest {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,14 +103,8 @@ mod tests {
         ports.insert(8080, 80);
 
         let mut files = HashMap::new();
-        files.insert(
-            ".env".to_string(),
-            "abc123def456".to_string(),
-        );
-        files.insert(
-            "docker-compose.yml".to_string(),
-            "789xyz000111".to_string(),
-        );
+        files.insert(".env".to_string(), "abc123def456".to_string());
+        files.insert("docker-compose.yml".to_string(), "789xyz000111".to_string());
 
         BackupManifest {
             version: "1.0.0".to_string(),
@@ -147,8 +139,7 @@ mod tests {
     fn test_serialize_deserialize_roundtrip() {
         let manifest = sample_manifest();
         let json = manifest.serialize().expect("serialize should succeed");
-        let deserialized =
-            BackupManifest::deserialize(&json).expect("deserialize should succeed");
+        let deserialized = BackupManifest::deserialize(&json).expect("deserialize should succeed");
         assert_eq!(manifest, deserialized);
     }
 

@@ -1,14 +1,14 @@
+mod backup;
 mod docker;
 mod env_config;
 mod mirror;
-mod backup;
 mod workspace;
 
 // Re-export all commands for lib.rs invoke_handler registration
+pub use backup::*;
 pub use docker::*;
 pub use env_config::*;
 pub use mirror::*;
-pub use backup::*;
 pub use workspace::*;
 
 use crate::engine::workspace_manager::WorkspaceManager;

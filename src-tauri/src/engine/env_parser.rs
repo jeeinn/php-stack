@@ -339,10 +339,7 @@ mod tests {
             } => {
                 assert_eq!(key, "KEY");
                 assert_eq!(value, "value");
-                assert_eq!(
-                    inline_comment,
-                    &Some("# this is a comment".to_string())
-                );
+                assert_eq!(inline_comment, &Some("# this is a comment".to_string()));
             }
             _ => panic!("Expected KeyValue"),
         }
@@ -407,9 +404,7 @@ mod tests {
         assert_eq!(env.get("KEY"), Some("new"));
         // Inline comment should be preserved
         match &env.lines[0] {
-            EnvLine::KeyValue {
-                inline_comment, ..
-            } => {
+            EnvLine::KeyValue { inline_comment, .. } => {
                 assert_eq!(inline_comment, &Some("# comment".to_string()));
             }
             _ => panic!("Expected KeyValue"),
@@ -479,13 +474,12 @@ QUOTED_VALUE='hello world'"#;
         assert_eq!(map.get("QUOTED_VALUE"), Some(&"hello world".to_string()));
 
         // Verify inline comment on APT_MIRROR
-        let apt_line = env.lines.iter().find(|l| {
-            matches!(l, EnvLine::KeyValue { key, .. } if key == "APT_MIRROR")
-        });
+        let apt_line = env
+            .lines
+            .iter()
+            .find(|l| matches!(l, EnvLine::KeyValue { key, .. } if key == "APT_MIRROR"));
         match apt_line {
-            Some(EnvLine::KeyValue {
-                inline_comment, ..
-            }) => {
+            Some(EnvLine::KeyValue { inline_comment, .. }) => {
                 assert_eq!(inline_comment, &Some("# Aliyun mirror".to_string()));
             }
             _ => panic!("Expected APT_MIRROR KeyValue with inline comment"),

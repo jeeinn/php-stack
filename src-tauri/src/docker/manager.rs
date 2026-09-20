@@ -1,8 +1,8 @@
-use bollard::Docker;
 use bollard::query_parameters::{
-    ListContainersOptions, StartContainerOptions, StopContainerOptions, RestartContainerOptions,
+    ListContainersOptions, RestartContainerOptions, StartContainerOptions, StopContainerOptions,
 };
-use serde::{Serialize, Deserialize};
+use bollard::Docker;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,7 +35,7 @@ impl DockerManager {
     pub async fn list_ps_containers(&self) -> Result<Vec<PsContainer>, Box<dyn std::error::Error>> {
         let mut filters = HashMap::new();
         filters.insert("name".to_string(), vec!["ps-".to_string()]);
-        
+
         let options = Some(ListContainersOptions {
             all: true,
             filters: Some(filters),
@@ -43,80 +43,110 @@ impl DockerManager {
         });
 
         let containers = self.docker.list_containers(options).await?;
-        
-        let ps_containers = containers.into_iter().map(|c| {
-            let name = c.names.clone().unwrap_or_default().first()
-                .map(|n| n.trim_start_matches('/').to_string())
-                .unwrap_or_else(|| "unknown".to_string());
 
-            PsContainer {
-                id: c.id.unwrap_or_default(),
-                name,
-                image: c.image.unwrap_or_default(),
-                status: c.status.unwrap_or_default(),
-                state: format!("{:?}", c.state),
-                ports: c.ports.unwrap_or_default().into_iter()
-                    .filter_map(|p| p.public_port.map(|port| port as i32))
-                    .collect(),
-            }
-        }).collect();
+        let ps_containers = containers
+            .into_iter()
+            .map(|c| {
+                let name = c
+                    .names
+                    .clone()
+                    .unwrap_or_default()
+                    .first()
+                    .map(|n| n.trim_start_matches('/').to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                PsContainer {
+                    id: c.id.unwrap_or_default(),
+                    name,
+                    image: c.image.unwrap_or_default(),
+                    status: c.status.unwrap_or_default(),
+                    state: format!("{:?}", c.state),
+                    ports: c
+                        .ports
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|p| p.public_port.map(|port| port as i32))
+                        .collect(),
+                }
+            })
+            .collect();
 
         Ok(ps_containers)
     }
 
     /// 获取所有运行中的容器（用于端口冲突检测）
-    pub async fn list_all_running_containers(&self) -> Result<Vec<PsContainer>, Box<dyn std::error::Error>> {
+    pub async fn list_all_running_containers(
+        &self,
+    ) -> Result<Vec<PsContainer>, Box<dyn std::error::Error>> {
         let options = Some(ListContainersOptions {
             all: false, // 只返回运行中的容器
             ..Default::default()
         });
 
         let containers = self.docker.list_containers(options).await?;
-        
-        let all_containers = containers.into_iter().map(|c| {
-            let name = c.names.clone().unwrap_or_default().first()
-                .map(|n| n.trim_start_matches('/').to_string())
-                .unwrap_or_else(|| "unknown".to_string());
 
-            PsContainer {
-                id: c.id.unwrap_or_default(),
-                name,
-                image: c.image.unwrap_or_default(),
-                status: c.status.unwrap_or_default(),
-                state: format!("{:?}", c.state),
-                ports: c.ports.unwrap_or_default().into_iter()
-                    .filter_map(|p| p.public_port.map(|port| port as i32))
-                    .collect(),
-            }
-        }).collect();
+        let all_containers = containers
+            .into_iter()
+            .map(|c| {
+                let name = c
+                    .names
+                    .clone()
+                    .unwrap_or_default()
+                    .first()
+                    .map(|n| n.trim_start_matches('/').to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                PsContainer {
+                    id: c.id.unwrap_or_default(),
+                    name,
+                    image: c.image.unwrap_or_default(),
+                    status: c.status.unwrap_or_default(),
+                    state: format!("{:?}", c.state),
+                    ports: c
+                        .ports
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|p| p.public_port.map(|port| port as i32))
+                        .collect(),
+                }
+            })
+            .collect();
 
         Ok(all_containers)
     }
 
     pub async fn start_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.start_container(name, None::<StartContainerOptions>).await?;
+        self.docker
+            .start_container(name, None::<StartContainerOptions>)
+            .await?;
         Ok(())
     }
 
     pub async fn stop_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.stop_container(name, None::<StopContainerOptions>).await?;
+        self.docker
+            .stop_container(name, None::<StopContainerOptions>)
+            .await?;
         Ok(())
     }
 
     pub async fn restart_container(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.docker.restart_container(name, None::<RestartContainerOptions>).await?;
+        self.docker
+            .restart_container(name, None::<RestartContainerOptions>)
+            .await?;
         Ok(())
     }
 
     /// 检查所有 ps- 前缀的容器是否都处于 running 状态
     pub async fn check_all_ps_containers_running(&self) -> Result<bool, String> {
-        let containers = self.list_ps_containers().await
+        let containers = self
+            .list_ps_containers()
+            .await
             .map_err(|e| format!("获取容器列表失败: {e}"))?;
-        
+
         if containers.is_empty() {
             return Ok(false);
         }
-        
+
         // 检查所有容器是否都是 running 状态
         for container in &containers {
             // state 字段是 "Some(RUNNING)" 或 "Some(EXITED)" 等格式
@@ -124,7 +154,7 @@ impl DockerManager {
                 return Ok(false);
             }
         }
-        
+
         Ok(true)
     }
 }

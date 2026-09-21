@@ -25,6 +25,13 @@ pub struct RestoreResult {
     pub success: bool,
     pub restored_files: Vec<String>,
     pub errors: Vec<String>,
+    /// 恢复开始前自动生成的回滚包路径（R2）。
+    ///
+    /// 恢复是逐文件覆盖现有配置的破坏性操作，中途失败会留下半恢复状态。
+    /// 该字段指向恢复前的自动备份，用户可用它一键回退。
+    /// 由调用方 `commands::execute_restore` 在创建回滚包后填入。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollback_path: Option<String>,
 }
 
 pub struct RestoreEngine;
@@ -228,6 +235,8 @@ impl RestoreEngine {
             success: errors.is_empty(),
             restored_files,
             errors,
+            // 由调用方（commands::execute_restore）在创建回滚包后填入
+            rollback_path: None,
         })
     }
 

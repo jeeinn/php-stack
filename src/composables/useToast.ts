@@ -25,6 +25,11 @@ export function getLogs() {
   return logs;
 }
 
+// 清空日志面板
+export function clearLogs() {
+  logs.value = [];
+}
+
 // 显示 Toast
 export function showToast(message: string, type: ToastType = 'info', duration = 3000) {
   const id = nextId++;

@@ -194,6 +194,23 @@ pub fn reset_all_overrides() -> Result<(), String> {
     manager.reset_all_overrides(&project_root)
 }
 
+/// 把完整文件日志导出到用户指定位置
+///
+/// 与 `export_logs`（返回文本内容，供复制）不同，这里直接落盘，
+/// 对应日志面板的"导出"动作。
+#[tauri::command]
+pub fn export_logs_to(dest: String) -> Result<(), String> {
+    let log_path = get_log_file()?;
+
+    if !log_path.exists() {
+        return Err("日志文件不存在，请先执行一些操作".to_string());
+    }
+
+    std::fs::copy(&log_path, &dest).map_err(|e| format!("导出日志失败: {e}"))?;
+
+    Ok(())
+}
+
 /// 导出当前会话日志
 ///
 /// 日志文件位于应用数据目录（路径由 `paths::log_file()` 统一给出）。

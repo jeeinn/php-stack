@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { showToast, getToasts, removeToast, addLog, getLogs } from '../useToast'
+import { showToast, getToasts, removeToast, addLog, getLogs, clearLogs } from '../useToast'
 
 describe('useToast', () => {
   it('shows a toast message', () => {
@@ -24,5 +24,12 @@ describe('useToast', () => {
     const logs = getLogs()
     expect(logs.value.length).toBeGreaterThan(0)
     expect(logs.value[logs.value.length - 1]).toContain('Test log message')
+  })
+
+  it('clears all log messages', () => {
+    addLog('to be cleared')
+    expect(getLogs().value.length).toBeGreaterThan(0)
+    clearLogs()
+    expect(getLogs().value.length).toBe(0)
   })
 })

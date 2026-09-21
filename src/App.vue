@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { save } from '@tauri-apps/plugin-dialog';
 import { getVersion } from '@tauri-apps/api/app';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
@@ -11,7 +12,7 @@ import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
-import { getLogs, addLog, showToast } from './composables/useToast';
+import { getLogs, addLog, clearLogs, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
@@ -361,14 +362,39 @@ const scrollToBottom = async () => {
   }
 };
 
-// 复制日志到剪贴板
+// 复制面板里当前可见的日志（此前复制的是后端文件日志全文，
+// 与界面看到的内容对不上——面板只保留最近 50 条）
 async function copyLogs() {
+  if (logs.value.length === 0) {
+    showToast(t('dashboard.log.empty'), 'warning');
+    return;
+  }
   try {
-    const logs = await invoke('export_logs');
-    await writeText(logs as string);
+    await writeText(logs.value.join('\n'));
     showToast(t('dashboard.log.copied'), 'success');
   } catch (e) {
     showToast(t('dashboard.log.copyFailed', { error: e }), 'error');
+  }
+}
+
+// 清空面板（长会话下满屏历史，此前没有出口）
+function clearLogPanel() {
+  clearLogs();
+  showToast(t('dashboard.log.cleared'), 'success');
+}
+
+// 导出完整文件日志到用户指定位置（走后端，与面板显示范围无关）
+async function exportLogs() {
+  try {
+    const dest = await save({
+      defaultPath: 'php-stack.log',
+      filters: [{ name: 'Log', extensions: ['log', 'txt'] }],
+    });
+    if (!dest) return; // 用户取消
+    await invoke('export_logs_to', { dest });
+    showToast(t('dashboard.log.exported', { path: dest }), 'success');
+  } catch (e) {
+    showToast(t('dashboard.log.exportFailed', { error: e }), 'error');
   }
 }
 </script>
@@ -610,9 +636,23 @@ async function copyLogs() {
             <button 
               @click="copyLogs"
               class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
-              title="复制日志到剪贴板"
+              :title="$t('dashboard.log.copyTip')"
             >
-              📋 {{ $t('common.copy') }}
+              📋 {{ $t('dashboard.log.copy') }}
+            </button>
+            <button 
+              @click="clearLogPanel"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              :title="$t('dashboard.log.clearTip')"
+            >
+              🗑️ {{ $t('dashboard.log.clear') }}
+            </button>
+            <button 
+              @click="exportLogs"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              :title="$t('dashboard.log.exportTip')"
+            >
+              💾 {{ $t('dashboard.log.export') }}
             </button>
             <button 
               @click="scrollToBottom"

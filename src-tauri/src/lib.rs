@@ -110,6 +110,7 @@ pub fn run() {
             commands::reset_all_overrides,
             // 日志导出
             commands::export_logs,
+            commands::export_logs_to,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

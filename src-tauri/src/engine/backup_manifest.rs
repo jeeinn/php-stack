@@ -1,6 +1,37 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// 当前写入备份包的格式版本
+pub const MANIFEST_FORMAT_VERSION: &str = "1.0.0";
+
+/// 本应用支持的备份格式主版本（同主版本内向前兼容）
+pub const MANIFEST_SUPPORTED_MAJOR: u32 = 1;
+
+/// 校验备份包 `manifest.version` 是否在本应用支持区间内（E4）。
+///
+/// 规则：仅接受主版本 == [`MANIFEST_SUPPORTED_MAJOR`]。
+/// 过高 → 提示升级应用；过低 → 提示格式已弃用。
+pub fn check_manifest_version(version: &str) -> Result<(), String> {
+    let major = version
+        .trim()
+        .split('.')
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .ok_or_else(|| format!("备份包格式版本无效: {version}"))?;
+
+    if major > MANIFEST_SUPPORTED_MAJOR {
+        return Err(format!(
+            "备份包格式版本过新（{version}），当前应用仅支持 {MANIFEST_SUPPORTED_MAJOR}.x，请升级 PHP-Stack"
+        ));
+    }
+    if major < MANIFEST_SUPPORTED_MAJOR {
+        return Err(format!(
+            "备份包格式版本过旧（{version}），当前应用不再支持该格式"
+        ));
+    }
+    Ok(())
+}
+
 /// 备份选项
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BackupOptions {
@@ -77,7 +108,7 @@ impl BackupManifest {
     /// 创建一个新的空 manifest
     pub fn new() -> Self {
         Self {
-            version: "1.0.0".to_string(),
+            version: MANIFEST_FORMAT_VERSION.to_string(),
             timestamp: chrono::Local::now().to_rfc3339(),
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             os_info: std::env::consts::OS.to_string(),
@@ -218,7 +249,7 @@ mod tests {
     #[test]
     fn test_new_manifest() {
         let manifest = BackupManifest::new();
-        assert_eq!(manifest.version, "1.0.0");
+        assert_eq!(manifest.version, MANIFEST_FORMAT_VERSION);
         assert_eq!(manifest.app_version, env!("CARGO_PKG_VERSION"));
         assert_eq!(manifest.os_info, std::env::consts::OS);
         assert!(manifest.services.is_empty());
@@ -229,6 +260,32 @@ mod tests {
         assert!(manifest.errors.is_empty());
         // timestamp should be a non-empty string
         assert!(!manifest.timestamp.is_empty());
+    }
+
+    #[test]
+    fn test_check_manifest_version_accepts_current_major() {
+        assert!(check_manifest_version("1.0.0").is_ok());
+        assert!(check_manifest_version("1.9.9").is_ok());
+        assert!(check_manifest_version(" 1.0.0 ").is_ok());
+    }
+
+    #[test]
+    fn test_check_manifest_version_rejects_too_new() {
+        let err = check_manifest_version("2.0.0").expect_err("主版本过高应拒绝");
+        assert!(err.contains("过新"), "实际: {err}");
+        assert!(err.contains("2.0.0"), "实际: {err}");
+    }
+
+    #[test]
+    fn test_check_manifest_version_rejects_too_old() {
+        let err = check_manifest_version("0.9.0").expect_err("主版本过低应拒绝");
+        assert!(err.contains("过旧"), "实际: {err}");
+    }
+
+    #[test]
+    fn test_check_manifest_version_rejects_invalid() {
+        let err = check_manifest_version("not-a-version").expect_err("非法版本应拒绝");
+        assert!(err.contains("无效"), "实际: {err}");
     }
 
     #[test]

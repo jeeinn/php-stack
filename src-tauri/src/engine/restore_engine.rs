@@ -3,7 +3,7 @@ use std::io::Read;
 use std::path::Path;
 
 use super::backup_engine::BackupEngine;
-use super::backup_manifest::BackupManifest;
+use super::backup_manifest::{check_manifest_version, BackupManifest};
 
 /// 恢复预览信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +88,7 @@ impl RestoreEngine {
 
         // Read manifest.json
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
+        check_manifest_version(&manifest.version)?;
 
         // Count total files in ZIP (excluding manifest.json itself)
         let file_count = (0..archive.len())
@@ -116,6 +117,7 @@ impl RestoreEngine {
         validate_archive_entry_names(&mut archive)?;
 
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
+        check_manifest_version(&manifest.version)?;
 
         for (file_path, expected_hash) in &manifest.files {
             let mut zip_file = archive
@@ -156,6 +158,7 @@ impl RestoreEngine {
         // Step 1: Read manifest
         Self::emit_progress(app_handle, "解析备份包...", 5);
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
+        check_manifest_version(&manifest.version)?;
 
         // Step 2: Extract .env
         Self::emit_progress(app_handle, "恢复环境配置...", 15);
@@ -487,6 +490,29 @@ mod tests {
             err.contains("../../escaped.txt"),
             "校验错误应指出非法条目，实际: {err}"
         );
+    }
+
+    /// Feature: restore-compat, Property: 预览拒绝格式版本过新的备份包
+    #[test]
+    fn test_preview_rejects_unsupported_manifest_version() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let zip_path = tmp_dir.path().join("future.zip");
+        let file = fs::File::create(&zip_path).expect("创建 ZIP 失败");
+        let mut zip = zip::ZipWriter::new(file);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+
+        let mut manifest = BackupManifest::new();
+        manifest.version = "2.0.0".to_string();
+        let json = manifest.serialize().expect("序列化失败");
+        zip.start_file("manifest.json", zip_options).unwrap();
+        zip.write_all(json.as_bytes()).unwrap();
+        zip.finish().unwrap();
+
+        let err = RestoreEngine::preview(zip_path.to_str().unwrap())
+            .expect_err("格式版本过新应在预览阶段拒绝");
+        assert!(err.contains("过新"), "实际: {err}");
+        assert!(err.contains("2.0.0"), "实际: {err}");
     }
 
     /// Helper: create a test backup ZIP with manifest and some files.

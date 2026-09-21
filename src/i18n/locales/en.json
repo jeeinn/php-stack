@@ -245,6 +245,62 @@
       "writeFailed": "❌ File Write Failed\n\nPlease check if the directory has write permissions.",
       "parseFailed": "❌ Config File Format Error\n\nPlease check the .env file format.",
       "default": "❌ Operation Failed\n\n{error}"
+    },
+    "versionList": {
+      "loadFailed": "Failed to load service versions",
+      "loadFailedHint": "Version dropdowns will be empty. The list is built into the app rather than read from your workspace, so repeated failure usually means an incomplete installation — reinstall, then click Retry.",
+      "retry": "Retry",
+      "retrying": "Retrying…"
+    },
+    "versionHelp": {
+      "helpButton": "How to add a new version?",
+      "title": "📘 How to add a new service version",
+      "subtitle": "Modify the version manifest and template directory to support more versions — no code changes or recompilation needed.",
+      "sectionNaming": "§1 Naming convention (don't change casually)",
+      "namingDesc1": "Template directory names are uniformly {service}+{version} (with dots removed), and are used by the program in fixed derivations:",
+      "namingDesc2": "Env-var prefix (e.g. {'{PREFIX}'}), Compose service name, container name (ps-{'{dir}'}), and the three directories (services/data/logs) all depend on this directory name. Changing one requires changing a chain.",
+      "colService": "Service",
+      "colVersion": "Version",
+      "colDir": "Directory",
+      "colId": "Manifest ID",
+      "sectionSteps": "§2 Three-step workflow",
+      "step1Title": "Step 1: Add an entry to the manifest",
+      "step1Desc": "Edit src-tauri/services/version_manifest.json and add a new entry under the relevant service type.",
+      "step2Title": "Step 2: Prepare the template directory (pick one of three)",
+      "step2A": "Option A (recommended):",
+      "step2ADesc": "Reuse an existing directory. Set service_dir to an existing dir — zero new files.",
+      "step2B": "Option B:",
+      "step2BDesc": "Don't create a directory — rely on auto-fallback (PHP→php85, MySQL→mysql80, Redis→redis72, Nginx→nginx127).",
+      "step2C": "Option C:",
+      "step2CDesc": "Create a fresh independent directory (when customization is required). The safest path is to copy a same-type directory and rename it.",
+      "step3Title": "Step 3: A rebuild is required (not just a restart)",
+      "step3Desc": "The manifest is embedded into the binary at compile time via include_str! — so after editing the manifest you must rebuild for changes to take effect. A plain restart won't pick it up. Editing template files inside services/ (e.g. php.ini, redis.conf) only requires an app restart.",
+      "sectionSample": "§3 Full example: Adding MySQL 5.6",
+      "sampleDesc": "Suppose you're on MySQL 8.4 but one legacy project still depends on MySQL 5.6. To keep both:",
+      "sampleTip": "It reuses mysql80's directory. The runtime config extractor pulls the actual mysql:5.6 default config from the upstream image and overwrites the fallback, so you get a real 5.6 config rather than mysql80's.",
+      "sectionFaq": "§4 FAQ",
+      "faq1Q": "I edited version_manifest.json but the dropdown didn't change?",
+      "faq1A": "The manifest is compile-time embedded. You must rebuild the app (cargo build / tauri build). A plain restart won't pick it up.",
+      "faq2Q": "After applying, services/<dir>/ is empty?",
+      "faq2A": "The template directory is missing the key file for that service type (PHP requires Dockerfile, MySQL requires mysql.cnf, etc.). The program will fall back to the default directory, but the result may not be what you wanted. Verify service_dir matches the directory name.",
+      "faq3Q": "I edited php.ini in the workspace, but it got reset on next apply?",
+      "faq3A": "That's intentional: template release semantics skip writing if the target file already exists. Your edits are preserved, not overwritten. To restore defaults, delete the file and apply again.",
+      "docFooter": "Full doc: docs/guides/ADDING_SERVICE_VERSION.md"
+    },
+    "pullConfirm": {
+      "title": "Confirm image presence",
+      "desc": "Before applying config, check whether each service-version image is local. Missing images need to be pulled — otherwise the config extractor falls back to built-in templates, which may not exactly match the version.",
+      "summary": "{total} total images, {missing} to pull, {present} already local",
+      "allPresent": "All images are local. No pull needed — you can apply config directly.",
+      "toPull": "To pull",
+      "tip": "Once pulled, \"One-click start\" reuses the local cache — it won't re-download on subsequent runs.",
+      "confirmPull": "Pull {count}",
+      "pulling": "Pulling…"
+    },
+    "toast": {
+      "pullPartialSuccess": "⚠️ Some images failed to pull: {details}. Fallback templates will be used for those.",
+      "pullAllFailed": "❌ All images failed to pull. Falling back to built-in templates.",
+      "pullAllSuccess": "✅ {count} images pulled successfully"
     }
   },
   "settings": {

@@ -183,5 +183,53 @@ describe('RestorePage — 恢复结果明细', () => {
     expect(wrapper.find('[data-testid="rollback-path"]').text()).toContain(
       '.restore_rollback_',
     )
+    expect(wrapper.find('[data-testid="rollback-action"]').exists()).toBe(true)
+    // 有已恢复文件 → 不算致命失败
+    expect(wrapper.find('[data-testid="restore-fatal"]').exists()).toBe(false)
+  })
+
+  it('致命失败时展示错误面板与回滚快捷入口，而非仅 toast', async () => {
+    mockInvoke({
+      success: false,
+      restored_files: [],
+      errors: ['备份包包含非法路径条目，已拒绝恢复: ../../escaped.txt'],
+      rollback_path: '/ws/.restore_rollback_20260921_120002.zip',
+    })
+
+    const wrapper = mount(RestorePage)
+    await prepareRestoreStep(wrapper)
+    await (wrapper.vm as any).handleRestore()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="restore-fatal"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="restore-errors"]').text()).toContain(
+      '非法路径条目',
+    )
+    expect(wrapper.find('[data-testid="rollback-action"]').exists()).toBe(true)
+  })
+
+  it('点击回滚快捷入口后载入回滚包并进入预览步骤', async () => {
+    const rollbackPath = '/ws/.restore_rollback_20260921_120003.zip'
+    mockInvoke({
+      success: false,
+      restored_files: [],
+      errors: ['打开备份文件失败'],
+      rollback_path: rollbackPath,
+    })
+
+    const wrapper = mount(RestorePage)
+    await prepareRestoreStep(wrapper)
+    await (wrapper.vm as any).handleRestore()
+    await flushPromises()
+
+    await (wrapper.vm as any).useRollbackBundle()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.zipPath).toBe(rollbackPath)
+    expect(vm.currentStep).toBe('preview')
+    expect(vm.restoreResult).toBeNull()
+    // 载入后自动触发预览
+    expect(vm.preview).not.toBeNull()
   })
 })

@@ -113,8 +113,11 @@ export interface RestoreProgress {
 
 /// 后端 `RestoreResult` 序列化形态
 ///
-/// 恢复命令始终返回该结构（U2）：success=false 表示「部分失败」而非整体失败，
-/// 此时 errors 里有逐条明细，前端需完整展示而不是只弹一句 toast。
+/// 恢复命令始终返回该结构（U2）：
+/// - success=true：全部成功
+/// - success=false 且 restored_files 非空：部分失败
+/// - success=false 且 restored_files 为空：致命失败（包打不开 / zip-slip 等）
+/// 前端用结果面板展示明细与回滚包快捷入口，不只弹 toast。
 export interface RestoreResult {
   success: boolean;
   restored_files: string[];

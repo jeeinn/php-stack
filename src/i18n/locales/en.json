@@ -559,12 +559,17 @@
       "title": "Restore finished with errors",
       "description": "Files that could not be restored are listed below. Use the rollback bundle to undo this restore if needed."
     },
+    "fatal": {
+      "title": "Restore failed",
+      "description": "No files were written. See the error below. If a rollback bundle was created, you can use it to restore the previous configuration."
+    },
     "result": {
       "restoredFiles": "Restored files",
       "filesCount": "{count} files",
       "errors": "Errors",
       "rollbackTitle": "Pre-restore rollback bundle",
-      "rollbackHint": "Your previous configuration was backed up automatically. To undo, restore from this bundle:"
+      "rollbackHint": "Your previous configuration was backed up automatically. To undo, load this bundle into the restore wizard:",
+      "rollbackAction": "Restore from this bundle"
     },
     "progress": {
       "title": "📊 Restore Progress"
@@ -574,12 +579,18 @@
       "message": "⚠️ Warning: Existing config files will be overwritten. Consider backing up first.\n\n💡 After restore, click \"Start All\" to run the environment.",
       "start": "Start Restore"
     },
+    "rollbackConfirm": {
+      "title": "Restore from rollback bundle?",
+      "message": "This loads the rollback bundle into the restore wizard (preview → verify → confirm). Current workspace config will be overwritten again.",
+      "confirm": "Load rollback bundle"
+    },
     "toast": {
       "previewDone": "Preview complete, check backup contents",
       "verifyPassed": "Verification passed, ready to restore",
       "verifyFailed": "Verification failed, backup may be corrupted",
       "success": "Environment restored successfully!",
-      "partialSuccess": "⚠️ Restore finished with errors, see details below"
+      "partialSuccess": "⚠️ Restore finished with errors, see details below",
+      "fatalFailed": "Restore failed, see error details below"
     }
   },
   "workspace": {
@@ -592,11 +603,15 @@
     "error": {
       "invalidPath": "Please select a valid directory as workspace"
     },
-  "status": {
-    "loading": "Loading...",
-    "notConfigured": "Not configured",
-    "loadFailed": "Load failed",
-    "fallback": "Configured workspace is unavailable; data is written to {effective}. {reason}"
-  }
+    "banner": {
+      "title": "Workspace path unavailable",
+      "action": "Open Env Config"
+    },
+    "status": {
+      "loading": "Loading...",
+      "notConfigured": "Not configured",
+      "loadFailed": "Load failed",
+      "fallback": "Configured workspace is unavailable; data is written to {effective}. {reason}"
+    }
   }
 }

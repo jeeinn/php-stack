@@ -53,8 +53,9 @@ pub fn verify_backup(zip_path: String) -> Result<bool, String> {
 
 /// 执行环境恢复
 ///
-/// 始终返回 `RestoreResult`（U2）：成功与「部分成功」都把文件清单和错误明细
-/// 交回前端渲染，只有致命错误（备份包打不开等）才走 `Err`。
+/// 始终返回 `RestoreResult`（U2）：成功、部分失败、致命失败（包打不开 / zip-slip 等）
+/// 都走 `Ok`，把错误明细与回滚包路径交给前端结果面板。
+/// 仅工作区路径等命令前置失败才走 `Err`。
 #[tauri::command]
 pub async fn execute_restore(
     zip_path: String,
@@ -68,13 +69,14 @@ pub async fn execute_restore(
     let mut result = match RestoreEngine::restore(&zip_path, &project_root, Some(&app_handle)).await
     {
         Ok(r) => r,
-        Err(e) => {
-            // 致命错误：把回滚包位置一并告知，用户至少能回到恢复前的状态
-            return Err(match &rollback_path {
-                Some(p) => format!("{e}\n\n已生成恢复前回滚包: {p}"),
-                None => e,
-            });
-        }
+        // 致命错误也结构化返回：前端可渲染错误面板 + 回滚快捷入口，
+        // 不再把多行文案塞进 toast。
+        Err(e) => RestoreResult {
+            success: false,
+            restored_files: Vec::new(),
+            errors: vec![e],
+            rollback_path: None,
+        },
     };
 
     result.rollback_path = rollback_path;

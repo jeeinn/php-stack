@@ -39,6 +39,15 @@ let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时�
 let consecutiveFailures = 0; // Docker 连续失败次数（用于轮询退避）
 let pollTimer: ReturnType<typeof setTimeout> | null = null; // 轮询定时器
 const hasEnvFile = ref(false); // .env 文件是否存在
+/// 工作区回退告警（配置路径不可用、数据写到别处）。全局横幅展示，不限环境配置页。
+const workspaceFallbackMsg = ref('');
+
+interface WorkspaceInfo {
+  workspace_path: string;
+  effective_path: string;
+  using_fallback: boolean;
+  fallback_reason?: string | null;
+}
 
 // 判断是否有运行中的 ps- 容器
 const hasRunningContainers = computed(() => {
@@ -306,6 +315,23 @@ const checkEnvFileExists = async () => {
   }
 };
 
+/// 加载工作区状态：配置路径不可用时必须全局可见，否则备份/恢复也会写到错误位置。
+async function loadWorkspaceFallbackBanner() {
+  try {
+    const info = await invoke<WorkspaceInfo | null>('get_workspace_info');
+    if (info?.using_fallback) {
+      workspaceFallbackMsg.value = t('workspace.status.fallback', {
+        effective: info.effective_path,
+        reason: info.fallback_reason || '',
+      });
+    } else {
+      workspaceFallbackMsg.value = '';
+    }
+  } catch {
+    workspaceFallbackMsg.value = '';
+  }
+}
+
 // 监听 tab 切换，回到 dashboard 时刷新 .env 检测状态
 watch(activeTab, async (newTab) => {
   if (newTab === 'dashboard') {
@@ -345,6 +371,7 @@ onMounted(async () => {
   
   refreshContainers();
   checkEnvFileExists(); // 检查 .env 文件是否存在
+  loadWorkspaceFallbackBanner();
   startPolling();
   
   // 监听后端发送的日志事件
@@ -520,6 +547,25 @@ async function exportLogs() {
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-hidden p-3 sm:p-4 md:p-5 lg:p-6">
+      <!-- 工作区回退全局告警：备份/恢复/启动都走 effective_path，必须跨页可见 -->
+      <div
+        v-if="workspaceFallbackMsg"
+        data-testid="workspace-fallback-banner"
+        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3 text-amber-700 dark:text-amber-400"
+      >
+        <div class="flex-1 min-w-0">
+          <h3 class="font-bold text-sm sm:text-base mb-0.5">{{ $t('workspace.banner.title') }}</h3>
+          <p class="text-xs sm:text-sm opacity-90 break-words">{{ workspaceFallbackMsg }}</p>
+        </div>
+        <button
+          type="button"
+          @click="activeTab = 'env-config'"
+          class="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap"
+        >
+          {{ $t('workspace.banner.action') }}
+        </button>
+      </div>
+
       <!-- 1. 环境管理 (Dashboard) -->
       <div v-if="activeTab === 'dashboard'" class="flex-1 flex flex-col overflow-hidden">
         <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">

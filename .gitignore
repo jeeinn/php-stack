@@ -45,3 +45,7 @@ services*/
 
 # Local helper scripts (underscore-prefixed, agent-internal)
 scripts/_*.sh
+
+# Cargo 本地构建配置（磁盘迁移脚本生成，把 target-dir 指到别的盘）
+# 属于机器个性化配置，不应入库；且它会导致 cargo test 找不到 src-tauri/services/
+src-tauri/.cargo/

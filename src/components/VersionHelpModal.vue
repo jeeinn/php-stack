@@ -25,6 +25,28 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
+
+// ─── 示例代码：硬编码而非放 i18n ────────────────────────────────
+// 原因：vue-i18n 会把消息里的 `{...}` 当作插值占位符解析。JSON 示例含大量花括号，
+// 放进 locale 文件会被吃掉（实测报 "Invalid token in placeholder" 且渲染残缺）。
+// 另外 JSON 是代码，中英文一致，本就不需要翻译。
+const STEP1_SAMPLE = `"nginx129": {
+  "display_name": "Nginx 1.29",
+  "image_tag": "nginx:1.29-alpine",
+  "service_dir": "nginx128",   // ← 复用 1.28 的模板目录
+  "default_port": 80,
+  "show_port": true,
+  "eol": false
+}`;
+
+const MYSQL56_SAMPLE = `{
+  "mysql": {
+    "mysql84": { "display_name": "MySQL 8.4", "image_tag": "mysql:8.4", "service_dir": "mysql84", "default_port": 3306, "show_port": true, "eol": false },
+    "mysql80": { "display_name": "MySQL 8.0", "image_tag": "mysql:8.0", "service_dir": "mysql80", "default_port": 3306, "show_port": true, "eol": true },
+    "mysql57": { "display_name": "MySQL 5.7", "image_tag": "mysql:5.7", "service_dir": "mysql57", "default_port": 3306, "show_port": true, "eol": true },
+    "mysql56": { "display_name": "MySQL 5.6", "image_tag": "mysql:5.6", "service_dir": "mysql80", "default_port": 3306, "show_port": true, "eol": true, "description": "EOL: 仅旧项目兼容" }
+  }
+}`;
 </script>
 
 <template>
@@ -93,7 +115,7 @@ const emit = defineEmits<{
                 {{ $t('envConfig.versionHelp.step1Title') }}
               </p>
               <p class="text-slate-600 dark:text-slate-400 mb-2 text-xs">{{ $t('envConfig.versionHelp.step1Desc') }}</p>
-              <pre class="text-[11px] bg-slate-100 dark:bg-black/40 p-2 rounded font-mono overflow-x-auto">{{ $t('envConfig.versionHelp.step1Sample') }}</pre>
+              <pre class="text-[11px] bg-slate-100 dark:bg-black/40 p-2 rounded font-mono overflow-x-auto">{{ STEP1_SAMPLE }}</pre>
             </div>
 
             <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3">
@@ -124,7 +146,7 @@ const emit = defineEmits<{
             {{ $t('envConfig.versionHelp.sectionSample') }}
           </h3>
           <p class="text-slate-600 dark:text-slate-400 mb-2 text-xs">{{ $t('envConfig.versionHelp.sampleDesc') }}</p>
-          <pre class="text-[11px] bg-slate-100 dark:bg-black/40 p-3 rounded font-mono overflow-x-auto leading-relaxed">{{ $t('envConfig.versionHelp.mysql56Sample') }}</pre>
+          <pre class="text-[11px] bg-slate-100 dark:bg-black/40 p-3 rounded font-mono overflow-x-auto leading-relaxed">{{ MYSQL56_SAMPLE }}</pre>
           <p class="text-xs text-slate-500 dark:text-slate-500 mt-2">
             💡 {{ $t('envConfig.versionHelp.sampleTip') }}
           </p>

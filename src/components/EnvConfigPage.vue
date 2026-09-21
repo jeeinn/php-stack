@@ -134,6 +134,11 @@ const showPullConfirm = ref(false);
 const pulling = ref(false);
 /// 单镜像拉取进度（tag -> 0-100，目前简化：不细分到下载进度，整体 boolean）
 const pullProgress = ref<Record<string, number>>({});
+/// 用户是否在「覆盖确认」弹窗里勾选了备份。
+///
+/// 必须是 ref 而非 handleApply 的局部变量：走「镜像缺失 → 拉取 → 再 apply」
+/// 这条路径时，handleApply 已经返回，局部变量会丢失，导致备份选择被静默丢弃。
+const enableBackup = ref(false);
 
 /// 打开版本帮助弹窗（"?" 按钮）
 function openVersionHelp() {
@@ -568,8 +573,8 @@ async function handleApply() {
     return;
   }
   
-  // 检查配置文件是否存在
-  let enableBackup = false;
+  // 检查配置文件是否存在（结果写入 enableBackup ref，供后续拉取路径复用）
+  enableBackup.value = false;
   try {
     const existingFiles = await invoke<string[]>('check_config_files_exist');
     if (existingFiles.length > 0) {
@@ -593,7 +598,7 @@ async function handleApply() {
       
       // 获取复选框的值
       if (typeof result === 'object') {
-        enableBackup = result.checkboxValue;
+        enableBackup.value = result.checkboxValue;
       }
     }
   } catch (e) {
@@ -611,7 +616,7 @@ async function handleApply() {
 
     if (missing.length === 0) {
       // 全部已存在 → 跳过拉取，直接 apply
-      await doApplyCore(config, enableBackup);
+      await doApplyCore(config, enableBackup.value);
     } else {
       // 有缺失 → 弹"待拉取"确认
       showPullConfirm.value = true;
@@ -652,7 +657,8 @@ async function confirmPullAndApply(missingTags: string[]) {
     // 重新计算 presences（拉取成功的应该已经 present）
     const config = buildConfig();
     imagePresences.value = await invoke<ImagePresence[]>('check_service_images_presence', { config });
-    await doApplyCore(config, true /* 先前用户已确认 enableBackup */);
+    // 沿用用户在覆盖确认里的备份选择（不能硬编码 true，否则覆盖用户意愿）
+    await doApplyCore(config, enableBackup.value);
   } catch (e) {
     pulling.value = false;
     showPullConfirm.value = false;

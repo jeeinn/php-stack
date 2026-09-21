@@ -2,7 +2,7 @@ use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverr
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::engine::workspace_manager::WorkspaceManager;
 
-use super::get_project_root;
+use super::{get_log_file, get_project_root};
 
 /// 打开指定服务的配置文件目录
 #[tauri::command]
@@ -195,29 +195,11 @@ pub fn reset_all_overrides() -> Result<(), String> {
 }
 
 /// 导出当前会话日志
+///
+/// 日志文件位于应用数据目录（路径由 `paths::log_file()` 统一给出）。
 #[tauri::command]
 pub fn export_logs() -> Result<String, String> {
-    // 获取项目根目录（与 get_project_root 逻辑一致）
-    let log_dir = if cfg!(debug_assertions) {
-        // 开发模式：使用项目根目录
-        std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {e}"))?
-            .parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .ok_or("无法获取项目根目录")?
-            .to_path_buf()
-    } else {
-        // 生产模式：使用可执行文件所在目录
-        std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {e}"))?
-            .parent()
-            .ok_or("无法获取程序所在目录")?
-            .to_path_buf()
-    };
-
-    let log_path = log_dir.join("php-stack.log");
+    let log_path = get_log_file()?;
 
     if !log_path.exists() {
         return Err("日志文件不存在，请先执行一些操作".to_string());

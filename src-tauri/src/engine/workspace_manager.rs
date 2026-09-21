@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::commands::paths;
+
 /// 工作目录配置结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
@@ -12,28 +14,12 @@ pub struct WorkspaceConfig {
 pub struct WorkspaceManager;
 
 impl WorkspaceManager {
-    /// 获取 workspace.json 的路径（位于可执行文件同级）
+    /// 获取 workspace.json 的路径。
+    ///
+    /// 位于应用数据目录（`%APPDATA%\<identifier>` / `~/Library/Application Support/<identifier>`）。
+    /// 此前放在 exe 同级目录，用户装进 `Program Files` 后无写权限。
     fn get_config_path() -> Result<PathBuf, String> {
-        let exe_path = std::env::current_exe().map_err(|e| format!("获取程序路径失败: {e}"))?;
-
-        let config_dir = if cfg!(debug_assertions) {
-            // 开发模式：workspace.json 放在项目根目录 (src-tauri 的父目录)
-            exe_path
-                .parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .ok_or("无法获取项目根目录")?
-                .to_path_buf()
-        } else {
-            // 生产模式：放在 exe 同级目录
-            exe_path
-                .parent()
-                .ok_or("无法获取程序所在目录")?
-                .to_path_buf()
-        };
-
-        Ok(config_dir.join("workspace.json"))
+        Ok(paths::app_data_dir()?.join("workspace.json"))
     }
 
     /// 读取工作目录配置

@@ -9,38 +9,44 @@ pub mod macros;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // 获取项目根目录（优先 workspace.json，否则 exe 同级目录）
-            let log_dir = if cfg!(debug_assertions) {
-                // 开发模式：使用项目根目录
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|p| {
-                        p.parent()
-                            .and_then(|p| p.parent())
-                            .and_then(|p| p.parent())
-                            .and_then(|p| p.parent())
-                            .map(|p| p.to_path_buf())
-                    })
-                    .unwrap_or_else(|| std::path::PathBuf::from("."))
-            } else {
-                // 生产模式：使用可执行文件所在目录
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                    .unwrap_or_else(|| std::path::PathBuf::from("."))
-            };
+            use tauri::Manager;
+
+            // 用户级配置与日志统一落在 Tauri 官方应用数据目录：
+            // Windows %APPDATA%\<identifier>、macOS ~/Library/Application Support/<identifier>。
+            // 此前写在 exe 同级目录，装进 Program Files 后无写权限。
+            let app_data = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("无法获取应用数据目录: {e}"))?;
+            commands::paths::init_app_data_dir(app_data.clone());
+
+            // 旧版本把 workspace.json 放在 exe 同级目录，首次启动自动搬迁
+            let migrated = commands::paths::migrate_legacy_config();
 
             // 初始化日志系统
-            if let Err(e) = logging::init_logging(&log_dir) {
+            if let Err(e) = logging::init_logging(&app_data) {
                 eprintln!("Failed to initialize logging: {e}");
             }
+
+            let log_path =
+                commands::paths::log_file().unwrap_or_else(|_| app_data.join("php-stack.log"));
 
             app_log!(
                 info,
                 "app",
                 "PHP-Stack started, log file at: {:?}",
-                log_dir.join("php-stack.log")
+                log_path
             );
+
+            if !migrated.is_empty() {
+                app_log!(
+                    info,
+                    "app",
+                    "已从旧位置迁移用户配置到 {:?}: {}",
+                    app_data,
+                    migrated.join(", ")
+                );
+            }
 
             app.handle().plugin(tauri_plugin_dialog::init())?;
             app.handle()

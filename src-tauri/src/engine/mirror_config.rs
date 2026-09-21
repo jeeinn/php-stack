@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use crate::app_log;
+
 /// 镜像源配置
 ///
 /// 统一管理容器内依赖镜像源（APT/Composer/PyPI/NPM）
@@ -108,7 +110,11 @@ impl MirrorConfig {
         let env_path = Path::new(".env");
 
         if !env_path.exists() {
-            log::warn!("⚠️ .env file not found, using default config");
+            app_log!(
+                warn,
+                "engine::mirror_config",
+                ".env file not found, using default config"
+            );
             return Ok(Self::default());
         }
 
@@ -203,7 +209,11 @@ impl MirrorConfig {
         }
 
         fs::write(env_path, env_content).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
-        log::info!("✅ in-container mirror config saved to .env");
+        app_log!(
+            info,
+            "engine::mirror_config",
+            "in-container mirror config saved to .env"
+        );
         Ok(())
     }
 

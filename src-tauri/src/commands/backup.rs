@@ -63,14 +63,6 @@ pub async fn execute_restore(zip_path: String, app_handle: tauri::AppHandle) -> 
     }
 }
 
-/// 选择项目文件夹并转换为相对路径
-#[tauri::command]
-pub fn select_project_folder() -> Result<Option<String>, String> {
-    // 实际的文件选择逻辑应该在前端通过 @tauri-apps/plugin-dialog 实现
-    // 这里仅作为占位符
-    Ok(None)
-}
-
 /// 将绝对路径转换为相对于项目根目录的路径
 #[tauri::command]
 pub fn convert_to_relative_path(
@@ -82,9 +74,7 @@ pub fn convert_to_relative_path(
 
     // 使用 pathdiff 计算相对路径，它会自动处理跨平台差异（如 Windows 盘符）
     match pathdiff::diff_paths(&abs_path, &project_root) {
-        Some(relative)
-            if relative.as_os_str().is_empty() || relative == std::path::PathBuf::from(".") =>
-        {
+        Some(relative) if relative.as_os_str().is_empty() || relative.as_os_str() == "." => {
             Err("不能选择项目根目录本身，请选择其子文件或子文件夹".to_string())
         }
         Some(relative) => {

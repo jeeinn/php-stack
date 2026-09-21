@@ -382,7 +382,9 @@ mod tests {
         assert!(is_safe_entry_name("docker-compose.yml"));
         assert!(is_safe_entry_name("services/php82/php.ini"));
         assert!(is_safe_entry_name("projects/www/test/index.php"));
-        assert!(is_safe_entry_name("services/php82/sub/dir/conf.d/default.conf"));
+        assert!(is_safe_entry_name(
+            "services/php82/sub/dir/conf.d/default.conf"
+        ));
     }
 
     /// Feature: restore-security, Property: 含路径遍历条目的 ZIP 必须整体拒绝且不写盘

@@ -119,30 +119,17 @@ pub fn validate_env_config(config: EnvConfig) -> Result<(), String> {
     ConfigGenerator::validate(&config)
 }
 
-/// 读取现有配置文件并解析为 EnvConfig
-#[tauri::command]
-pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
-    let project_root = get_project_root()?;
-    let env_path = project_root.join(".env");
-    let compose_path = project_root.join("docker-compose.yml");
+/// 从 .env 变量映射解析出服务配置列表（纯函数，便于单元测试）
+///
+/// 按键名前缀（PHP82_VERSION / MYSQL80_VERSION / ...）识别多版本服务，
+/// 并通过 VersionManifest 反查版本 ID；未收录的前缀回退为小写 ID。
+fn parse_env_to_services(
+    env_map: &std::collections::HashMap<String, String>,
+    manifest: &VersionManifest,
+) -> Vec<crate::engine::config_generator::ServiceEntry> {
+    use crate::engine::config_generator::{ServiceEntry, ServiceType};
 
-    // 如果两个文件都不存在，返回 None
-    if !env_path.exists() || !compose_path.exists() {
-        return Ok(None);
-    }
-
-    // 读取 .env 文件
-    let env_content =
-        std::fs::read_to_string(&env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?;
-    let env_file = crate::engine::env_parser::EnvFile::parse(&env_content)
-        .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
-    let env_map = env_file.to_map();
-
-    // 解析服务配置
-    let mut services: Vec<crate::engine::config_generator::ServiceEntry> = Vec::new();
-
-    // 创建 VersionManifest 用于 env prefix 反查
-    let manifest = VersionManifest::new();
+    let mut services: Vec<ServiceEntry> = Vec::new();
 
     // 解析 PHP 服务（支持多版本）
     // 查找所有 PHPxx_VERSION 格式的键
@@ -174,8 +161,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
                 .get(&ext_key)
                 .map(|exts| exts.split(',').map(|s| s.trim().to_string()).collect());
 
-            services.push(crate::engine::config_generator::ServiceEntry {
-                service_type: crate::engine::config_generator::ServiceType::PHP,
+            services.push(ServiceEntry {
+                service_type: ServiceType::PHP,
                 version,
                 host_port,
                 extensions,
@@ -213,8 +200,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
                 .and_then(|p| p.parse::<u16>().ok())
                 .unwrap_or(3306 + idx as u16);
 
-            services.push(crate::engine::config_generator::ServiceEntry {
-                service_type: crate::engine::config_generator::ServiceType::MySQL,
+            services.push(ServiceEntry {
+                service_type: ServiceType::MySQL,
                 version,
                 host_port,
                 extensions: None,
@@ -246,8 +233,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
                 .and_then(|p| p.parse::<u16>().ok())
                 .unwrap_or(6379);
 
-            services.push(crate::engine::config_generator::ServiceEntry {
-                service_type: crate::engine::config_generator::ServiceType::Redis,
+            services.push(ServiceEntry {
+                service_type: ServiceType::Redis,
                 version,
                 host_port,
                 extensions: None,
@@ -259,7 +246,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     for key in env_map.keys() {
         if key.ends_with("_VERSION") && key.starts_with("NGINX") {
             let prefix = &key[..key.len() - 8];
-            let index_part = &key[6..key.len() - 8]; // NGINX 是 5 个字母 + 1 = 6
+            // NGINX 为 5 个字母（与 MYSQL/REDIS 一致），版本号从第 5 位开始
+            let index_part = &key[5..key.len() - 8];
 
             if index_part.is_empty() {
                 continue;
@@ -277,14 +265,40 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
                 .and_then(|p| p.parse::<u16>().ok())
                 .unwrap_or(80);
 
-            services.push(crate::engine::config_generator::ServiceEntry {
-                service_type: crate::engine::config_generator::ServiceType::Nginx,
+            services.push(ServiceEntry {
+                service_type: ServiceType::Nginx,
                 version,
                 host_port,
                 extensions: None,
             });
         }
     }
+
+    services
+}
+
+/// 读取现有配置文件并解析为 EnvConfig
+#[tauri::command]
+pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
+    let project_root = get_project_root()?;
+    let env_path = project_root.join(".env");
+    let compose_path = project_root.join("docker-compose.yml");
+
+    // 如果两个文件都不存在，返回 None
+    if !env_path.exists() || !compose_path.exists() {
+        return Ok(None);
+    }
+
+    // 读取 .env 文件
+    let env_content =
+        std::fs::read_to_string(&env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?;
+    let env_file = crate::engine::env_parser::EnvFile::parse(&env_content)
+        .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+    let env_map = env_file.to_map();
+
+    // 创建 VersionManifest 用于 env prefix 反查
+    let manifest = VersionManifest::new();
+    let services = parse_env_to_services(&env_map, &manifest);
 
     // 如果没有解析到任何服务，返回 None
     if services.is_empty() {
@@ -1433,87 +1447,107 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use super::parse_env_to_services;
+    use crate::engine::config_generator::ServiceType;
+    use crate::engine::env_parser::EnvFile;
+    use crate::engine::version_manifest::VersionManifest;
 
-    /// 测试 load_existing_config 解析多版本 Redis
-    #[test]
-    fn test_load_existing_config_multi_redis() {
-        // 创建临时目录
-        let temp_dir = std::env::temp_dir().join("php_stack_test_multi_redis");
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        // 创建测试 .env 文件
-        let env_content = r#"SOURCE_DIR=./www
-TZ=Asia/Shanghai
-REDIS62_VERSION=6.2-alpine-01
-REDIS62_HOST_PORT=6379
-REDIS72_VERSION=7.2-alpine
-REDIS72_HOST_PORT=6380
-"#;
-        fs::write(temp_dir.join(".env"), env_content).unwrap();
-
-        // 创建空的 docker-compose.yml
-        fs::write(
-            temp_dir.join("docker-compose.yml"),
-            "version: '3'\nservices: {}\n",
-        )
-        .unwrap();
-
-        // 临时修改 project_root（这里无法直接测试，因为 get_project_root 是硬编码的）
-        // 所以这个测试主要用于验证解析逻辑
-
-        // 清理
-        fs::remove_dir_all(&temp_dir).ok();
+    fn parse_env(content: &str) -> std::collections::HashMap<String, String> {
+        EnvFile::parse(content)
+            .expect("解析 .env 内容失败")
+            .to_map()
     }
 
-    /// 测试 load_existing_config 解析多版本 Nginx
+    /// 测试解析多版本 Redis
     #[test]
-    fn test_load_existing_config_multi_nginx() {
-        let temp_dir = std::env::temp_dir().join("php_stack_test_multi_nginx");
-        fs::create_dir_all(&temp_dir).unwrap();
+    fn test_parse_env_to_services_multi_redis() {
+        let env_map = parse_env(
+            "SOURCE_DIR=./www\nTZ=Asia/Shanghai\nREDIS62_VERSION=6.2-alpine-01\nREDIS62_HOST_PORT=6379\nREDIS72_VERSION=7.2-alpine\nREDIS72_HOST_PORT=6380\n",
+        );
+        let manifest = VersionManifest::new();
+        let services = parse_env_to_services(&env_map, &manifest);
 
-        let env_content = r#"SOURCE_DIR=./www
-TZ=Asia/Shanghai
-NGINX127_VERSION=1.27-alpine
-NGINX127_HTTP_HOST_PORT=80
-NGINX125_VERSION=1.25-alpine
-NGINX125_HTTP_HOST_PORT=8080
-"#;
-        fs::write(temp_dir.join(".env"), env_content).unwrap();
-        fs::write(
-            temp_dir.join("docker-compose.yml"),
-            "version: '3'\nservices: {}\n",
-        )
-        .unwrap();
+        let redis: Vec<_> = services
+            .iter()
+            .filter(|s| matches!(s.service_type, ServiceType::Redis))
+            .collect();
+        assert_eq!(
+            redis.len(),
+            2,
+            "应解析出 2 个 Redis 服务，实际: {services:?}"
+        );
 
-        fs::remove_dir_all(&temp_dir).ok();
+        let ports: Vec<u16> = redis.iter().map(|s| s.host_port).collect();
+        assert!(ports.contains(&6379), "REDIS62 端口应为 6379");
+        assert!(ports.contains(&6380), "REDIS72 端口应为 6380");
     }
 
-    /// 测试 load_existing_config 解析混合服务
+    /// 测试解析多版本 Nginx
     #[test]
-    fn test_load_existing_config_mixed_services() {
-        let temp_dir = std::env::temp_dir().join("php_stack_test_mixed");
-        fs::create_dir_all(&temp_dir).unwrap();
+    fn test_parse_env_to_services_multi_nginx() {
+        let env_map = parse_env(
+            "SOURCE_DIR=./www\nTZ=Asia/Shanghai\nNGINX127_VERSION=1.27-alpine\nNGINX127_HTTP_HOST_PORT=80\nNGINX125_VERSION=1.25-alpine\nNGINX125_HTTP_HOST_PORT=8080\n",
+        );
+        let manifest = VersionManifest::new();
+        let services = parse_env_to_services(&env_map, &manifest);
 
-        let env_content = r#"SOURCE_DIR=./www
-TZ=Asia/Shanghai
-PHP85_VERSION=8.5
-PHP85_HOST_PORT=9000
-PHP85_EXTENSIONS=mysqli,mbstring
-MYSQL84_VERSION=8.4
-MYSQL84_HOST_PORT=3306
-REDIS62_VERSION=6.2-alpine-01
-REDIS62_HOST_PORT=6379
-NGINX127_VERSION=1.27-alpine
-NGINX127_HTTP_HOST_PORT=80
-"#;
-        fs::write(temp_dir.join(".env"), env_content).unwrap();
-        fs::write(
-            temp_dir.join("docker-compose.yml"),
-            "version: '3'\nservices: {}\n",
-        )
-        .unwrap();
+        let nginx: Vec<_> = services
+            .iter()
+            .filter(|s| matches!(s.service_type, ServiceType::Nginx))
+            .collect();
+        assert_eq!(
+            nginx.len(),
+            2,
+            "应解析出 2 个 Nginx 服务，实际: {services:?}"
+        );
 
-        fs::remove_dir_all(&temp_dir).ok();
+        let ports: Vec<u16> = nginx.iter().map(|s| s.host_port).collect();
+        assert!(ports.contains(&80), "NGINX127 端口应为 80");
+        assert!(ports.contains(&8080), "NGINX125 端口应为 8080");
+
+        // manifest 收录的版本应反查出 ID，未收录的回退为小写前缀
+        let ids: Vec<&str> = nginx.iter().map(|s| s.version.as_str()).collect();
+        assert!(ids.contains(&"nginx127"), "NGINX127 应反查为 ID nginx127");
+        assert!(ids.contains(&"nginx125"), "NGINX125 应反查为 ID nginx125");
+    }
+
+    /// 测试解析混合服务（含 manifest 未收录的 PHP85 回退路径）
+    #[test]
+    fn test_parse_env_to_services_mixed_services() {
+        let env_map = parse_env(
+            "SOURCE_DIR=./www\nTZ=Asia/Shanghai\nPHP85_VERSION=8.5\nPHP85_HOST_PORT=9000\nPHP85_EXTENSIONS=mysqli,mbstring\nMYSQL84_VERSION=8.4\nMYSQL84_HOST_PORT=3306\nREDIS62_VERSION=6.2-alpine-01\nREDIS62_HOST_PORT=6379\nNGINX127_VERSION=1.27-alpine\nNGINX127_HTTP_HOST_PORT=80\n",
+        );
+        let manifest = VersionManifest::new();
+        let services = parse_env_to_services(&env_map, &manifest);
+
+        assert_eq!(services.len(), 4, "应解析出 4 个服务，实际: {services:?}");
+
+        let php = services
+            .iter()
+            .find(|s| matches!(s.service_type, ServiceType::PHP))
+            .expect("应包含 PHP 服务");
+        assert_eq!(php.version, "php85", "未收录的 PHP85 应回退为小写前缀");
+        assert_eq!(php.host_port, 9000);
+        let php_exts = php.extensions.as_ref().expect("PHP 服务应有扩展列表");
+        assert_eq!(
+            php_exts,
+            &["mysqli".to_string(), "mbstring".to_string()],
+            "扩展列表应按逗号拆分"
+        );
+
+        let mysql = services
+            .iter()
+            .find(|s| matches!(s.service_type, ServiceType::MySQL))
+            .expect("应包含 MySQL 服务");
+        assert_eq!(mysql.version, "mysql84");
+        assert_eq!(mysql.host_port, 3306);
+
+        // MYSQL_ROOT_PASSWORD 不应被误识别为 MySQL 服务
+        let with_root = parse_env("MYSQL_ROOT_PASSWORD=secret\n");
+        let no_services = parse_env_to_services(&with_root, &VersionManifest::new());
+        assert!(
+            no_services.is_empty(),
+            "仅 ROOT_PASSWORD 时不应解析出服务，实际: {no_services:?}"
+        );
     }
 }

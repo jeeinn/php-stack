@@ -82,7 +82,6 @@ pub fn run() {
             commands::reset_all_mirror_overrides,
             // 备份
             commands::create_backup,
-            commands::select_project_folder,
             commands::convert_to_relative_path,
             // 恢复
             commands::preview_restore,

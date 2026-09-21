@@ -32,27 +32,53 @@ macro_rules! app_log {
 }
 
 /// 用户可见日志（同时发送到前端 UI）
+///
+/// 空消息会被丢弃。payload 为 `{ level, message }`，便于前端按等级过滤着色。
 #[macro_export]
 macro_rules! ui_log {
     ($app_handle:expr, info, $module:expr, $($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            $crate::app_log!(info, $module, "{}", msg);
-            let _ = $app_handle.emit("env-log", &msg);
+            if !msg.trim().is_empty() {
+                $crate::app_log!(info, $module, "{}", msg);
+                let _ = $app_handle.emit(
+                    "env-log",
+                    &$crate::logging::UiLogPayload {
+                        level: "info".to_string(),
+                        message: msg,
+                    },
+                );
+            }
         }
     };
     ($app_handle:expr, warn, $module:expr, $($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            $crate::app_log!(warn, $module, "{}", msg);
-            let _ = $app_handle.emit("env-log", &msg);
+            if !msg.trim().is_empty() {
+                $crate::app_log!(warn, $module, "{}", msg);
+                let _ = $app_handle.emit(
+                    "env-log",
+                    &$crate::logging::UiLogPayload {
+                        level: "warn".to_string(),
+                        message: msg,
+                    },
+                );
+            }
         }
     };
     ($app_handle:expr, error, $module:expr, $($arg:tt)*) => {
         {
             let msg = format!($($arg)*);
-            $crate::app_log!(error, $module, "{}", msg);
-            let _ = $app_handle.emit("env-log", &msg);
+            if !msg.trim().is_empty() {
+                $crate::app_log!(error, $module, "{}", msg);
+                let _ = $app_handle.emit(
+                    "env-log",
+                    &$crate::logging::UiLogPayload {
+                        level: "error".to_string(),
+                        message: msg,
+                    },
+                );
+            }
         }
     };
 }

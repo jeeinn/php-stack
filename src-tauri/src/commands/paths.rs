@@ -126,8 +126,7 @@ pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
 ///
 /// 仅在用户明确点「重建」时调用；成功后后续 `resolve_workspace` 会命中该路径。
 pub fn recreate_configured_workspace() -> Result<PathBuf, String> {
-    let config = WorkspaceManager::load_workspace()?
-        .ok_or_else(|| "尚未配置工作区".to_string())?;
+    let config = WorkspaceManager::load_workspace()?.ok_or_else(|| "尚未配置工作区".to_string())?;
     let path = PathBuf::from(&config.workspace_path);
     create_workspace_dir(&path)?;
     Ok(path)
@@ -138,12 +137,7 @@ pub fn create_workspace_dir(path: &std::path::Path) -> Result<(), String> {
     if path.exists() {
         return Ok(());
     }
-    std::fs::create_dir_all(path).map_err(|e| {
-        format!(
-            "无法创建工作区目录 {}: {e}",
-            path.display()
-        )
-    })
+    std::fs::create_dir_all(path).map_err(|e| format!("无法创建工作区目录 {}: {e}", path.display()))
 }
 
 /// 工作区根目录（.env / docker-compose.yml / services/ 所在）。

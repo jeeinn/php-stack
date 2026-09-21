@@ -1,6 +1,6 @@
 # PHP-Stack 日志与启动系统
 
-> **版本**: v0.2.0 (2026-04-27)  
+> **版本**: v0.3.1  
 > ↩ [返回主架构文档](./ARCHITECTURE.md)
 
 ---
@@ -20,9 +20,9 @@
 
 | 层级 | 目标 | 用途 | 特性 |
 |------|------|------|------|
-| **文件日志** | `php-stack.log` | 问题排查、审计 | 持久化、完整记录、每次启动覆盖 |
-| **控制台日志** | 终端输出 | 开发调试 | 彩色格式化、实时显示 |
-| **UI 日志** | 前端面板 | 用户反馈 | 实时推送、自动滚动、可复制 |
+| **文件日志** | `php-stack.log` | 问题排查、审计 | 持久化、启动时轮转保留 2 代、写入全部等级 |
+| **控制台日志** | 终端输出 | 开发调试 | tracing + EnvFilter |
+| **UI 日志** | 前端面板 | 用户反馈 | `env-log` 推送 `{ level, message }`、按等级过滤着色 |
 
 ### 1.2 后端日志初始化流程
 
@@ -36,47 +36,33 @@ sequenceDiagram
     MAIN->>LOG: init_logging(&log_dir)
     LOG->>FS: create_dir_all(log_dir)
     alt 目录创建失败
-        LOG-->>MAIN: Err("无法创建目录")
+        LOG-->>MAIN: Err("failed to create dir")
     else 目录创建成功
-        LOG->>FS: OpenOptions::new().truncate(true).open("php-stack.log")
-        LOG->>TRACING: 配置 FileLayer (JSON 格式)
-        LOG->>TRACING: 配置 ConsoleLayer (Pretty 格式，仅 debug)
-        LOG->>TRACING: 注册 subscriber
+        LOG->>FS: rotate php-stack.log → .1 → .2, then create current
+        LOG->>TRACING: EnvFilter console subscriber
         LOG-->>MAIN: Ok(())
-        MAIN->>MAIN: app_log!(info, "PHP-Stack 启动")
+        MAIN->>MAIN: app_log!(info, "PHP-Stack started")
     end
 ```
 
 **关键实现**:
-- 使用 `tracing-subscriber` 配置多层日志输出
-- 文件日志使用 JSON 格式，便于结构化分析
-- 控制台日志使用 Pretty 格式，便于开发调试
-- 每次启动覆盖日志文件（`truncate: true`），避免无限增长
+- 文件由 `write_to_log_file` 写入，格式 `[HH:MM:SS.mmm] LEVEL [module] message`
+- 启动时轮转：当前 → `.1` → `.2`，超出丢弃
+- 控制台使用 `tracing_subscriber` + `EnvFilter`（可用 `RUST_LOG` 覆盖）
+- 用户可见文案统一为英文短句，无 emoji
 
 ### 1.3 日志宏定义
 
-```rust
-/// 应用日志宏 — 同时输出到文件和 Tauri 事件
-#[macro_export]
-macro_rules! app_log {
-    ($level:ident, $target:expr, $($arg:tt)*) => {{
-        let msg = format!($($arg)*);
-        // 1. 输出到 tracing（文件 + 控制台）
-        event!(target: $target, level, "{}", msg);
-        // 2. 发送到前端 UI（通过 Tauri 事件 "env-log"）
-        if let Some(handle) = $crate::get_app_handle() {
-            let _ = handle.emit("env-log", &msg);
-        }
-    }};
-}
-```
+- `app_log!(level, module, ...)`：写文件 + 控制台，不推 UI
+- `ui_log!(app, level, module, ...)`：先 `app_log!`，再 emit `env-log`，payload 为 `{ "level": "info|warn|error", "message": "..." }`；空消息丢弃
 
 ### 1.4 前端日志接收与显示
 
 **日志状态管理**（`useToast.ts`）:
-- 使用 `ref<string[]>` 存储日志，最新在下
-- 保留最近 50 条，超出时移除最早的
-- 通过 `listen('env-log', ...)` 监听后端事件
+- `LogEntry { time, level, message }`，最多 200 条
+- 关于页配置最低显示等级（`php-stack-log-level`），只过滤面板，不删缓冲、不改文件
+- `listen('env-log')` 兼容旧版纯字符串 payload（当作 info）
+- 前端操作日志走 `addLogKey`，始终使用英文 locale
 
 **自动滚动优化**:
 
@@ -99,30 +85,30 @@ graph TD
 
 ### 1.5 日志导出
 
-**后端命令**: `export_logs()` — 读取 `php-stack.log` 文件内容  
-**前端调用**: 使用 `@tauri-apps/plugin-clipboard-manager` 的 `writeText()` 写入剪贴板  
-**权限配置**: `capabilities/default.json` 中配置 `clipboard-manager:allow-write-text`
+**后端命令**: `export_logs_to(dest)` 复制完整 `php-stack.log`；`export_logs()` 读文件返回文本  
+**入口**: 日志面板「导出」、关于页「导出日志」  
+**复制**: 面板「复制」只复制当前可见的最近条目
 
 ### 1.6 相关文件
 
 | 文件 | 职责 |
 |------|------|
-| `src-tauri/src/logging.rs` | 日志基础设施（tracing 配置、宏定义） |
+| `src-tauri/src/macros.rs` | `app_log!` / `ui_log!` |
+| `src-tauri/src/logging.rs` | 轮转、写文件、`UiLogPayload` |
 | `src-tauri/src/lib.rs` | 日志系统初始化 |
 | `src-tauri/src/commands/workspace.rs` | 导出日志命令 |
-| `src/composables/useToast.ts` | 前端日志状态管理 |
+| `src/composables/useToast.ts` | 前端日志状态、等级过滤 |
+| `src/components/AboutPage.vue` | 日志等级设置、导出 |
 | `src/App.vue` | 日志面板 UI、事件监听、自动滚动 |
-| `src-tauri/capabilities/default.json` | 剪贴板权限配置 |
 
 ### 1.7 测试建议
 
 **手动测试场景**:
-1. 启动应用 → 检查 `php-stack.log` 是否生成
-2. 执行操作 → 观察日志面板实时更新
-3. 手动向上滚动 → 等待 1 秒后新日志应自动滚动
-4. 切换日志面板显示/隐藏 → 打开时应自动滚到底部
-5. 点击"📋 复制" → 粘贴验证完整性
-6. 连续操作 50+ 次 → 确认日志数量不超过 50 条
+1. 启动应用 → 检查 `php-stack.log` 是否生成且为英文分隔线
+2. 执行操作 → 观察日志面板实时更新，失败行为 error 着色
+3. 关于页把等级调到 warn → info 行隐藏，导出文件仍含 info
+4. 手动向上滚动 → 等待 1 秒后新日志应自动滚动
+5. 连续操作 200+ 次 → 确认面板不超过 200 条
 
 ---
 

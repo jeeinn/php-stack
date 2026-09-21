@@ -5,7 +5,7 @@ import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import type { BackupOptions, BackupProgress } from '../types/env-config';
 import { createBackup, convertToRelativePath, normalizeError } from '../api';
-import { showToast, addLog } from '../composables/useToast';
+import { showToast, addLogKey } from '../composables/useToast';
 
 const { t } = useI18n();
 
@@ -53,7 +53,7 @@ async function selectProjectFile() {
 
 function handlePathError(errorMsg: string) {
   console.error('[Backup] Path conversion failed:', errorMsg);
-  addLog(t('backup.toast.pathError', { error: errorMsg }));
+  addLogKey('backup.toast.pathError', { error: errorMsg }, 'error');
   showToast(errorMsg, 'error');
 }
 

@@ -112,7 +112,7 @@ async fn create_rollback_bundle(project_root: &std::path::Path) -> Option<String
             app_log!(
                 info,
                 "commands::execute_restore",
-                "已生成恢复前回滚包: {}",
+                "Created restore rollback pack: {}",
                 save_path.display()
             );
             Some(save_path.to_string_lossy().to_string())
@@ -121,7 +121,7 @@ async fn create_rollback_bundle(project_root: &std::path::Path) -> Option<String
             app_log!(
                 warn,
                 "commands::execute_restore",
-                "生成回滚包失败（不阻断恢复）: {e}"
+                "Rollback pack failed (restore continues): {e}"
             );
             None
         }

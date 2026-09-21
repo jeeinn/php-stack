@@ -531,7 +531,8 @@ mod tests {
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("manifest.json", zip_options).unwrap();
-        zip.write_all(br#"{"version":"1.0.0","timestamp":"t","services":[]}"#).unwrap();
+        zip.write_all(br#"{"version":"1.0.0","timestamp":"t","services":[]}"#)
+            .unwrap();
         zip.start_file("../../escaped.txt", zip_options).unwrap();
         zip.write_all(b"pwned").unwrap();
         zip.finish().unwrap();

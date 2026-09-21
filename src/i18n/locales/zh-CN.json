@@ -28,7 +28,8 @@
     "settings": "其他设置",
     "migration": "环境迁移",
     "expand": "展开侧边栏",
-    "collapse": "收缩侧边栏"
+    "collapse": "收缩侧边栏",
+    "about": "关于"
   },
   "dashboard": {
     "title": "运行状态",
@@ -329,11 +330,6 @@
       "auto": "自动",
       "light": "明亮",
       "dark": "暗黑"
-    },
-    "about": {
-      "title": "关于 PHP-Stack",
-      "hint": "自动更新尚未接入；可打开 GitHub Releases 查看是否有新版本。",
-      "checkUpdate": "检查更新"
     }
   },
   "mirror": {
@@ -639,6 +635,42 @@
       "notConfigured": "未配置",
       "loadFailed": "获取失败",
       "fallback": "配置的工作区不可用，数据实际写入 {effective}。{reason}"
+    }
+  },
+  "about": {
+    "title": "关于 PHP-Stack",
+    "support": "支持信息",
+    "version": "版本",
+    "os": "操作系统",
+    "arch": "系统架构",
+    "copyAll": "复制全部",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "复制失败: {error}",
+    "logLevel": "日志等级",
+    "logLevelHint": "仅影响实时日志面板，导出文件仍包含全部等级。",
+    "level": {
+      "info": "info",
+      "warn": "warn",
+      "error": "error"
+    },
+    "exportLogs": "导出日志",
+    "project": "项目地址",
+    "openRepo": "打开仓库",
+    "update": {
+      "title": "检查更新",
+      "check": "检查更新",
+      "checking": "正在检查...",
+      "upToDate": "已是最新版本",
+      "available": "发现新版本 {version}",
+      "notes": "更新说明",
+      "download": "下载并安装",
+      "downloading": "正在下载… {percent}%",
+      "installing": "正在安装…",
+      "relaunching": "即将重启…",
+      "failed": "检查更新失败: {error}",
+      "devHint": "开发模式下可能无法检查更新。",
+      "banner": "新版本 {version} 可用",
+      "bannerAction": "查看"
     }
   }
 }

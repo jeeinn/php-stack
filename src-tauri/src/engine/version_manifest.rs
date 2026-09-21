@@ -112,7 +112,7 @@ impl VersionManifest {
                     crate::app_log!(
                         info,
                         "engine::version_manifest",
-                        "已加载外部版本清单: {}",
+                        "Loaded external version manifest: {}",
                         path.display()
                     );
                     Some(m)
@@ -121,7 +121,7 @@ impl VersionManifest {
                     crate::app_log!(
                         warn,
                         "engine::version_manifest",
-                        "外部版本清单解析失败，回退内置: {} ({e})",
+                        "External manifest parse failed, using built-in: {} ({e})",
                         path.display()
                     );
                     None
@@ -131,7 +131,7 @@ impl VersionManifest {
                 crate::app_log!(
                     warn,
                     "engine::version_manifest",
-                    "读取外部版本清单失败，回退内置: {} ({e})",
+                    "Failed to read external manifest, using built-in: {} ({e})",
                     path.display()
                 );
                 None
@@ -141,8 +141,8 @@ impl VersionManifest {
 
     /// 从 JSON 字符串解析清单（供单测与外部覆盖共用）
     pub fn from_json(json_data: &str) -> Result<Self, String> {
-        let file: ManifestFile =
-            serde_json::from_str(json_data).map_err(|e| format!("解析 version_manifest 失败: {e}"))?;
+        let file: ManifestFile = serde_json::from_str(json_data)
+            .map_err(|e| format!("解析 version_manifest 失败: {e}"))?;
 
         let mut versions = HashMap::new();
         versions.insert(ServiceType::Php, file.php);

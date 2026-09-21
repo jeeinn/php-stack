@@ -1,3 +1,4 @@
+mod app;
 mod backup;
 mod docker;
 mod env_config;
@@ -6,6 +7,7 @@ pub mod paths;
 mod workspace;
 
 // Re-export all commands for lib.rs invoke_handler registration
+pub use app::*;
 pub use backup::*;
 pub use docker::*;
 pub use env_config::*;

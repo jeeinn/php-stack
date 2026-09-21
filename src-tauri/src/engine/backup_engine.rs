@@ -103,7 +103,7 @@ impl BackupEngine {
                 app_log!(
                     debug,
                     "engine::backup",
-                    "尝试匹配模式: {} -> {}",
+                    "Trying glob: {} -> {}",
                     pattern,
                     abs_pattern
                 );
@@ -120,7 +120,7 @@ impl BackupEngine {
                                         .map(|p| p.to_string_lossy().replace('\\', "/"))
                                         .unwrap_or_else(|| path.display().to_string());
                                     let zip_path = format!("projects/{relative_path}");
-                                    app_log!(debug, "engine::backup", "添加文件: {}", zip_path);
+                                    app_log!(debug, "engine::backup", "Adding file: {}", zip_path);
                                     // 流式写入：单个大文件不再整体进内存
                                     if let Err(e) = Self::add_file_to_zip(
                                         &mut zip,
@@ -137,24 +137,24 @@ impl BackupEngine {
                                 }
                                 Ok(path) => {
                                     // 跳过目录
-                                    app_log!(debug, "engine::backup", "跳过目录: {:?}", path);
+                                    app_log!(debug, "engine::backup", "Skipping dir: {:?}", path);
                                 }
                                 Err(e) => {
-                                    manifest.errors.push(format!("Glob 匹配错误: {e}"));
-                                    app_log!(warn, "engine::backup", "Glob 匹配错误: {}", e);
+                                    manifest.errors.push(format!("Glob match error: {e}"));
+                                    app_log!(warn, "engine::backup", "Glob match error: {}", e);
                                 }
                             }
                         }
                         app_log!(
                             info,
                             "engine::backup",
-                            "模式 '{}' 匹配到 {} 个文件",
+                            "Pattern '{}' matched {} file(s)",
                             pattern,
                             matched_count
                         );
                     }
                     Err(e) => {
-                        let error_msg = format!("Glob 模式错误 '{pattern}': {e}");
+                        let error_msg = format!("Invalid glob '{pattern}': {e}");
                         manifest.errors.push(error_msg.clone());
                         app_log!(error, "engine::backup", "{}", error_msg);
                     }
@@ -164,7 +164,7 @@ impl BackupEngine {
 
         // Step 5: Optional — Recent logs (70%)
         if options.include_logs {
-            Self::emit_progress(app_handle, "打包日志文件...", 85);
+            Self::emit_progress(app_handle, "Packing logs...", 85);
             let logs_dir = project_root.join("logs");
             if logs_dir.exists() {
                 // MVP: pack all logs (7-day filter can be added later)
@@ -264,7 +264,12 @@ impl BackupEngine {
             let path = entry.path();
             // 无文件名（盘符根等）时跳过而非 panic
             let Some(name) = path.file_name() else {
-                app_log!(warn, "engine::backup", "跳过无文件名的路径: {:?}", path);
+                app_log!(
+                    warn,
+                    "engine::backup",
+                    "Skipping path with no file name: {:?}",
+                    path
+                );
                 continue;
             };
             let zip_path = format!("{zip_prefix}/{}", name.to_string_lossy());

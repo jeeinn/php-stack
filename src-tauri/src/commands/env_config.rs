@@ -560,12 +560,16 @@ pub fn check_service_images_presence(config: EnvConfig) -> Result<Vec<ImageStatu
 /// **一条失败不影响其他镜像**——返回每条的 success/error，前端可选择继续或回滚。
 /// `pull_service_images` 是 idempotent：本机已有镜像时 `docker pull` 本身是 no-op + 极快。
 #[tauri::command]
-pub fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImageResult>, String> {
+pub async fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImageResult>, String> {
     use crate::app_log;
 
     let mut results: Vec<PullImageResult> = Vec::with_capacity(image_tags.len());
-    for tag in &image_tags {
-        match ConfigExtractor::pull_image(tag) {
+    for tag in image_tags {
+        let tag_for_task = tag.clone();
+        // docker pull 会长时间阻塞（大镜像下载），必须走阻塞线程池，
+        // 否则 Tauri async runtime 的执行线程被占满，前端弹窗无响应。
+        let result = run_blocking_command(move || ConfigExtractor::pull_image(&tag_for_task)).await;
+        match result {
             Ok(()) => {
                 app_log!(
                     info,
@@ -574,7 +578,7 @@ pub fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImageResul
                     tag
                 );
                 results.push(PullImageResult {
-                    tag: tag.clone(),
+                    tag,
                     success: true,
                     error: None,
                 });
@@ -588,7 +592,7 @@ pub fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImageResul
                     e
                 );
                 results.push(PullImageResult {
-                    tag: tag.clone(),
+                    tag,
                     success: false,
                     error: Some(e),
                 });

@@ -1,7 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  getWorkspaceInfo,
+  checkConfigFilesExist,
+  getVersionMappings,
+  loadExistingConfig as apiLoadExistingConfig,
+  generateEnvConfig,
+  previewCompose,
+  applyEnvConfig,
+  checkServiceImagesPresence,
+  pullServiceImages,
+  openServiceConfig,
+  startEnvironment,
+  normalizeError,
+} from '../api';
 import { open } from '@tauri-apps/plugin-shell';
 import type { ServiceEntry, EnvConfig, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
 import { showToast } from '../composables/useToast';
@@ -164,7 +177,7 @@ onUnmounted(() => {
 /// 工作区路径展示（回退告警已提升为 App 全局横幅，此处只显示配置值）
 async function loadWorkspaceInfo() {
   try {
-    const info = await invoke<any>('get_workspace_info');
+    const info = await getWorkspaceInfo();
     if (info) {
       workspacePath.value = info.workspace_path;
     } else {
@@ -178,7 +191,7 @@ async function loadWorkspaceInfo() {
 // 检查 .env 文件是否存在
 async function checkEnvFileExists() {
   try {
-    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
     console.log('[EnvConfig] .env 文件存在:', hasEnvFile.value);
   } catch (e) {
@@ -191,7 +204,7 @@ async function checkEnvFileExists() {
 async function loadVersionMappings() {
   console.log('[EnvConfig] 开始加载版本映射...');
   try {
-    const mappings = await invoke<any>('get_version_mappings');
+    const mappings = await getVersionMappings();
     console.log('[EnvConfig] 版本映射:', mappings);
     
     // 提取版本信息列表（包含 id、display_name、image_tag、service_dir 等完整信息）
@@ -233,8 +246,8 @@ async function retryLoadVersionMappings() {
 }
 
 // 错误信息格式化
-function formatErrorMessage(error: any): string {
-  const errorMsg = String(error);
+function formatErrorMessage(error: unknown): string {
+  const errorMsg = normalizeError(error);
   
   if (errorMsg.includes('Docker') || errorMsg.includes('docker')) {
     if (errorMsg.includes('not running') || errorMsg.includes('unavailable')) {
@@ -271,7 +284,7 @@ function showError(message: string) {
 async function loadExistingConfig() {
   console.log('[EnvConfig] 开始加载现有配置...');
   try {
-    const config = await invoke<EnvConfig | null>('load_existing_config');
+    const config = await apiLoadExistingConfig();
     console.log('[EnvConfig] 加载结果:', config);
     
     if (config) {
@@ -574,8 +587,8 @@ async function handlePreview() {
   try {
     const config = buildConfig();
     const [envContent, composeContent] = await Promise.all([
-      invoke<string>('generate_env_config', { config }),
-      invoke<string>('preview_compose', { config }),
+      generateEnvConfig(config),
+      previewCompose(config),
     ]);
     previewEnv.value = envContent;
     previewCompose.value = composeContent;
@@ -597,7 +610,7 @@ async function handleApply() {
   // 检查配置文件是否存在（结果写入 enableBackup ref，供后续拉取路径复用）
   enableBackup.value = false;
   try {
-    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    const existingFiles = await checkConfigFilesExist();
     if (existingFiles.length > 0) {
       // 有文件存在，显示确认对话框
       const fileList = existingFiles.map(f => `• ${f}`).join('\n');
@@ -631,7 +644,7 @@ async function handleApply() {
   applying.value = true;
   try {
     const config = buildConfig();
-    const presences = await invoke<ImagePresence[]>('check_service_images_presence', { config });
+    const presences = await checkServiceImagesPresence(config);
     imagePresences.value = presences;
     const missing = presences.filter(p => p.status === 'missing');
 
@@ -670,9 +683,7 @@ async function confirmPullAndApply(missingTags: string[]) {
       pullProgress.value = { ...pullProgress.value, [tag]: 10 };
 
       try {
-        const batch = await invoke<PullImageResultItem[]>('pull_service_images', {
-          imageTags: [tag],
-        });
+        const batch = await pullServiceImages([tag]);
         const item = batch[0] ?? { tag, success: false, error: 'empty result' };
         results.push(item);
         pullProgress.value = {
@@ -680,7 +691,7 @@ async function confirmPullAndApply(missingTags: string[]) {
           [tag]: item.success ? 100 : 0,
         };
       } catch (e) {
-        results.push({ tag, success: false, error: String(e) });
+        results.push({ tag, success: false, error: normalizeError(e) });
         pullProgress.value = { ...pullProgress.value, [tag]: 0 };
       }
     }
@@ -716,7 +727,7 @@ async function confirmPullAndApply(missingTags: string[]) {
     showPullConfirm.value = false;
 
     const config = buildConfig();
-    imagePresences.value = await invoke<ImagePresence[]>('check_service_images_presence', { config });
+    imagePresences.value = await checkServiceImagesPresence(config);
     await doApplyCore(config, enableBackup.value);
   } catch (e) {
     pullStatusText.value = '';
@@ -738,7 +749,7 @@ async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
   applying.value = true;
   showNginxHint.value = false;
   try {
-    const backedUpFiles = await invoke<string[]>('apply_env_config', { config, enableBackup });
+    const backedUpFiles = await applyEnvConfig(config, enableBackup);
     
     // 显示成功消息
     let successMsg = t('envConfig.toast.applySuccess', { 
@@ -795,7 +806,7 @@ async function openNginxConfigDir(serviceDir?: string) {
   try {
     // 如果没有指定服务目录，默认打开第一个 Nginx 的配置目录
     const targetDir = serviceDir || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
-    await invoke('open_service_config', { serviceName: targetDir });
+    await openServiceConfig(targetDir);
     showToast(t('envConfig.toast.nginxConfigOpened', { dir: targetDir }), 'success');
   } catch (e) {
     console.error('打开目录失败:', e);
@@ -813,7 +824,7 @@ async function confirmStart() {
   showStartConfirm.value = false;
   starting.value = true;
   try {
-    const result = await invoke<string>('start_environment');
+    const result = await startEnvironment();
     showToast(t('envConfig.toast.startSuccess', { result }), 'success', 5000);
   } catch (e) {
     showError(formatErrorMessage(e));

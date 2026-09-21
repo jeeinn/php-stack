@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  getMergedMirrorList,
+  testMirror,
+  saveSelectedMirrorOption,
+  updateSingleMirror,
+  saveUserMirrorCategory,
+  removeUserMirrorCategory,
+  resetAllMirrorOverrides,
+  normalizeError,
+} from '../api';
 import type { MergedMirrorCategory, MirrorSourceOption } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
@@ -112,10 +121,10 @@ async function loadMirrorList() {
   loading.value = true;
   
   try {
-    const data = await invoke<MergedMirrorCategory[]>('get_merged_mirror_list');
+    const data = await getMergedMirrorList();
     categories.value = data;
   } catch (e) {
-    showToast(t('mirror.toast.loadFailed', { error: e }), 'error');
+    showToast(t('mirror.toast.loadFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -140,14 +149,14 @@ async function testConnection(option: MirrorSourceOption) {
   testingOptions.value.add(optionKey);
   
   try {
-    const result = await invoke<boolean>('test_mirror', { url: option.value });
+    const result = await testMirror(option.value);
     if (result) {
       showToast(t('mirror.toast.testSuccess', { name: option.name }), 'success');
     } else {
       showToast(t('mirror.toast.testFailed', { name: option.name }), 'error');
     }
   } catch (e) {
-    showToast(t('mirror.toast.testError', { error: e }), 'error');
+    showToast(t('mirror.toast.testError', { error: normalizeError(e) }), 'error');
   } finally {
     testingOptions.value.delete(optionKey);
   }
@@ -165,23 +174,17 @@ async function selectMirror(option: MirrorSourceOption) {
   
   try {
     // 1. 保存用户选择
-    await invoke('save_selected_mirror_option', {
-      categoryId: selectedCategory.value,
-      optionId: option.id
-    });
+    await saveSelectedMirrorOption(selectedCategory.value, option.id);
     
     // 2. 立即应用到 .env 文件
-    await invoke('update_single_mirror', {
-      category: selectedCategory.value,
-      source: option.value
-    });
+    await updateSingleMirror(selectedCategory.value, option.value);
     
     showToast(t('mirror.toast.selected', { name: option.name }), 'success');
     
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(t('mirror.toast.saveFailed', { error: e }), 'error');
+    showToast(t('mirror.toast.saveFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -216,17 +219,14 @@ async function saveEdit() {
   
   try {
     // 1. 保存用户自定义配置
-    await invoke('save_user_mirror_category', {
-      categoryId: selectedCategory.value,
-      source: editValue.value.trim(),
-      description: editDescription.value || undefined
-    });
+    await saveUserMirrorCategory(
+      selectedCategory.value,
+      editValue.value.trim(),
+      editDescription.value || undefined,
+    );
     
     // 2. 立即应用到 .env 文件
-    await invoke('update_single_mirror', {
-      category: selectedCategory.value,
-      source: editValue.value.trim()
-    });
+    await updateSingleMirror(selectedCategory.value, editValue.value.trim());
     
     showToast(t('mirror.toast.updated'), 'success');
     showEditDialog.value = false;
@@ -234,7 +234,7 @@ async function saveEdit() {
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(t('mirror.toast.updateFailed', { error: e }), 'error');
+    showToast(t('mirror.toast.updateFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -251,17 +251,14 @@ async function saveCustomMirror() {
   
   try {
     // 1. 保存用户自定义配置
-    await invoke('save_user_mirror_category', {
-      categoryId: selectedCategory.value,
-      source: editValue.value.trim(),
-      description: editDescription.value || undefined
-    });
+    await saveUserMirrorCategory(
+      selectedCategory.value,
+      editValue.value.trim(),
+      editDescription.value || undefined,
+    );
     
     // 2. 立即应用到 .env 文件
-    await invoke('update_single_mirror', {
-      category: selectedCategory.value,
-      source: editValue.value.trim()
-    });
+    await updateSingleMirror(selectedCategory.value, editValue.value.trim());
     
     showToast(t('mirror.toast.customSaved'), 'success');
     showEditDialog.value = false;
@@ -269,7 +266,7 @@ async function saveCustomMirror() {
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(t('mirror.toast.saveFailed', { error: e }), 'error');
+    showToast(t('mirror.toast.saveFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -290,9 +287,7 @@ async function removeCustomMirror() {
   
   try {
     // 1. 从用户配置中删除
-    await invoke('remove_user_mirror_category', {
-      categoryId: selectedCategory.value
-    });
+    await removeUserMirrorCategory(selectedCategory.value);
     
     // 2. 同步更新 .env 文件（恢复为默认值）
     let defaultValue = '';
@@ -314,10 +309,7 @@ async function removeCustomMirror() {
         break;
     }
     
-    await invoke('update_single_mirror', {
-      category: selectedCategory.value,
-      source: defaultValue
-    });
+    await updateSingleMirror(selectedCategory.value, defaultValue);
     
     showToast(t('mirror.toast.deleted'), 'success');
     showEditDialog.value = false;
@@ -325,7 +317,7 @@ async function removeCustomMirror() {
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(t('mirror.toast.deleteFailed', { error: e }), 'error');
+    showToast(t('mirror.toast.deleteFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -346,7 +338,7 @@ async function resetAllOverrides() {
   
   try {
     // 1. 重置所有用户自定义配置
-    await invoke('reset_all_mirror_overrides');
+    await resetAllMirrorOverrides();
     
     // 2. 同步更新 .env 文件（恢复所有类别为默认值）
     const defaults = {
@@ -358,10 +350,7 @@ async function resetAllOverrides() {
     };
     
     for (const [category, defaultValue] of Object.entries(defaults)) {
-      await invoke('update_single_mirror', {
-        category,
-        source: defaultValue
-      });
+      await updateSingleMirror(category, defaultValue);
     }
     
     showToast(t('mirror.toast.resetDone'), 'success');
@@ -369,7 +358,7 @@ async function resetAllOverrides() {
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
-    showToast(t('mirror.toast.resetFailed', { error: e }), 'error');
+    showToast(t('mirror.toast.resetFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }

@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  getVersionMappings,
+  saveUserOverride,
+  removeUserOverride,
+  resetAllOverrides,
+  normalizeError,
+} from '../api';
 import type { VersionMappings, VersionInfo, ServiceTypeLower } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
@@ -31,11 +37,11 @@ async function loadVersionMappings() {
   loading.value = true;
   
   try {
-    const data = await invoke<VersionMappings>('get_version_mappings');
+    const data = await getVersionMappings();
     // 标记有用户覆盖的版本
     versionMappings.value = data;
   } catch (e) {
-    showToast(t('software.toast.loadFailed', { error: e }), 'error');
+    showToast(t('software.toast.loadFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -72,12 +78,12 @@ async function saveOverride() {
   loading.value = true;
   
   try {
-    await invoke('save_user_override', {
-      serviceType: selectedService.value,
-      id: editingVersion.value.id,
-      imageTag: editTag.value,
-      description: editDescription.value || undefined
-    });
+    await saveUserOverride(
+      selectedService.value,
+      editingVersion.value.id,
+      editTag.value,
+      editDescription.value || undefined,
+    );
     
     showToast(t('software.toast.saved'), 'success');
     showEditDialog.value = false;
@@ -86,7 +92,7 @@ async function saveOverride() {
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    showToast(t('software.toast.saveFailed', { error: e }), 'error');
+    showToast(t('software.toast.saveFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -106,17 +112,14 @@ async function removeOverride(version: VersionInfo) {
   loading.value = true;
   
   try {
-    await invoke('remove_user_override', {
-      serviceType: selectedService.value,
-      id: version.id
-    });
+    await removeUserOverride(selectedService.value, version.id);
     
     showToast(t('software.toast.deleted'), 'success');
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    showToast(t('software.toast.deleteFailed', { error: e }), 'error');
+    showToast(t('software.toast.deleteFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }
@@ -136,14 +139,14 @@ async function resetAllOverrides() {
   loading.value = true;
   
   try {
-    await invoke('reset_all_overrides');
+    await resetAllOverrides();
     
     showToast(t('software.toast.resetDone'), 'success');
     
     // 重新加载数据
     await loadVersionMappings();
   } catch (e) {
-    showToast(t('software.toast.resetFailed', { error: e }), 'error');
+    showToast(t('software.toast.resetFailed', { error: normalizeError(e) }), 'error');
   } finally {
     loading.value = false;
   }

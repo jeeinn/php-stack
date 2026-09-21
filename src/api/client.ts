@@ -38,7 +38,9 @@ export async function invokeCommand<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   try {
-    return await tauriInvoke<T>(cmd, args)
+    return args === undefined
+      ? await tauriInvoke<T>(cmd)
+      : await tauriInvoke<T>(cmd, args)
   } catch (e) {
     throw normalizeError(e)
   }

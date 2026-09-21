@@ -1,7 +1,24 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  checkDocker,
+  listContainers,
+  startContainer,
+  stopContainer,
+  openServiceConfig,
+  startEnvironment,
+  stopEnvironment,
+  restartEnvironment,
+  getWorkspaceInfo,
+  checkConfigFilesExist,
+  exportLogsTo,
+  normalizeError,
+  isPortConflictError,
+  stripProtocolPrefix,
+  PORT_CONFLICT_PREFIX,
+  type WorkspaceInfo,
+} from './api';
 import { listen } from '@tauri-apps/api/event';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -49,13 +66,6 @@ const workspaceMissingInfo = ref<{ workspace_path: string; effective_path: strin
 /// 本会话已选「临时回退」则不再反复弹窗（横幅仍保留）
 const workspaceMissingDismissed = ref(false);
 
-interface WorkspaceInfo {
-  workspace_path: string;
-  effective_path: string;
-  using_fallback: boolean;
-  path_missing: boolean;
-  fallback_reason?: string | null;
-}
 
 // 判断是否有运行中的 ps- 容器
 const hasRunningContainers = computed(() => {
@@ -79,7 +89,7 @@ const canStop = computed(() => {
 
 const checkDocker = async () => {
   try {
-    await invoke('check_docker');
+    await checkDocker();
     // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
     if (dockerError.value !== null) {
       addLog(t('dashboard.toast.dockerRestored'));
@@ -112,7 +122,7 @@ const refreshContainers = async (silent = false) => {
     return;
   }
   try {
-    const result = await invoke('list_containers') as Container[];
+    const result = await listContainers();
     consecutiveFailures = 0;
     
     // 只有当内容真正改变时才更新，减少 DOM 抖动
@@ -136,7 +146,7 @@ const refreshContainers = async (silent = false) => {
 const startService = async (name: string) => {
   try {
     addLog(t('dashboard.toast.serviceStarting', { name }));
-    await invoke('start_container', { name });
+    await startContainer(String(name));
     addLog(t('dashboard.toast.serviceStarted', { name }));
     await refreshContainers(true);
   } catch (e) {
@@ -147,7 +157,7 @@ const startService = async (name: string) => {
 const stopService = async (name: string) => {
   try {
     addLog(t('dashboard.toast.serviceStopping', { name }));
-    await invoke('stop_container', { name });
+    await stopContainer(String(name));
     addLog(t('dashboard.toast.serviceStopped', { name }));
     await refreshContainers(true);
   } catch (e) {
@@ -160,7 +170,7 @@ const openServiceConfig = async (name: string) => {
     addLog(t('dashboard.toast.configOpening', { name }));
     // 容器名统一为 ps-{serviceDir}（如 ps-php82），去掉前缀即得服务配置目录
     const serviceName = String(name).replace(/^ps-/, '');
-    await invoke('open_service_config', { serviceName });
+    await openServiceConfig(serviceName);
     addLog(t('dashboard.toast.configOpened', { name: serviceName }));
   } catch (e) {
     addLog(t('dashboard.toast.configOpenFailed', { error: e }));
@@ -184,7 +194,7 @@ const handleStopEnvironment = async () => {
   addLog(t('dashboard.toast.envStopping'));
   
   try {
-    await invoke('stop_environment');
+    await stopEnvironment();
     addLog(t('dashboard.toast.envStopped'));
     
     // 等待 1 秒让 Docker API 状态更新
@@ -210,19 +220,19 @@ const confirmStart = async () => {
   addLog(t('dashboard.toast.envStarting'));
   
   try {
-    await invoke('start_environment');
+    await startEnvironment();
     addLog(t('dashboard.toast.envStarted'));
     
     // 等待 1 秒让 Docker API 状态更新
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     await refreshContainers();
-  } catch (e: any) {
-    const errorMsg = String(e);
+  } catch (e: unknown) {
+    const errorMsg = normalizeError(e);
     
     // 检查是否是端口冲突错误
-    if (errorMsg.startsWith('PORT_CONFLICT:')) {
-      const conflictDetails = errorMsg.substring('PORT_CONFLICT:'.length);
+    if (isPortConflictError(errorMsg)) {
+      const conflictDetails = stripProtocolPrefix(errorMsg, PORT_CONFLICT_PREFIX);
       const formattedConflicts = conflictDetails.replace(/; /g, '\n• ');
       
       // 显示自定义确认对话框
@@ -238,7 +248,7 @@ const confirmStart = async () => {
         // 用户选择继续
         addLog(t('dashboard.toast.portConflictIgnore'));
         try {
-          await invoke('start_environment');
+          await startEnvironment();
           addLog(t('dashboard.toast.envStarted'));
           
           // 等待 1 秒让 Docker API 状态更新
@@ -272,7 +282,7 @@ const confirmRestart = async () => {
   addLog(t('dashboard.toast.envRestarting'));
   
   try {
-    await invoke('restart_environment');
+    await restartEnvironment();
     addLog(t('dashboard.toast.envRestarted'));
     
     // 等待 1 秒让 Docker API 状态更新
@@ -295,7 +305,7 @@ const goToMirrorSettings = () => {
 // 检查 .env 文件是否存在
 const checkEnvFileExists = async () => {
   try {
-    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
     console.log('[App] .env 文件存在:', hasEnvFile.value);
   } catch (e) {
@@ -307,7 +317,7 @@ const checkEnvFileExists = async () => {
 /// 加载工作区状态：配置路径不可用时必须全局可见，否则备份/恢复也会写到错误位置。
 async function loadWorkspaceFallbackBanner() {
   try {
-    const info = await invoke<WorkspaceInfo | null>('get_workspace_info');
+    const info = await getWorkspaceInfo();
     if (info?.using_fallback) {
       workspaceFallbackMsg.value = t('workspace.status.fallback', {
         effective: info.effective_path,
@@ -488,7 +498,7 @@ async function exportLogs() {
       filters: [{ name: 'Log', extensions: ['log', 'txt'] }],
     });
     if (!dest) return; // 用户取消
-    await invoke('export_logs_to', { dest });
+    await exportLogsTo(dest);
     showToast(t('dashboard.log.exported', { path: dest }), 'success');
   } catch (e) {
     showToast(t('dashboard.log.exportFailed', { error: e }), 'error');

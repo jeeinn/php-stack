@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getWorkspaceInfo, setWorkspacePath, normalizeError } from '../api';
 import { WORKSPACE_CHANGED_EVENT } from '../utils/workspaceEvents';
 
 const { t } = useI18n();
@@ -13,7 +13,7 @@ const errorMessage = ref('');
 
 onMounted(async () => {
   try {
-    const info = await invoke<any>('get_workspace_info');
+    const info = await getWorkspaceInfo();
     if (!info) {
       isOpen.value = true;
     } else {
@@ -43,11 +43,11 @@ async function confirmWorkspace() {
   }
 
   try {
-    await invoke('set_workspace_path', { path: currentPath.value });
+    await setWorkspacePath(currentPath.value);
     isOpen.value = false;
     window.dispatchEvent(new CustomEvent(WORKSPACE_CHANGED_EVENT));
   } catch (e) {
-    errorMessage.value = e as string;
+    errorMessage.value = normalizeError(e);
   }
 }
 </script>

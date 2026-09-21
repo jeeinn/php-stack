@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { recreateWorkspaceDir, setWorkspacePath, normalizeError } from '../api';
 
 export interface WorkspaceMissingInfo {
   workspace_path: string;
@@ -35,10 +35,10 @@ async function recreate() {
   busy.value = true;
   errorMessage.value = '';
   try {
-    await invoke('recreate_workspace_dir');
+    await recreateWorkspaceDir();
     emit('resolved');
   } catch (e) {
-    errorMessage.value = String(e);
+    errorMessage.value = normalizeError(e);
   } finally {
     busy.value = false;
   }
@@ -53,10 +53,10 @@ async function chooseNew() {
       busy.value = false;
       return;
     }
-    await invoke('set_workspace_path', { path: selected as string });
+    await setWorkspacePath(selected as string);
     emit('resolved');
   } catch (e) {
-    errorMessage.value = String(e);
+    errorMessage.value = normalizeError(e);
   } finally {
     busy.value = false;
   }

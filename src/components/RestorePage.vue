@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import type { RestorePreview, RestoreProgress, RestoreResult } from '../types/env-config';
+import { previewRestore, verifyBackup, executeRestore, normalizeError } from '../api';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
@@ -109,11 +109,11 @@ async function handlePreview() {
   if (!zipPath.value) return;
   loading.value = true;
   try {
-    preview.value = await invoke<RestorePreview>('preview_restore', { zipPath: zipPath.value });
+    preview.value = await previewRestore(zipPath.value);
     markStepCompleted('preview');
     showToast(t('restore.toast.previewDone'), 'success');
   } catch (e) {
-    showToast(e as string, 'error');
+    showToast(normalizeError(e), 'error');
   } finally {
     loading.value = false;
   }
@@ -123,7 +123,7 @@ async function handleVerify() {
   if (!zipPath.value) return;
   loading.value = true;
   try {
-    verified.value = await invoke<boolean>('verify_backup', { zipPath: zipPath.value });
+    verified.value = await verifyBackup(zipPath.value);
     if (verified.value) {
       markStepCompleted('verify');
       showToast(t('restore.toast.verifyPassed'), 'success');
@@ -131,7 +131,7 @@ async function handleVerify() {
       showToast(t('restore.toast.verifyFailed'), 'error');
     }
   } catch (e) {
-    showToast(e as string, 'error');
+    showToast(normalizeError(e), 'error');
     verified.value = false;
   } finally {
     loading.value = false;
@@ -158,9 +158,7 @@ async function handleRestore() {
 
   try {
     // 成功 / 部分失败 / 致命失败均返回 RestoreResult，明细进结果面板
-    const result = await invoke<RestoreResult>('execute_restore', {
-      zipPath: zipPath.value,
-    });
+    const result = await executeRestore(zipPath.value);
     restoreResult.value = result;
 
     if (result.success) {
@@ -180,7 +178,7 @@ async function handleRestore() {
     restoreResult.value = {
       success: false,
       restored_files: [],
-      errors: [String(e)],
+      errors: [normalizeError(e)],
       rollback_path: null,
     };
     showToast(t('restore.toast.fatalFailed'), 'error');

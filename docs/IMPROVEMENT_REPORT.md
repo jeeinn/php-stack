@@ -116,11 +116,13 @@
 
 **修复（2026-09-21）**：改为遍历 manifest 中各服务的 `service_dir` 生成 `{DIR}_VERSION` / `_HOST_PORT` / `_HTTP_HOST_PORT` 去匹配 env 键；四个服务循环抽成 `collect_services_from_manifest`。不再依赖魔数切片。
 
-### A3.【P1】前端缺少统一的 API 层 `[未开始]`
+### A3.【P1】前端缺少统一的 API 层 `[进行中]`
 
 `invoke` 直接散落在 8 个组件里，错误处理模式各不相同：EnvConfigPage 有 `formatErrorMessage`（EnvConfigPage.vue:208-236），其他页面直接 `showToast(e as string)`，Dashboard 只写日志不弹提示（App.vue:121）。`e as string` 假设后端总是返回字符串，遇到非字符串错误时会显示 `[object Object]`。
 
 **修复**：新建 `src/api/` 目录，按域封装（`docker.ts` / `envConfig.ts` / `mirror.ts` / `backup.ts`），统一做三件事：错误规范化（`String(e)` + 剥离 `PORT_CONFLICT:` 等协议前缀）、loading 注入、类型标注。组件只调用 api 函数。这是后续所有前端改进的地基，约 1 天。
+
+**进度（2026-09-21）**：已落地 `src/api/client.ts`（`normalizeError` / `invokeCommand` / 端口冲突前缀助手）与 `src/api/backup.ts`；`BackupPage` / `RestorePage` 已迁入。其余组件（App / EnvConfig / Mirror / Workspace）待后续分批迁移。
 
 ### A4.【P2】镜像源三个模块职责重叠 `[未开始]`
 

@@ -1,8 +1,20 @@
 use crate::docker::manager::DockerManager;
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
 use crate::engine::version_manifest::{VersionManifest, ServiceType as VmServiceType};
+use crate::engine::config_extractor::{
+    ConfigExtractor, ExtractOutcome, ImageStatus,
+};
 
 use super::get_project_root;
+
+/// 单个镜像拉取结果（前端"待拉取"确认弹窗使用）
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PullImageResult {
+    pub tag: String,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
 
 /// 获取 Docker Compose 容器的最新日志（非阻塞）
 ///
@@ -367,6 +379,135 @@ pub async fn apply_env_config(config: EnvConfig, enable_backup: bool, app_handle
             Err(e)
         }
     }
+}
+
+// ==================== Phase 3: 镜像探测 / 拉取 / 配置提取 ====================
+
+/// 按 EnvConfig 推算所有服务的 image_tag 并批量探测本地存在性
+///
+/// 前端流程：
+/// 1. 用户点击"应用配置" → 先调本接口探测镜像
+/// 2. 若有 `Missing` 项 → 弹"待拉取"确认对话框
+/// 3. 用户确认 → 调 `pull_service_images` 拉取缺失镜像
+/// 4. 拉取完成 → 调 `apply_env_config`（此时镜像已存在，extract 路径生效）
+#[tauri::command]
+pub fn check_service_images_presence(config: EnvConfig) -> Result<Vec<ImageStatus>, String> {
+    let manifest = VersionManifest::new();
+    let mut tags: Vec<String> = Vec::new();
+
+    for service in &config.services {
+        let vm_service_type = match service.service_type {
+            crate::engine::config_generator::ServiceType::PHP => VmServiceType::Php,
+            crate::engine::config_generator::ServiceType::MySQL => VmServiceType::Mysql,
+            crate::engine::config_generator::ServiceType::Redis => VmServiceType::Redis,
+            crate::engine::config_generator::ServiceType::Nginx => VmServiceType::Nginx,
+        };
+
+        // 优先用 manifest 的 image_tag（自定义 fallback 与 generate_service_dirs 保持一致）
+        let tag = manifest
+            .get_entry(&vm_service_type, &service.version)
+            .map(|entry| entry.image_tag.clone())
+            .unwrap_or_else(|| {
+                let svc_prefix = match service.service_type {
+                    crate::engine::config_generator::ServiceType::PHP => "php",
+                    crate::engine::config_generator::ServiceType::MySQL => "mysql",
+                    crate::engine::config_generator::ServiceType::Redis => "redis",
+                    crate::engine::config_generator::ServiceType::Nginx => "nginx",
+                };
+                format!("{svc_prefix}:{}", service.version)
+            });
+        tags.push(tag);
+    }
+
+    Ok(ConfigExtractor::check_images_batch(&tags))
+}
+
+/// 批量拉取镜像（前端用户确认后调用）
+///
+/// **一条失败不影响其他镜像**——返回每条的 success/error，前端可选择继续或回滚。
+/// `pull_service_images` 是 idempotent：本机已有镜像时 `docker pull` 本身是 no-op + 极快。
+#[tauri::command]
+pub fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImageResult>, String> {
+    use crate::app_log;
+
+    let mut results: Vec<PullImageResult> = Vec::with_capacity(image_tags.len());
+    for tag in &image_tags {
+        match ConfigExtractor::pull_image(tag) {
+            Ok(()) => {
+                app_log!(
+                    info,
+                    "commands::pull_service_images",
+                    "✅ 镜像拉取成功: {}",
+                    tag
+                );
+                results.push(PullImageResult {
+                    tag: tag.clone(),
+                    success: true,
+                    error: None,
+                });
+            }
+            Err(e) => {
+                app_log!(
+                    warn,
+                    "commands::pull_service_images",
+                    "⚠️ 镜像拉取失败: {} ({})",
+                    tag,
+                    e
+                );
+                results.push(PullImageResult {
+                    tag: tag.clone(),
+                    success: false,
+                    error: Some(e),
+                });
+            }
+        }
+    }
+    Ok(results)
+}
+
+/// 强制从镜像提取配置（覆盖式；用户手动点"重新提取"时调用）
+///
+/// **谨慎**：destination 存在时返回 `SkippedExists`（保留用户修改）。如需强制覆盖，
+/// 前端应先在 UI 提示用户、删除目标文件后再调用。
+#[tauri::command]
+pub fn extract_service_config(
+    service_type: String,
+    service_dir: String,
+    image_tag: String,
+) -> Result<ExtractOutcome, String> {
+    use crate::app_log;
+
+    let project_root = get_project_root()?;
+
+    // 字符串 → VmServiceType
+    let vm_service_type = match service_type.as_str() {
+        "php" => VmServiceType::Php,
+        "mysql" => VmServiceType::Mysql,
+        "redis" => VmServiceType::Redis,
+        "nginx" => VmServiceType::Nginx,
+        other => {
+            return Err(format!(
+                "未知服务类型 '{other}'（期望 php/mysql/redis/nginx）"
+            ))
+        }
+    };
+
+    app_log!(
+        info,
+        "commands::extract_service_config",
+        "🔧 请求从镜像 {} 提取 {} (dir={}) 配置",
+        image_tag,
+        service_type,
+        service_dir
+    );
+
+    let outcome = ConfigExtractor::extract_config(
+        &vm_service_type,
+        &service_dir,
+        &image_tag,
+        &project_root,
+    );
+    Ok(outcome)
 }
 
 /// 一键启动环境（docker compose up -d）
@@ -853,6 +994,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
 
 #[cfg(test)]
 mod tests {
+    use super::PullImageResult;
     use std::fs;
 
     /// 测试 load_existing_config 解析多版本 Redis
@@ -925,4 +1067,37 @@ NGINX127_HTTP_HOST_PORT=80
         fs::remove_dir_all(&temp_dir).ok();
     }
 
+    // ─── 前后端 serde 契约 ──────────────────────────────────────
+    // 前端 `PullImageResultItem` 按 `success` 判定成功/失败、按 `error` 展示原因。
+    // pull_service_images 的失败是「部分失败也继续」语义，因此 error 字段的
+    // 有无必须稳定：成功时省略（skip_serializing_if），失败时必带。
+
+    #[test]
+    fn test_pull_image_result_serde_contract_success() {
+        let ok = PullImageResult {
+            tag: "mysql:8.4".to_string(),
+            success: true,
+            error: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&ok).unwrap();
+        assert_eq!(json["tag"], "mysql:8.4");
+        assert_eq!(json["success"], true);
+        assert!(
+            json.get("error").is_none(),
+            "成功时 error 应被省略（skip_serializing_if），前端依赖此形态"
+        );
+    }
+
+    #[test]
+    fn test_pull_image_result_serde_contract_failure() {
+        let failed = PullImageResult {
+            tag: "redis:8.2-alpine".to_string(),
+            success: false,
+            error: Some("manifest unknown".to_string()),
+        };
+        let json: serde_json::Value = serde_json::to_value(&failed).unwrap();
+        assert_eq!(json["tag"], "redis:8.2-alpine");
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "manifest unknown");
+    }
 }

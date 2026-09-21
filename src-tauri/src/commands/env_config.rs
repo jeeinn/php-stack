@@ -151,10 +151,10 @@ pub fn validate_env_config(config: EnvConfig) -> Result<(), String> {
     ConfigGenerator::validate(&config)
 }
 
-/// 从 .env 变量映射解析出服务配置列表（纯函数，便于单元测试）
+/// 从 .env 键解析服务列表（纯函数，便于单测）。
 ///
-/// 按键名前缀（PHP82_VERSION / MYSQL80_VERSION / ...）识别多版本服务，
-/// 并通过 VersionManifest 反查版本 ID；未收录的前缀回退为小写 ID。
+/// 按 version_manifest 的 `service_dir` 生成 `{DIR}_VERSION` 去匹配，
+/// **不再**用 `key[3..]` / `key[5..]` / `key[6..]` 这类魔数切片反解前缀（A2）。
 fn parse_env_to_services(
     env_map: &std::collections::HashMap<String, String>,
     manifest: &VersionManifest,
@@ -163,150 +163,95 @@ fn parse_env_to_services(
 
     let mut services: Vec<ServiceEntry> = Vec::new();
 
-    // 解析 PHP 服务（支持多版本）
-    // 查找所有 PHPxx_VERSION 格式的键
-    for key in env_map.keys() {
-        if key.ends_with("_VERSION") && key.starts_with("PHP") {
-            // 提取前缀，如 PHP82_VERSION → PHP82
-            let prefix = &key[..key.len() - 8]; // 去掉 "_VERSION"
-            let ver_part = &key[3..key.len() - 8]; // 去掉 "PHP" 和 "_VERSION"
-
-            if ver_part.is_empty() {
-                continue;
-            }
-
-            // 使用 manifest 反查 ID，如 "PHP82" → "php82"
-            let version = manifest
-                .find_entry_by_env_prefix(&VmServiceType::Php, prefix)
-                .map(|(id, _)| id.clone())
-                .unwrap_or_else(|| prefix.to_lowercase());
-
-            let port_key = format!("PHP{ver_part}_HOST_PORT");
-            let ext_key = format!("PHP{ver_part}_EXTENSIONS");
-
-            let host_port = env_map
-                .get(&port_key)
-                .and_then(|p| p.parse::<u16>().ok())
-                .unwrap_or(9000);
-
-            let extensions = env_map
-                .get(&ext_key)
-                .map(|exts| exts.split(',').map(|s| s.trim().to_string()).collect());
-
-            services.push(ServiceEntry {
-                service_type: ServiceType::PHP,
-                version,
-                host_port,
-                extensions,
-            });
-        }
-    }
-
-    // 解析 MySQL 服务（支持多版本）
-    let mut mysql_index = 0;
-    for key in env_map.keys() {
-        if key.ends_with("_VERSION")
-            && key.starts_with("MYSQL")
-            && !key.contains("ROOT")
-            && !key.contains("USER")
-            && !key.contains("PASSWORD")
-        {
-            let prefix = &key[..key.len() - 8];
-            let index_part = &key[5..key.len() - 8];
-
-            if index_part.is_empty() {
-                continue;
-            }
-
-            let idx = index_part.parse::<usize>().unwrap_or(mysql_index);
-
-            let version = manifest
-                .find_entry_by_env_prefix(&VmServiceType::Mysql, prefix)
-                .map(|(id, _)| id.clone())
-                .unwrap_or_else(|| prefix.to_lowercase());
-
-            let port_key = format!("MYSQL{index_part}_HOST_PORT");
-
-            let host_port = env_map
-                .get(&port_key)
-                .and_then(|p| p.parse::<u16>().ok())
-                .unwrap_or(3306 + idx as u16);
-
-            services.push(ServiceEntry {
-                service_type: ServiceType::MySQL,
-                version,
-                host_port,
-                extensions: None,
-            });
-
-            mysql_index += 1;
-        }
-    }
-
-    // 解析 Redis 服务（支持多版本）
-    for key in env_map.keys() {
-        if key.ends_with("_VERSION") && key.starts_with("REDIS") {
-            let prefix = &key[..key.len() - 8];
-            let index_part = &key[5..key.len() - 8];
-
-            if index_part.is_empty() {
-                continue;
-            }
-
-            let version = manifest
-                .find_entry_by_env_prefix(&VmServiceType::Redis, prefix)
-                .map(|(id, _)| id.clone())
-                .unwrap_or_else(|| prefix.to_lowercase());
-
-            let port_key = format!("REDIS{index_part}_HOST_PORT");
-
-            let host_port = env_map
-                .get(&port_key)
-                .and_then(|p| p.parse::<u16>().ok())
-                .unwrap_or(6379);
-
-            services.push(ServiceEntry {
-                service_type: ServiceType::Redis,
-                version,
-                host_port,
-                extensions: None,
-            });
-        }
-    }
-
-    // 解析 Nginx 服务（支持多版本）
-    for key in env_map.keys() {
-        if key.ends_with("_VERSION") && key.starts_with("NGINX") {
-            let prefix = &key[..key.len() - 8];
-            // NGINX 为 5 个字母（与 MYSQL/REDIS 一致），版本号从第 5 位开始
-            let index_part = &key[5..key.len() - 8];
-
-            if index_part.is_empty() {
-                continue;
-            }
-
-            let version = manifest
-                .find_entry_by_env_prefix(&VmServiceType::Nginx, prefix)
-                .map(|(id, _)| id.clone())
-                .unwrap_or_else(|| prefix.to_lowercase());
-
-            let port_key = format!("NGINX{index_part}_HTTP_HOST_PORT");
-
-            let host_port = env_map
-                .get(&port_key)
-                .and_then(|p| p.parse::<u16>().ok())
-                .unwrap_or(80);
-
-            services.push(ServiceEntry {
-                service_type: ServiceType::Nginx,
-                version,
-                host_port,
-                extensions: None,
-            });
-        }
-    }
+    collect_services_from_manifest(
+        &mut services,
+        env_map,
+        manifest,
+        VmServiceType::Php,
+        ServiceType::PHP,
+        PortKeyKind::HostPort,
+        true,
+    );
+    collect_services_from_manifest(
+        &mut services,
+        env_map,
+        manifest,
+        VmServiceType::Mysql,
+        ServiceType::MySQL,
+        PortKeyKind::HostPort,
+        false,
+    );
+    collect_services_from_manifest(
+        &mut services,
+        env_map,
+        manifest,
+        VmServiceType::Redis,
+        ServiceType::Redis,
+        PortKeyKind::HostPort,
+        false,
+    );
+    collect_services_from_manifest(
+        &mut services,
+        env_map,
+        manifest,
+        VmServiceType::Nginx,
+        ServiceType::Nginx,
+        PortKeyKind::HttpHostPort,
+        false,
+    );
 
     services
+}
+
+/// 端口环境变量后缀：PHP/MySQL/Redis 用 `_HOST_PORT`，Nginx 用 `_HTTP_HOST_PORT`
+enum PortKeyKind {
+    HostPort,
+    HttpHostPort,
+}
+
+fn collect_services_from_manifest(
+    services: &mut Vec<crate::engine::config_generator::ServiceEntry>,
+    env_map: &std::collections::HashMap<String, String>,
+    manifest: &VersionManifest,
+    vm_type: VmServiceType,
+    service_type: crate::engine::config_generator::ServiceType,
+    port_kind: PortKeyKind,
+    with_extensions: bool,
+) {
+    use crate::engine::config_generator::ServiceEntry;
+
+    for (id, entry) in manifest.get_available_entries(&vm_type) {
+        let prefix = entry.service_dir.to_uppercase();
+        let version_key = format!("{prefix}_VERSION");
+        if !env_map.contains_key(&version_key) {
+            continue;
+        }
+
+        let port_key = match port_kind {
+            PortKeyKind::HostPort => format!("{prefix}_HOST_PORT"),
+            PortKeyKind::HttpHostPort => format!("{prefix}_HTTP_HOST_PORT"),
+        };
+
+        let host_port = env_map
+            .get(&port_key)
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(entry.default_port);
+
+        let extensions = if with_extensions {
+            env_map
+                .get(&format!("{prefix}_EXTENSIONS"))
+                .map(|exts| exts.split(',').map(|s| s.trim().to_string()).collect())
+        } else {
+            None
+        };
+
+        services.push(ServiceEntry {
+            service_type: service_type.clone(),
+            version: id.clone(),
+            host_port,
+            extensions,
+        });
+    }
 }
 
 /// 读取现有配置文件并解析为 EnvConfig
@@ -1691,7 +1636,7 @@ mod tests {
         assert!(ids.contains(&"nginx125"), "NGINX125 应反查为 ID nginx125");
     }
 
-    /// 测试解析混合服务（含 manifest 未收录的 PHP85 回退路径）
+    /// 测试解析混合服务（manifest 驱动，按 service_dir 匹配）
     #[test]
     fn test_parse_env_to_services_mixed_services() {
         let env_map = parse_env(
@@ -1706,7 +1651,7 @@ mod tests {
             .iter()
             .find(|s| matches!(s.service_type, ServiceType::PHP))
             .expect("应包含 PHP 服务");
-        assert_eq!(php.version, "php85", "未收录的 PHP85 应回退为小写前缀");
+        assert_eq!(php.version, "php85", "PHP85 应反查为 ID php85");
         assert_eq!(php.host_port, 9000);
         let php_exts = php.extensions.as_ref().expect("PHP 服务应有扩展列表");
         assert_eq!(

@@ -110,11 +110,11 @@
 
 **实现方式**：`app_data_dir` 由 setup 注入一次后存入 `OnceLock`，而不是把 `AppHandle` 透传进 20 余处命令——后者会让所有命令签名膨胀，与"简单"原则冲突。未注入时回退旧逻辑，保证单元测试可用。
 
-### A2.【P1】.env 键名解析依赖字符串前缀切片 `[未开始]`
+### A2.【P1】.env 键名解析依赖字符串前缀切片 `[已完成]`
 
-`commands/env_config.rs:139-263` 的 `load_existing_config` 用 `&key[3..key.len()-8]`、`&key[6..key.len()-8]` 这类魔数切片反解 `PHP82_VERSION` / `NGINX127_HTTP_HOST_PORT`，且四个服务的解析代码高度雷同。新增服务类型或前缀规则变化时极易出错（NGINX 的"5 个字母 + 1 = 6"注释就是危险信号）。
+`commands/env_config.rs` 的 `parse_env_to_services` 曾用 `&key[3..key.len()-8]`、`&key[6..key.len()-8]` 这类魔数切片反解 `PHP82_VERSION` / `NGINX127_HTTP_HOST_PORT`，且四个服务的解析代码高度雷同。新增服务类型或前缀规则变化时极易出错（NGINX 的"5 个字母 + 1 = 6"注释就是危险信号）。
 
-**修复**：已有 `VersionManifest::find_entry_by_env_prefix`（version_manifest.rs:76）能做前缀反查，应反向利用——遍历 manifest 中所有 `service_dir` 生成前缀去匹配 env 键，替代手写切片；四个服务的重复循环抽成一个泛型函数。约 60 行替换 120 行。
+**修复（2026-09-21）**：改为遍历 manifest 中各服务的 `service_dir` 生成 `{DIR}_VERSION` / `_HOST_PORT` / `_HTTP_HOST_PORT` 去匹配 env 键；四个服务循环抽成 `collect_services_from_manifest`。不再依赖魔数切片。
 
 ### A3.【P1】前端缺少统一的 API 层 `[未开始]`
 
@@ -297,7 +297,7 @@ README 底部链接 `[MIT](LICENSE)`，但文件不存在。要么补 MIT 全文
 | 1 | 自动更新（tauri-plugin-updater 或最低配"检查更新"） | E5 | ⬜ 未开始 |
 | 2 | 版本清单外部覆盖 | E1 | ⬜ 未开始 |
 | 3 | manifest 版本兼容检查 | E4 | ⬜ 未开始 |
-| 4 | .env 解析去魔数切片 | A2 | ⬜ 未开始 |
+| 4 | .env 解析去魔数切片 | A2 | ✅ 已完成 |
 | 5 | 前端 api 层 + EnvConfigPage 服务面板配置化 | A3、E2 | ⬜ 未开始 |
 | 6 | i18n 收尾 + 主题适配收尾 + lint 基建 + CSP | U5、U6、Q5、Q6 | ⬜ 未开始（U5 部分完成） |
 | 7 | mysqldump / SQL 导入（维持低优先级） | E3 | ⬜ 未开始 |

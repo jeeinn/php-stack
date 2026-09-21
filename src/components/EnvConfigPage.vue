@@ -193,7 +193,6 @@ async function checkEnvFileExists() {
   try {
     const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
-    console.log('[EnvConfig] .env 文件存在:', hasEnvFile.value);
   } catch (e) {
     console.error('[EnvConfig] 检查配置文件失败:', e);
     hasEnvFile.value = false;
@@ -202,27 +201,21 @@ async function checkEnvFileExists() {
 
 // 从后端加载版本映射
 async function loadVersionMappings() {
-  console.log('[EnvConfig] 开始加载版本映射...');
   try {
     const mappings = await getVersionMappings();
-    console.log('[EnvConfig] 版本映射:', mappings);
     
     // 提取版本信息列表（包含 id、display_name、image_tag、service_dir 等完整信息）
     if (mappings.php) {
       phpVersions.value = mappings.php;
-      console.log('[EnvConfig] PHP 版本:', phpVersions.value);
     }
     if (mappings.mysql) {
       mysqlVersions.value = mappings.mysql;
-      console.log('[EnvConfig] MySQL 版本:', mysqlVersions.value);
     }
     if (mappings.redis) {
       redisVersions.value = mappings.redis;
-      console.log('[EnvConfig] Redis 版本:', redisVersions.value);
     }
     if (mappings.nginx) {
       nginxVersions.value = mappings.nginx;
-      console.log('[EnvConfig] Nginx 版本:', nginxVersions.value);
     }
 
     // 加载成功：清除上一次可能残留的错误态（用户修正清单后重试成功时）
@@ -282,10 +275,8 @@ function showError(message: string) {
 }
 
 async function loadExistingConfig() {
-  console.log('[EnvConfig] 开始加载现有配置...');
   try {
     const config = await apiLoadExistingConfig();
-    console.log('[EnvConfig] 加载结果:', config);
     
     if (config) {
       // Parse services
@@ -295,7 +286,6 @@ async function loadExistingConfig() {
       const nginxSvcs: ServiceEntry[] = [];
       
       config.services.forEach(s => {
-        console.log('[EnvConfig] 解析服务:', s);
         if (s.service_type === 'PHP') {
           phpSvcs.push({ ...s, extensions: s.extensions ? [...s.extensions] : [] });
         } else if (s.service_type === 'MySQL') {
@@ -307,10 +297,6 @@ async function loadExistingConfig() {
         }
       });
       
-      console.log('[EnvConfig] PHP 服务:', phpSvcs);
-      console.log('[EnvConfig] MySQL 服务:', mysqlSvcs);
-      console.log('[EnvConfig] Redis 服务:', redisSvcs);
-      console.log('[EnvConfig] Nginx 服务:', nginxSvcs);
       
       phpServices.value = phpSvcs.length > 0 ? phpSvcs : [{
         service_type: 'PHP',
@@ -349,9 +335,7 @@ async function loadExistingConfig() {
         mysqlRootPassword.value = config.mysql_root_password;
       }
       
-      console.log('[EnvConfig] 配置加载成功');
     } else {
-      console.log('[EnvConfig] 未找到现有配置，使用默认值');
       // Default config
       phpServices.value = [{
         service_type: 'PHP',

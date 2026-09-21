@@ -307,7 +307,6 @@ const checkEnvFileExists = async () => {
   try {
     const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
-    console.log('[App] .env 文件存在:', hasEnvFile.value);
   } catch (e) {
     console.error('[App] 检查配置文件失败:', e);
     hasEnvFile.value = false;
@@ -521,7 +520,8 @@ async function exportLogs() {
       
       <!-- Menu Items -->
       <div class="flex flex-col gap-2">
-        <div 
+        <button
+          type="button"
           @click="activeTab = 'dashboard'"
           :class="{ 'active': activeTab === 'dashboard' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -529,8 +529,9 @@ async function exportLogs() {
         >
           <span class="text-base sm:text-lg">🏠</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.dashboard') }}</span>
-        </div>
-        <div 
+        </button>
+        <button
+          type="button"
           @click="activeTab = 'env-config'"
           :class="{ 'active': activeTab === 'env-config' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -538,8 +539,9 @@ async function exportLogs() {
         >
           <span class="text-base sm:text-lg">🛠️</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.envConfig') }}</span>
-        </div>
-        <div 
+        </button>
+        <button
+          type="button"
           @click="activeTab = 'mirrors-unified'"
           :class="{ 'active': activeTab === 'mirrors-unified' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -547,8 +549,9 @@ async function exportLogs() {
         >
           <span class="text-base sm:text-lg">⚙️</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.settings') }}</span>
-        </div>
-        <div 
+        </button>
+        <button
+          type="button"
           @click="activeTab = 'migration'"
           :class="{ 'active': activeTab === 'migration' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -556,7 +559,7 @@ async function exportLogs() {
         >
           <span class="text-base sm:text-lg">📦</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.migration') }}</span>
-        </div>
+        </button>
       </div>
       
       <!-- Version & Toggle Button -->
@@ -900,7 +903,7 @@ async function exportLogs() {
 @reference "tailwindcss";
 
 .sidebar-item {
-  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent flex items-center;
+  @apply w-full text-left px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent flex items-center bg-transparent;
 }
 .sidebar-item.active {
   @apply bg-blue-600/10 text-blue-600 dark:text-blue-400 border-blue-600/20;

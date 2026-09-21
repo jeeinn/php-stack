@@ -29,7 +29,6 @@ export async function checkContainerPortConflicts(
   try {
     // 1. 获取所有运行中的容器（包括非 ps- 前缀的）
     const containers = await listAllRunningContainers();
-    console.log('[DEBUG] 获取到的容器列表:', containers.map(c => ({ name: c.name, ports: c.ports })));
     
     // 2. 提取配置中需要的端口
     const requiredPorts = extractPortsFromConfig(config);

@@ -18,8 +18,6 @@ export function applyTheme() {
   const html = document.documentElement;
   const mode = theme.value;
   
-  console.log('[Theme] applyTheme:', mode, 'systemDarkMode:', systemDarkMode.value);
-  
   if (mode === 'auto') {
     // 使用系统主题
     html.classList.toggle('dark', systemDarkMode.value);
@@ -29,15 +27,12 @@ export function applyTheme() {
     html.classList.toggle('light', mode === 'light');
   }
   
-  console.log('[Theme] HTML classes:', html.className);
-  
   // 保存到 localStorage
   localStorage.setItem('php-stack-theme', mode);
 }
 
 // 设置主题
 export function setTheme(newTheme: ThemeMode) {
-  console.log('[Theme] setTheme called:', newTheme);
   theme.value = newTheme;
   applyTheme();
 }

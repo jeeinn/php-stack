@@ -1,5 +1,6 @@
 pub mod backup_engine; // 增强备份引擎
 pub mod backup_manifest; // 备份清单数据模型与序列化
+pub mod config_extractor; // 运行时配置基线提取器（Phase 3）
 pub mod config_generator; // 可视化配置生成器
 pub mod env_parser; // Env 解析器/格式化器
 pub mod mirror_config; // 镜像源配置（向后兼容）

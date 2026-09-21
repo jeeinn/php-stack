@@ -3,10 +3,12 @@ import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
-import type { ServiceEntry, EnvConfig, VersionInfo } from '../types/env-config';
+import type { ServiceEntry, EnvConfig, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 import CustomSelect from './CustomSelect.vue';
+import VersionHelpModal from './VersionHelpModal.vue';
+import ImagePullConfirmModal from './ImagePullConfirmModal.vue';
 
 const { t } = useI18n();
 
@@ -19,6 +21,11 @@ const phpVersions = ref<VersionInfo[]>([]);
 const mysqlVersions = ref<VersionInfo[]>([]);
 const redisVersions = ref<VersionInfo[]>([]);
 const nginxVersions = ref<VersionInfo[]>([]);
+
+// 版本清单加载状态：失败时不回退到内置硬编码列表，而是展示可操作的错误态，
+// 避免用户自己在 version_manifest.json 里加的版本"看起来没生效"。
+const versionLoadError = ref(false);
+const versionLoadRetrying = ref(false);
 
 // PHP 扩展预设列表（扁平化）
 const commonExtensions = [
@@ -116,6 +123,28 @@ const phpContainerNames = ref<string[]>([]);
 const nginxServicesList = ref<Array<{ name: string; version: string; port?: number }>>([]); // 存储所有 Nginx 服务信息
 const showStartConfirm = ref(false);
 
+// ==================== Phase 3: 版本帮助 / 镜像探测 / 拉取确认 ====================
+
+/// 版本帮助弹窗（4 个版本下拉框旁的 ? 按钮触发）
+const showVersionHelp = ref(false);
+
+/// 镜像本地存在性探测结果（弹窗前的数据缓存）
+const imagePresences = ref<ImagePresence[]>([]);
+const showPullConfirm = ref(false);
+const pulling = ref(false);
+/// 单镜像拉取进度（tag -> 0-100，目前简化：不细分到下载进度，整体 boolean）
+const pullProgress = ref<Record<string, number>>({});
+/// 用户是否在「覆盖确认」弹窗里勾选了备份。
+///
+/// 必须是 ref 而非 handleApply 的局部变量：走「镜像缺失 → 拉取 → 再 apply」
+/// 这条路径时，handleApply 已经返回，局部变量会丢失，导致备份选择被静默丢弃。
+const enableBackup = ref(false);
+
+/// 打开版本帮助弹窗（"?" 按钮）
+function openVersionHelp() {
+  showVersionHelp.value = true;
+}
+
 // Load existing config on mount
 onMounted(async () => {
   await loadWorkspaceInfo();
@@ -173,35 +202,25 @@ async function loadVersionMappings() {
       nginxVersions.value = mappings.nginx;
       console.log('[EnvConfig] Nginx 版本:', nginxVersions.value);
     }
+
+    // 加载成功：清除上一次可能残留的错误态（用户修正清单后重试成功时）
+    versionLoadError.value = false;
   } catch (e) {
     console.error('[EnvConfig] 加载版本映射失败:', e);
-    // 使用默认值作为后备
-    phpVersions.value = [
-      { id: 'php56', display_name: 'PHP 5.6', image_tag: 'php:5.6-fpm', service_dir: 'php56', default_port: 9000, show_port: false, eol: true },
-      { id: 'php74', display_name: 'PHP 7.4', image_tag: 'php:7.4-fpm', service_dir: 'php74', default_port: 9000, show_port: false, eol: true },
-      { id: 'php80', display_name: 'PHP 8.0', image_tag: 'php:8.0-fpm', service_dir: 'php80', default_port: 9000, show_port: false, eol: true },
-      { id: 'php81', display_name: 'PHP 8.1', image_tag: 'php:8.1-fpm', service_dir: 'php81', default_port: 9000, show_port: false, eol: false },
-      { id: 'php82', display_name: 'PHP 8.2', image_tag: 'php:8.2-fpm', service_dir: 'php82', default_port: 9000, show_port: false, eol: false },
-      { id: 'php83', display_name: 'PHP 8.3', image_tag: 'php:8.3-fpm', service_dir: 'php83', default_port: 9000, show_port: false, eol: false },
-      { id: 'php84', display_name: 'PHP 8.4', image_tag: 'php:8.4-fpm', service_dir: 'php84', default_port: 9000, show_port: false, eol: false },
-    ];
-    mysqlVersions.value = [
-      { id: 'mysql57', display_name: 'MySQL 5.7', image_tag: 'mysql:5.7', service_dir: 'mysql57', default_port: 3306, show_port: true, eol: true },
-      { id: 'mysql80', display_name: 'MySQL 8.0', image_tag: 'mysql:8.0', service_dir: 'mysql80', default_port: 3306, show_port: true, eol: false },
-      { id: 'mysql84', display_name: 'MySQL 8.4 LTS', image_tag: 'mysql:8.4', service_dir: 'mysql84', default_port: 3306, show_port: true, eol: false },
-    ];
-    redisVersions.value = [
-      { id: 'redis62', display_name: 'Redis 6.2', image_tag: 'redis:6.2-alpine', service_dir: 'redis62', default_port: 6379, show_port: true, eol: true },
-      { id: 'redis70', display_name: 'Redis 7.0', image_tag: 'redis:7.0-alpine', service_dir: 'redis70', default_port: 6379, show_port: true, eol: false },
-      { id: 'redis72', display_name: 'Redis 7.2', image_tag: 'redis:7.2-alpine', service_dir: 'redis72', default_port: 6379, show_port: true, eol: false },
-      { id: 'redis82', display_name: 'Redis 8.2', image_tag: 'redis:8.2-alpine', service_dir: 'redis82', default_port: 6379, show_port: true, eol: false },
-    ];
-    nginxVersions.value = [
-      { id: 'nginx124', display_name: 'Nginx 1.24', image_tag: 'nginx:1.24-alpine', service_dir: 'nginx124', default_port: 80, show_port: true, eol: true },
-      { id: 'nginx125', display_name: 'Nginx 1.25', image_tag: 'nginx:1.25-alpine', service_dir: 'nginx125', default_port: 80, show_port: true, eol: false },
-      { id: 'nginx127', display_name: 'Nginx 1.27', image_tag: 'nginx:1.27-alpine', service_dir: 'nginx127', default_port: 80, show_port: true, eol: false },
-    ];
+    // 不再回退到内置的硬编码列表：那份列表会与 services/version_manifest.json 脱节，
+    // 导致用户自行添加的版本"看起来没生效"。改为展示可操作的错误态，
+    // 引导用户检查清单文件后重试。
+    versionLoadError.value = true;
+  } finally {
+    versionLoadRetrying.value = false;
   }
+}
+
+// 重试加载版本映射（用户修正 services/version_manifest.json 后点击）
+async function retryLoadVersionMappings() {
+  if (versionLoadRetrying.value) return;
+  versionLoadRetrying.value = true;
+  await loadVersionMappings();
 }
 
 // 错误信息格式化
@@ -566,8 +585,8 @@ async function handleApply() {
     return;
   }
   
-  // 检查配置文件是否存在
-  let enableBackup = false;
+  // 检查配置文件是否存在（结果写入 enableBackup ref，供后续拉取路径复用）
+  enableBackup.value = false;
   try {
     const existingFiles = await invoke<string[]>('check_config_files_exist');
     if (existingFiles.length > 0) {
@@ -591,18 +610,86 @@ async function handleApply() {
       
       // 获取复选框的值
       if (typeof result === 'object') {
-        enableBackup = result.checkboxValue;
+        enableBackup.value = result.checkboxValue;
       }
     }
   } catch (e) {
     console.error('检查配置文件失败:', e);
     // 如果检查失败，继续执行（不阻断用户操作）
   }
-  
+
+  // ========== Phase 3 前置：探测镜像本地存在性 ==========
+  applying.value = true;
+  try {
+    const config = buildConfig();
+    const presences = await invoke<ImagePresence[]>('check_service_images_presence', { config });
+    imagePresences.value = presences;
+    const missing = presences.filter(p => p.status === 'missing');
+
+    if (missing.length === 0) {
+      // 全部已存在 → 跳过拉取，直接 apply
+      await doApplyCore(config, enableBackup.value);
+    } else {
+      // 有缺失 → 弹"待拉取"确认
+      showPullConfirm.value = true;
+      // 不在这里关闭 applying：pullConfirm 弹窗期间由前端维持视觉态
+      // （弹窗关闭回调里再处理下一步）
+    }
+  } catch (e) {
+    console.error('[EnvConfig] 检查镜像存在性失败:', e);
+    showError(formatErrorMessage(e));
+    applying.value = false;
+  }
+}
+
+/// 用户在 pullConfirm 弹窗点击"确认拉取"：拉取缺失的镜像，然后继续 apply
+async function confirmPullAndApply(missingTags: string[]) {
+  pulling.value = true;
+  // 清空/初始化进度
+  for (const t of missingTags) pullProgress.value[t] = 0;
+  try {
+    const results = await invoke<PullImageResultItem[]>('pull_service_images', {
+      imageTags: missingTags,
+    });
+    pulling.value = false;
+    showPullConfirm.value = false;
+
+    const failures = results.filter(r => !r.success);
+    if (failures.length > 0) {
+      // 部分/全部失败：仍继续 apply，让后端 fallback 模板兜底
+      const failSummary = failures.map(f => `${f.tag} (${f.error || 'unknown'})`).join(', ');
+      if (failures.length === results.length) {
+        showToast(t('envConfig.toast.pullAllFailed'), 'warning', 5000);
+      } else {
+        showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'warning', 5000);
+      }
+    } else if (results.length > 0) {
+      showToast(t('envConfig.toast.pullAllSuccess', { count: results.length }), 'success', 3000);
+    }
+    // 重新计算 presences（拉取成功的应该已经 present）
+    const config = buildConfig();
+    imagePresences.value = await invoke<ImagePresence[]>('check_service_images_presence', { config });
+    // 沿用用户在覆盖确认里的备份选择（不能硬编码 true，否则覆盖用户意愿）
+    await doApplyCore(config, enableBackup.value);
+  } catch (e) {
+    pulling.value = false;
+    showPullConfirm.value = false;
+    showError(formatErrorMessage(e));
+    applying.value = false;
+  }
+}
+
+/// 用户取消 pullConfirm
+function cancelPull() {
+  showPullConfirm.value = false;
+  applying.value = false;
+}
+
+/// 真正应用配置（在镜像确认/拉取完成后调用）
+async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
   applying.value = true;
   showNginxHint.value = false;
   try {
-    const config = buildConfig();
     const backedUpFiles = await invoke<string[]>('apply_env_config', { config, enableBackup });
     
     // 显示成功消息
@@ -726,6 +813,23 @@ const goToMirrorSettings = () => {
       </div>
     </header>
     
+    <!-- 版本清单加载失败提示：不回退硬编码列表，引导用户修正清单后重试 -->
+    <div v-if="versionLoadError" class="mb-4 p-4 sm:p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div class="flex-1">
+          <p class="text-sm font-medium text-amber-900 dark:text-amber-200">{{ $t('envConfig.versionList.loadFailed') }}</p>
+          <p class="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">{{ $t('envConfig.versionList.loadFailedHint') }}</p>
+        </div>
+        <button
+          @click="retryLoadVersionMappings"
+          :disabled="versionLoadRetrying"
+          class="w-full sm:w-auto shrink-0 px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ versionLoadRetrying ? $t('envConfig.versionList.retrying') : $t('envConfig.versionList.retry') }}
+        </button>
+      </div>
+    </div>
+
     <!-- Nginx 配置提示 -->
     <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
       <div class="flex flex-col sm:flex-row items-start gap-3">
@@ -817,7 +921,15 @@ const goToMirrorSettings = () => {
       <!-- PHP Services -->
       <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.php.title') }}</h2>
+          <div class="flex items-center gap-2">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.php.title') }}</h2>
+            <button
+              @click="openVersionHelp"
+              :title="$t('envConfig.versionHelp.helpButton')"
+              class="w-5 h-5 inline-flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-blue-100 dark:hover:bg-blue-900 hover:text-blue-600 dark:hover:text-blue-300 text-xs font-bold transition-colors"
+              aria-label="help"
+            >?</button>
+          </div>
           <button @click="addPhpVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
@@ -1110,5 +1222,21 @@ const goToMirrorSettings = () => {
         </div>
       </div>
     </div>
+
+    <!-- Phase 3: 版本帮助弹窗（点击 ? 触发） -->
+    <VersionHelpModal
+      :open="showVersionHelp"
+      @close="showVersionHelp = false"
+    />
+
+    <!-- Phase 3: 镜像待拉取确认弹窗（apply 前置） -->
+    <ImagePullConfirmModal
+      :open="showPullConfirm"
+      :presences="imagePresences"
+      :pulling="pulling"
+      :progress="pullProgress"
+      @confirm="confirmPullAndApply"
+      @cancel="cancelPull"
+    />
   </div>
 </template>

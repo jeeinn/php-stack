@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use zip::write::FileOptions;
 
+use super::config_extractor::{ConfigExtractor, ExtractOutcome};
 use super::env_parser::EnvFile;
 use super::mirror_config_manager::UserMirrorConfig;
 use super::user_override_manager::UserOverrideManager;
@@ -35,6 +36,17 @@ pub struct EnvConfig {
 }
 
 pub struct ConfigGenerator;
+
+/// 配置文件来源（用于日志与未来的 UI 提示）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigSource {
+    /// 用户已存在该文件，未做改动
+    UserKept,
+    /// 从内置模板目录复制
+    TemplateCopied,
+    /// 从官方镜像运行时提取（Phase 3 新增）
+    ExtractedFromImage,
+}
 
 /// 检测宿主机当前用户的 UID/GID
 ///
@@ -569,6 +581,98 @@ impl ConfigGenerator {
         Ok(())
     }
 
+    /// 释放配置文件，多层降级（Phase 3）：
+    /// 1. 目标已存在 → 保留用户修改（`UserKept`）
+    /// 2. `primary_template_dir` 命中 → 模板复制（`TemplateCopied`）—— 精确目录场景
+    /// 3. 镜像提取 → `docker create` + `cp` 提取（`ExtractedFromImage`）—— fallback 场景或精确模板失败
+    /// 4. `fallback_template_dir` 命中 → 模板复制（仅 fallback 场景下用，**保底**）
+    /// 5. 全部失败 → 返回 `Err`
+    ///
+    /// `primary_template_dir` 通常是精确目录（与 service_dir 同名），`fallback_template_dir`
+    /// 是 `resolve_template_dir` 兜底出来的同服务类型主流版本目录。**fallback 场景下
+    /// 优先用镜像提取拿到正确版本配置**——避免 fallback 模板（如 mysql80 的 my.cnf）
+    /// 错配给冷门版本（mysql:5.6）。
+    ///
+    /// **不主动 rmi 镜像**——复用本地缓存，让用户后续启动时秒启。
+    #[allow(clippy::too_many_arguments)]
+    fn ensure_config_with_extract_fallback(
+        primary_template_dir: Option<&str>,
+        fallback_template_dir: Option<&str>,
+        dest_dir: &Path,
+        dest_filename: &str,
+        service_type: &VmServiceType,
+        service_dir: &str,
+        image_tag: &str,
+        dest_root: &Path,
+    ) -> Result<ConfigSource, String> {
+        let dest_path = dest_dir.join(dest_filename);
+
+        // 1. 目标已存在：用户已改过，保留
+        if dest_path.exists() {
+            return Ok(ConfigSource::UserKept);
+        }
+
+        // 2. 尝试精确目录模板（如果提供）
+        if let Some(tdir) = primary_template_dir {
+            let tname = format!("{tdir}/{dest_filename}");
+            if Self::copy_template_file(&tname, &dest_path).is_ok() {
+                return Ok(ConfigSource::TemplateCopied);
+            }
+            app_log!(
+                warn,
+                "engine::config_generator",
+                "内置精确模板不存在（{}），尝试从镜像 {} 提取默认配置",
+                tname,
+                image_tag
+            );
+        }
+
+        // 3. 调用 ConfigExtractor 从官方镜像提取
+        let extract_outcome =
+            ConfigExtractor::extract_config(service_type, service_dir, image_tag, dest_root);
+        match extract_outcome {
+            ExtractOutcome::Extracted { dest, bytes } => {
+                app_log!(
+                    info,
+                    "engine::config_generator",
+                    "✅ 从镜像提取配置成功: {} ({} bytes)",
+                    dest,
+                    bytes
+                );
+                return Ok(ConfigSource::ExtractedFromImage);
+            }
+            ExtractOutcome::SkippedExists => return Ok(ConfigSource::UserKept),
+            ExtractOutcome::Failed { reason } => {
+                app_log!(
+                    warn,
+                    "engine::config_generator",
+                    "⚠️ 镜像提取失败: {}",
+                    reason
+                );
+                // 继续走 fallback 模板
+            }
+        }
+
+        // 4. fallback 模板（保底）
+        if let Some(tdir) = fallback_template_dir {
+            let tname = format!("{tdir}/{dest_filename}");
+            if Self::copy_template_file(&tname, &dest_path).is_ok() {
+                app_log!(
+                    warn,
+                    "engine::config_generator",
+                    "⚠️ 使用 fallback 模板（可能与目标版本不严格匹配）: {}",
+                    tname
+                );
+                return Ok(ConfigSource::TemplateCopied);
+            }
+        }
+
+        // 5. 全部失败
+        Err(format!(
+            "无法释放配置：内置模板缺失、镜像提取失败、fallback 模板也缺失（service: {service_dir}，image: {image_tag}，file: {dest_filename}）"
+        ))
+    }
+
     /// Resolve the template source directory for a given service.
     /// Checks if the exact `service_dir` template exists; if not, falls back to a default.
     /// Returns `(template_dir, is_fallback)`.
@@ -636,6 +740,21 @@ impl ConfigGenerator {
                 .map(|entry| entry.service_dir.clone())
                 .unwrap_or_else(|| id.clone());
 
+            // Get image_tag from manifest entry (Phase 3: needed for runtime config extraction)
+            // fallback to `{service}:{version}` if manifest entry missing (自定义条目)
+            let image_tag = manifest
+                .get_entry(&vm_service_type, id)
+                .map(|entry| entry.image_tag.clone())
+                .unwrap_or_else(|| {
+                    let svc_prefix = match &service.service_type {
+                        ServiceType::PHP => "php",
+                        ServiceType::MySQL => "mysql",
+                        ServiceType::Redis => "redis",
+                        ServiceType::Nginx => "nginx",
+                    };
+                    format!("{svc_prefix}:{id}")
+                });
+
             // Resolve template directory: check if exact service_dir template exists, else fallback
             let (template_dir, is_fallback) =
                 Self::resolve_template_dir(&service.service_type, &service_dir_name);
@@ -649,25 +768,40 @@ impl ConfigGenerator {
                 );
             }
 
+            // 精确/fallback 模板目录分配（Phase 3）：
+            // - 精确目录：primary = Some(精确目录), fallback = None（避免误用其他版本模板）
+            // - fallback 目录：primary = None（直接走镜像提取）, fallback = Some(fallback 目录) 作保底
+            let (primary_tpl_dir, fallback_tpl_dir): (Option<&str>, Option<&str>) = if is_fallback {
+                (None, Some(template_dir.as_str()))
+            } else {
+                (Some(template_dir.as_str()), None)
+            };
+
             match &service.service_type {
                 ServiceType::PHP => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
 
-                    // Copy Dockerfile from template
+                    // Copy Dockerfile from template (项目自研，不从镜像提取)
                     Self::copy_template_file(
                         &format!("{template_dir}/Dockerfile"),
                         &service_dir.join("Dockerfile"),
                     )?;
 
-                    // Copy php.ini from template
-                    Self::copy_template_file(
-                        &format!("{template_dir}/php.ini"),
-                        &service_dir.join("php.ini"),
+                    // Copy php.ini via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
+                    Self::ensure_config_with_extract_fallback(
+                        primary_tpl_dir,
+                        fallback_tpl_dir,
+                        &service_dir,
+                        "php.ini",
+                        &vm_service_type,
+                        &service_dir_name,
+                        &image_tag,
+                        root,
                     )?;
 
-                    // Copy php-fpm.conf from template
+                    // Copy php-fpm.conf from template (项目自研，不从镜像提取)
                     Self::copy_template_file(
                         &format!("{template_dir}/php-fpm.conf"),
                         &service_dir.join("php-fpm.conf"),
@@ -682,10 +816,16 @@ impl ConfigGenerator {
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
 
-                    // Copy mysql.cnf from template
-                    Self::copy_template_file(
-                        &format!("{template_dir}/mysql.cnf"),
-                        &service_dir.join("mysql.cnf"),
+                    // Copy mysql.cnf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
+                    Self::ensure_config_with_extract_fallback(
+                        primary_tpl_dir,
+                        fallback_tpl_dir,
+                        &service_dir,
+                        "mysql.cnf",
+                        &vm_service_type,
+                        &service_dir_name,
+                        &image_tag,
+                        root,
                     )?;
 
                     // Create data and log directories
@@ -699,10 +839,16 @@ impl ConfigGenerator {
                     std::fs::create_dir_all(&service_dir)
                         .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
 
-                    // Copy redis.conf from template
-                    Self::copy_template_file(
-                        &format!("{template_dir}/redis.conf"),
-                        &service_dir.join("redis.conf"),
+                    // Copy redis.conf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
+                    Self::ensure_config_with_extract_fallback(
+                        primary_tpl_dir,
+                        fallback_tpl_dir,
+                        &service_dir,
+                        "redis.conf",
+                        &vm_service_type,
+                        &service_dir_name,
+                        &image_tag,
+                        root,
                     )?;
 
                     // Create data directory
@@ -720,19 +866,25 @@ impl ConfigGenerator {
                         format!("创建 services/{service_dir_name}/conf.d/ 目录失败: {e}")
                     })?;
 
-                    // Copy Dockerfile from template
+                    // Copy Dockerfile from template (项目自研，不从镜像提取)
                     Self::copy_template_file(
                         &format!("{template_dir}/Dockerfile"),
                         &service_dir.join("Dockerfile"),
                     )?;
 
-                    // Copy nginx.conf from template
-                    Self::copy_template_file(
-                        &format!("{template_dir}/nginx.conf"),
-                        &service_dir.join("nginx.conf"),
+                    // Copy nginx.conf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
+                    Self::ensure_config_with_extract_fallback(
+                        primary_tpl_dir,
+                        fallback_tpl_dir,
+                        &service_dir,
+                        "nginx.conf",
+                        &vm_service_type,
+                        &service_dir_name,
+                        &image_tag,
+                        root,
                     )?;
 
-                    // Copy default.conf from template
+                    // Copy default.conf from template (项目自研，不从镜像提取)
                     Self::copy_template_file(
                         &format!("{template_dir}/conf.d/default.conf"),
                         &service_dir.join("conf.d/default.conf"),

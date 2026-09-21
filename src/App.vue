@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -16,6 +16,7 @@ import { getLogs, addLog, clearLogs, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
+import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
 
 const { t } = useI18n();
 
@@ -35,6 +36,8 @@ const showRestartConfirm = ref(false); // 控制重启确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
+let consecutiveFailures = 0; // Docker 连续失败次数（用于轮询退避）
+let pollTimer: ReturnType<typeof setTimeout> | null = null; // 轮询定时器
 const hasEnvFile = ref(false); // .env 文件是否存在
 
 // 判断是否有运行中的 ps- 容器
@@ -60,11 +63,19 @@ const canStop = computed(() => {
 const checkDocker = async () => {
   try {
     await invoke('check_docker');
+    // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
+    if (dockerError.value !== null) {
+      addLog(t('dashboard.toast.dockerRestored'));
+    }
     dockerError.value = null;
     return true;
   } catch (e) {
+    // 只在状态由可用翻转为不可用时记一条，之后静默退避
+    const wasAvailable = dockerError.value === null;
     dockerError.value = e as string;
-    addLog(t('dashboard.toast.dockerCheckFailed', { error: e }));
+    if (wasAvailable) {
+      addLog(t('dashboard.toast.dockerCheckFailed', { error: e }));
+    }
     return false;
   }
 };
@@ -75,6 +86,7 @@ const refreshContainers = async (silent = false) => {
     addLog(t('dashboard.toast.refreshing'));
   }
   if (!(await checkDocker())) {
+    consecutiveFailures += 1;
     containers.value = [];
     if (!silent) {
       loading.value = false;
@@ -84,6 +96,7 @@ const refreshContainers = async (silent = false) => {
   }
   try {
     const result = await invoke('list_containers') as Container[];
+    consecutiveFailures = 0;
     
     // 只有当内容真正改变时才更新，减少 DOM 抖动
     if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
@@ -93,6 +106,7 @@ const refreshContainers = async (silent = false) => {
       addLog(t('dashboard.toast.containerNoChange'));
     }
   } catch (e) {
+    consecutiveFailures += 1;
     if (!silent) addLog(t('dashboard.toast.refreshFailed', { error: e }));
   } finally {
     if (!silent) {
@@ -299,6 +313,27 @@ watch(activeTab, async (newTab) => {
   }
 });
 
+function stopPolling() {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+// 自适应轮询：正常 5 秒；Docker 连续失败后逐级退避到 15s / 30s，恢复后回到 5 秒。
+// 用自调度的 setTimeout 而非 setInterval，间隔才能随失败次数变化。
+async function pollOnce() {
+  await refreshContainers(true);
+  // stopPolling() 可能在 await 期间被调用（组件卸载），此时不再续期
+  if (pollTimer === null) return;
+  pollTimer = setTimeout(pollOnce, nextPollDelay(consecutiveFailures));
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS);
+}
+
 onMounted(async () => {
   // 获取应用版本号
   try {
@@ -310,14 +345,18 @@ onMounted(async () => {
   
   refreshContainers();
   checkEnvFileExists(); // 检查 .env 文件是否存在
-  // 每 5 秒自动静默刷新一次
-  setInterval(() => refreshContainers(true), 5000);
+  startPolling();
   
   // 监听后端发送的日志事件
   listen('env-log', (event) => {
     const msg = event.payload as string;
     addLog(msg);
   });
+});
+
+onUnmounted(() => {
+  stopPolling();
+  if (scrollTimeout) clearTimeout(scrollTimeout);
 });
 
 // 监听日志变化，自动滚动到底部（用户未手动滚动时）
@@ -568,7 +607,7 @@ async function exportLogs() {
                 :class="isContainerRunning(c.state) ? 'text-emerald-400' : 'text-rose-400'"
                 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-tighter"
               >
-                <span :class="isContainerRunning(c.state) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
+                <span :class="[isContainerRunning(c.state) ? 'bg-emerald-500' : 'bg-rose-500', { 'animate-pulse': isContainerRunning(c.state) }]" class="w-2 h-2 rounded-full"></span>
                 {{ isContainerRunning(c.state) ? $t('dashboard.container.running') : $t('dashboard.container.stopped') }}
               </span>
             </div>

@@ -765,9 +765,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         // 过滤出仍在运行的 ps- 容器
         let running_ps_containers: Vec<_> = ps_containers
             .iter()
-            .filter(|c| {
-                c.state.to_lowercase().contains("running") || c.state.to_lowercase().contains("up")
-            })
+            .filter(|c| c.state.is_running())
             .collect();
 
         if running_ps_containers.is_empty() {

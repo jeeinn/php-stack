@@ -1,15 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ContainerPortConflict } from '../types/env-config';
 import type { EnvConfig } from '../types/env-config';
-
-interface Container {
-  id: string;
-  name: string;
-  image: string;
-  status: string;
-  state: string;
-  ports: number[];
-}
+import type { Container } from '../types/docker';
+import { isContainerRunning } from '../types/docker';
 
 /**
  * 从 EnvConfig 中提取所有需要检查的端口
@@ -48,7 +41,7 @@ export async function checkContainerPortConflicts(
     for (const [port, service] of requiredPorts.entries()) {
       // 查找是否有容器占用了这个端口
       const occupyingContainer = containers.find(c => 
-        c.ports.includes(port) && isRunning(c.state)
+        c.ports.includes(port) && isContainerRunning(c.state)
       );
       
       if (occupyingContainer) {
@@ -70,14 +63,6 @@ export async function checkContainerPortConflicts(
     console.error('检查容器端口冲突失败:', error);
     throw error;
   }
-}
-
-/**
- * 判断容器是否运行中
- */
-function isRunning(state: string): boolean {
-  const normalized = state.toLowerCase();
-  return normalized.includes('running');
 }
 
 /**

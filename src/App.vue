@@ -13,19 +13,12 @@ import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import { getLogs, addLog, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
+import type { Container } from './types/docker';
+import { isContainerRunning } from './types/docker';
 
 const { t } = useI18n();
 
 const appVersion = ref('v0.0.0'); // 应用版本号
-
-interface Container {
-  id: String;
-  name: String;
-  image: String;
-  status: String;
-  state: String;
-  ports: number[];
-}
 
 const containers = ref<Container[]>([]);
 const loading = ref(false);
@@ -45,19 +38,7 @@ const hasEnvFile = ref(false); // .env 文件是否存在
 
 // 判断是否有运行中的 ps- 容器
 const hasRunningContainers = computed(() => {
-  return containers.value.some(c => isRunning(String(c.state)));
-});
-
-// 判断是否有任何 ps- 容器（不管状态）
-// @ts-ignore - 用于后续功能扩展，暂时未使用
-const hasAnyContainers = computed(() => {
-  return containers.value.length > 0;
-});
-
-// 判断是否有任何停止的 ps- 容器
-// @ts-ignore - 用于后续功能扩展，暂时未使用
-const hasStoppedContainers = computed(() => {
-  return containers.value.some(c => !isRunning(String(c.state)));
+  return containers.value.some(c => isContainerRunning(c.state));
 });
 
 // 判断是否可以启动（没有任何容器或所有容器都已停止，且存在 .env 文件）
@@ -74,13 +55,6 @@ const canRestart = computed(() => {
 const canStop = computed(() => {
   return hasRunningContainers.value;
 });
-
-// 判断容器是否运行中（兼容多种格式）
-const isRunning = (state: string): boolean => {
-  // 后端返回的格式："Some(RUNNING)" 或 "Some(Exceeded)" 等
-  const normalized = state.toLowerCase();
-  return normalized.includes('running');
-};
 
 const checkDocker = async () => {
   try {
@@ -565,11 +539,11 @@ async function copyLogs() {
             <div class="flex justify-between items-start mb-4">
               <span class="text-slate-500 dark:text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
               <span 
-                :class="isRunning(String(c.state)) ? 'text-emerald-400' : 'text-rose-400'"
+                :class="isContainerRunning(c.state) ? 'text-emerald-400' : 'text-rose-400'"
                 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-tighter"
               >
-                <span :class="isRunning(String(c.state)) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
-                {{ isRunning(String(c.state)) ? $t('dashboard.container.running') : $t('dashboard.container.stopped') }}
+                <span :class="isContainerRunning(c.state) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
+                {{ isContainerRunning(c.state) ? $t('dashboard.container.running') : $t('dashboard.container.stopped') }}
               </span>
             </div>
             <div class="text-xl font-bold mb-1 truncate text-slate-900 dark:text-slate-200" :title="String(c.name)">{{ String(c.name) }}</div>
@@ -580,7 +554,7 @@ async function copyLogs() {
             
             <div class="flex gap-2">
               <button 
-                v-if="!isRunning(String(c.state))"
+                v-if="!isContainerRunning(c.state)"
                 @click="startService(String(c.name))"
                 class="flex-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 rounded text-sm font-medium transition-all"
               >

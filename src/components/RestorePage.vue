@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
-import type { RestorePreview, RestoreProgress } from '../types/env-config';
+import type { RestorePreview, RestoreProgress, RestoreResult } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
@@ -18,6 +18,8 @@ const verified = ref<boolean | null>(null);
 const restoring = ref(false);
 const loading = ref(false);
 const progress = ref<RestoreProgress | null>(null);
+// U2: 恢复结果明细（已恢复文件 / 错误列表 / 回滚包路径）
+const restoreResult = ref<RestoreResult | null>(null);
 
 const currentStep = ref<RestoreStep>('select');
 const completedSteps = ref<Set<RestoreStep>>(new Set());
@@ -146,15 +148,27 @@ async function handleRestore() {
   restoring.value = true;
   progress.value = { step: t('common.loading'), percentage: 0 };
 
+  restoreResult.value = null;
+
   try {
-    await invoke('execute_restore', {
+    // U2: 后端始终返回 RestoreResult，部分失败也能拿到逐条明细
+    const result = await invoke<RestoreResult>('execute_restore', {
       zipPath: zipPath.value,
     });
-    showToast(t('restore.toast.success'), 'success');
-    progress.value = { step: '✅', percentage: 100 };
-    markStepCompleted('restore');
+    restoreResult.value = result;
+
+    if (result.success) {
+      showToast(t('restore.toast.success'), 'success');
+      progress.value = { step: '✅', percentage: 100 };
+      markStepCompleted('restore');
+    } else {
+      // 部分失败：不静默吞掉，明细留在页面上供用户逐条查看
+      showToast(t('restore.toast.partialSuccess'), 'warning');
+      progress.value = null;
+    }
   } catch (e) {
     showToast(e as string, 'error');
+    progress.value = null;
   } finally {
     restoring.value = false;
   }
@@ -344,6 +358,37 @@ function formatTimestamp(ts: string): string {
               </div>
               <h3 class="text-xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">{{ $t('restore.success.title') }}</h3>
               <p class="text-sm text-slate-600 dark:text-slate-400">{{ $t('restore.success.description') }}</p>
+            </div>
+
+            <!-- U2: 恢复结果明细（成功与部分成功都展示） -->
+            <div v-if="restoreResult" class="mt-6 text-left space-y-4">
+              <div v-if="!restoreResult.success" class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <h3 class="font-bold text-amber-700 dark:text-amber-400">{{ $t('restore.partialSuccess.title') }}</h3>
+                <p class="text-sm text-amber-700 dark:text-amber-400 mt-1">{{ $t('restore.partialSuccess.description') }}</p>
+              </div>
+
+              <div v-if="restoreResult.restored_files.length">
+                <h4 class="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                  {{ $t('restore.result.restoredFiles') }}
+                  <span class="text-slate-500 dark:text-slate-500">({{ $t('restore.result.filesCount', { count: restoreResult.restored_files.length }) }})</span>
+                </h4>
+                <ul class="max-h-48 overflow-y-auto text-xs space-y-1 bg-slate-50 dark:bg-slate-800 rounded-lg p-3" data-testid="restored-files">
+                  <li v-for="file in restoreResult.restored_files" :key="file" class="font-mono text-slate-600 dark:text-slate-400">{{ file }}</li>
+                </ul>
+              </div>
+
+              <div v-if="restoreResult.errors.length">
+                <h4 class="font-semibold text-sm text-red-700 dark:text-red-400 mb-2">{{ $t('restore.result.errors') }}</h4>
+                <ul class="max-h-48 overflow-y-auto text-xs space-y-1 bg-red-50 dark:bg-red-900/20 rounded-lg p-3" data-testid="restore-errors">
+                  <li v-for="(err, idx) in restoreResult.errors" :key="idx" class="font-mono text-red-600 dark:text-red-400">{{ err }}</li>
+                </ul>
+              </div>
+
+              <div v-if="restoreResult.rollback_path" class="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <h4 class="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-1">{{ $t('restore.result.rollbackTitle') }}</h4>
+                <p class="text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('restore.result.rollbackHint') }}</p>
+                <code class="block break-all text-xs font-mono text-slate-700 dark:text-slate-300" data-testid="rollback-path">{{ restoreResult.rollback_path }}</code>
+              </div>
             </div>
           </section>
         </Transition>

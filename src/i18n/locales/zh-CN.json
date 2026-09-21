@@ -548,6 +548,17 @@
       "title": "环境恢复成功！",
       "description": "您可以重新启动 Docker 容器以应用新的配置"
     },
+    "partialSuccess": {
+      "title": "恢复完成，但有部分失败",
+      "description": "下方列出了未能恢复的文件。如需撤销本次恢复，可使用回滚包还原。"
+    },
+    "result": {
+      "restoredFiles": "已恢复文件",
+      "filesCount": "共 {count} 个文件",
+      "errors": "错误明细",
+      "rollbackTitle": "恢复前回滚包",
+      "rollbackHint": "恢复开始前已自动备份当前配置，如需撤销请用这个备份包重新恢复："
+    },
     "progress": {
       "title": "📊 恢复进度"
     },
@@ -560,7 +571,8 @@
       "previewDone": "预览完成，请查看备份内容",
       "verifyPassed": "校验通过，可以开始恢复",
       "verifyFailed": "校验失败，备份文件可能已损坏",
-      "success": "环境恢复成功！"
+      "success": "环境恢复成功！",
+      "partialSuccess": "⚠️ 恢复完成但存在错误，请查看下方明细"
     }
   },
   "workspace": {

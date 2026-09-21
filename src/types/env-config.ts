@@ -111,6 +111,18 @@ export interface RestoreProgress {
   percentage: number;
 }
 
+/// 后端 `RestoreResult` 序列化形态
+///
+/// 恢复命令始终返回该结构（U2）：success=false 表示「部分失败」而非整体失败，
+/// 此时 errors 里有逐条明细，前端需完整展示而不是只弹一句 toast。
+export interface RestoreResult {
+  success: boolean;
+  restored_files: string[];
+  errors: string[];
+  /// 恢复前自动生成的回滚包绝对路径（R2）。无回滚包时后端省略该字段。
+  rollback_path?: string | null;
+}
+
 // Docker 容器端口冲突信息
 export interface ContainerPortConflict {
   port: number;

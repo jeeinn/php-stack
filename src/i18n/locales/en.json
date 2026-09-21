@@ -548,6 +548,17 @@
       "title": "Environment Restored!",
       "description": "You can restart Docker containers to apply the new configuration"
     },
+    "partialSuccess": {
+      "title": "Restore finished with errors",
+      "description": "Files that could not be restored are listed below. Use the rollback bundle to undo this restore if needed."
+    },
+    "result": {
+      "restoredFiles": "Restored files",
+      "filesCount": "{count} files",
+      "errors": "Errors",
+      "rollbackTitle": "Pre-restore rollback bundle",
+      "rollbackHint": "Your previous configuration was backed up automatically. To undo, restore from this bundle:"
+    },
     "progress": {
       "title": "📊 Restore Progress"
     },
@@ -560,7 +571,8 @@
       "previewDone": "Preview complete, check backup contents",
       "verifyPassed": "Verification passed, ready to restore",
       "verifyFailed": "Verification failed, backup may be corrupted",
-      "success": "Environment restored successfully!"
+      "success": "Environment restored successfully!",
+      "partialSuccess": "⚠️ Restore finished with errors, see details below"
     }
   },
   "workspace": {

@@ -1,6 +1,9 @@
-#!/usr/bin/env node
 /**
  * 同步各 PHP 版本目录下的 Dockerfile。
+ *
+ * 注意：本文件不含 shebang。vitest 解析 ESM 时不会剥离 `#!` 行，
+ * 会导致 scripts/__tests__ 下的单元测试报 "Invalid or unexpected token"。
+ * 统一通过 `node scripts/sync-php-dockerfile.mjs` 调用（package.json 已封装为 npm scripts）。
  *
  * 背景：services/phpXX/Dockerfile 共 8 份，内容仅两行不同（版本注释与
  * ARG PHP_BASE_IMAGE 的默认值），其余完全一致。由于 config_generator.rs

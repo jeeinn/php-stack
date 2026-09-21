@@ -12,6 +12,7 @@ import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
+import WorkspaceMissingDialog from './components/WorkspaceMissingDialog.vue';
 import { getLogs, addLog, clearLogs, showToast } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 import type { Container } from './types/docker';
@@ -41,11 +42,17 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null; // 轮询定时器
 const hasEnvFile = ref(false); // .env 文件是否存在
 /// 工作区回退告警（配置路径不可用、数据写到别处）。全局横幅展示，不限环境配置页。
 const workspaceFallbackMsg = ref('');
+/// 配置路径不存在时弹出三选一对话框
+const showWorkspaceMissing = ref(false);
+const workspaceMissingInfo = ref<{ workspace_path: string; effective_path: string } | null>(null);
+/// 本会话已选「临时回退」则不再反复弹窗（横幅仍保留）
+const workspaceMissingDismissed = ref(false);
 
 interface WorkspaceInfo {
   workspace_path: string;
   effective_path: string;
   using_fallback: boolean;
+  path_missing: boolean;
   fallback_reason?: string | null;
 }
 
@@ -327,9 +334,42 @@ async function loadWorkspaceFallbackBanner() {
     } else {
       workspaceFallbackMsg.value = '';
     }
+
+    if (info?.path_missing && !workspaceMissingDismissed.value) {
+      workspaceMissingInfo.value = {
+        workspace_path: info.workspace_path,
+        effective_path: info.effective_path,
+      };
+      showWorkspaceMissing.value = true;
+    } else if (!info?.path_missing) {
+      showWorkspaceMissing.value = false;
+      workspaceMissingInfo.value = null;
+      workspaceMissingDismissed.value = false;
+    }
   } catch {
     workspaceFallbackMsg.value = '';
   }
+}
+
+async function onWorkspaceMissingResolved() {
+  showWorkspaceMissing.value = false;
+  workspaceMissingDismissed.value = false;
+  await loadWorkspaceFallbackBanner();
+  showToast(t('workspace.missing.resolved'), 'success');
+}
+
+function onWorkspaceMissingTemp() {
+  showWorkspaceMissing.value = false;
+  workspaceMissingDismissed.value = true;
+  showToast(t('workspace.missing.tempToast'), 'warning');
+}
+
+function openWorkspaceMissingOrConfig() {
+  if (workspaceMissingInfo.value && !showWorkspaceMissing.value) {
+    showWorkspaceMissing.value = true;
+    return;
+  }
+  activeTab.value = 'env-config';
 }
 
 // 监听 tab 切换，回到 dashboard 时刷新 .env 检测状态
@@ -559,10 +599,10 @@ async function exportLogs() {
         </div>
         <button
           type="button"
-          @click="activeTab = 'env-config'"
+          @click="openWorkspaceMissingOrConfig"
           class="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap"
         >
-          {{ $t('workspace.banner.action') }}
+          {{ workspaceMissingInfo ? $t('workspace.banner.handle') : $t('workspace.banner.action') }}
         </button>
       </div>
 
@@ -782,6 +822,14 @@ async function exportLogs() {
     
     <!-- Workspace Initialization Dialog -->
     <WorkspaceInitDialog />
+
+    <!-- 配置工作区目录不存在：重建 / 选新路径 / 临时回退 -->
+    <WorkspaceMissingDialog
+      :open="showWorkspaceMissing"
+      :info="workspaceMissingInfo"
+      @resolved="onWorkspaceMissingResolved"
+      @dismiss-temp="onWorkspaceMissingTemp"
+    />
 
     <!-- Start Environment Confirmation Dialog -->
     <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">

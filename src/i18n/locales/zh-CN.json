@@ -605,7 +605,17 @@
     },
     "banner": {
       "title": "工作区路径不可用",
-      "action": "查看环境配置"
+      "action": "查看环境配置",
+      "handle": "处理工作区"
+    },
+    "missing": {
+      "title": "工作区目录不存在",
+      "description": "配置的路径：{configured}\n当前临时写入：{effective}\n\n不会自动创建空目录，请选择下一步：",
+      "recreate": "重建该目录",
+      "chooseNew": "选择新路径",
+      "tempFallback": "本会话临时使用回退目录",
+      "resolved": "工作区已就绪",
+      "tempToast": "本会话将写入回退目录；横幅会保持提醒"
     },
     "status": {
       "loading": "加载中...",

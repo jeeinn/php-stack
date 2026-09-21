@@ -100,6 +100,7 @@ pub fn run() {
             // 工作目录管理
             commands::get_workspace_info,
             commands::set_workspace_path,
+            commands::recreate_workspace_dir,
             // 版本管理
             commands::get_version_mappings,
             commands::validate_version,

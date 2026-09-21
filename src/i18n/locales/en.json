@@ -605,7 +605,17 @@
     },
     "banner": {
       "title": "Workspace path unavailable",
-      "action": "Open Env Config"
+      "action": "Open Env Config",
+      "handle": "Fix workspace"
+    },
+    "missing": {
+      "title": "Workspace directory missing",
+      "description": "Configured path: {configured}\nTemporarily writing to: {effective}\n\nWe will not create an empty directory automatically. Choose next step:",
+      "recreate": "Recreate this directory",
+      "chooseNew": "Choose a new path",
+      "tempFallback": "Use fallback for this session",
+      "resolved": "Workspace is ready",
+      "tempToast": "This session writes to the fallback directory; the banner stays as a reminder"
     },
     "status": {
       "loading": "Loading...",

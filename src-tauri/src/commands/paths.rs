@@ -73,6 +73,8 @@ pub struct WorkspaceResolution {
     pub path: PathBuf,
     /// 配置的工作区不可用、已回退到默认目录
     pub fell_back: bool,
+    /// 配置路径本身不存在（等待用户：重建 / 选新路径 / 临时回退）
+    pub path_missing: bool,
     /// 回退原因（`fell_back` 为真时必有值）
     pub reason: Option<String>,
 }
@@ -80,15 +82,16 @@ pub struct WorkspaceResolution {
 /// 解析工作区根目录（.env / docker-compose.yml / services/ 所在）。
 ///
 /// 优先级：
-/// 1. workspace.json 已配置的路径：存在则直接用；**不存在则先尝试创建**——
-///    用户明确设定过工作区，写回默认位置会让他的配置看起来"没生效"；
-/// 2. 创建失败才回退到默认目录，并把原因记进 `reason`；
-/// 3. 从未配置过：用默认位置，这不算回退。
+/// 1. workspace.json 已配置且目录存在 → 直接用；
+/// 2. 已配置但目录不存在 → **不自动创建**（避免盘符卸载/拼写错误时静默建空环境），
+///    临时回退到默认目录，并标记 `path_missing`，由前端询问用户决策；
+/// 3. 从未配置过 → 用默认位置，不算回退。
 pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
     let Some(config) = WorkspaceManager::load_workspace()? else {
         return Ok(WorkspaceResolution {
             path: legacy_app_dir()?,
             fell_back: false,
+            path_missing: false,
             reason: None,
         });
     };
@@ -99,27 +102,48 @@ pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
         return Ok(WorkspaceResolution {
             path,
             fell_back: false,
+            path_missing: false,
             reason: None,
         });
     }
 
-    // 目录不见了（盘符卸载 / 目录被删 / 路径写错）：先试着建回来
-    match std::fs::create_dir_all(&path) {
-        Ok(()) => Ok(WorkspaceResolution {
-            path,
-            fell_back: false,
-            reason: None,
-        }),
-        Err(e) => {
-            let reason = format!("配置的工作区 {} 不可用（{}）", config.workspace_path, e);
-            eprintln!("{reason}，已回退到默认目录");
-            Ok(WorkspaceResolution {
-                path: legacy_app_dir()?,
-                fell_back: true,
-                reason: Some(reason),
-            })
-        }
+    // 目录不见了：不自动 create_dir_all。临时用默认目录保证读写不崩，
+    // 同时标记 path_missing，让前端弹出「重建 / 选新路径 / 临时回退」。
+    let reason = format!(
+        "配置的工作区 {} 不存在，等待用户确认重建或更换",
+        config.workspace_path
+    );
+    eprintln!("{reason}，已临时回退到默认目录");
+    Ok(WorkspaceResolution {
+        path: legacy_app_dir()?,
+        fell_back: true,
+        path_missing: true,
+        reason: Some(reason),
+    })
+}
+
+/// 按用户确认，把配置的工作区目录重建出来。
+///
+/// 仅在用户明确点「重建」时调用；成功后后续 `resolve_workspace` 会命中该路径。
+pub fn recreate_configured_workspace() -> Result<PathBuf, String> {
+    let config = WorkspaceManager::load_workspace()?
+        .ok_or_else(|| "尚未配置工作区".to_string())?;
+    let path = PathBuf::from(&config.workspace_path);
+    create_workspace_dir(&path)?;
+    Ok(path)
+}
+
+/// 创建工作区目录（纯路径操作，便于单测）。
+pub fn create_workspace_dir(path: &std::path::Path) -> Result<(), String> {
+    if path.exists() {
+        return Ok(());
     }
+    std::fs::create_dir_all(path).map_err(|e| {
+        format!(
+            "无法创建工作区目录 {}: {e}",
+            path.display()
+        )
+    })
 }
 
 /// 工作区根目录（.env / docker-compose.yml / services/ 所在）。
@@ -251,5 +275,31 @@ mod tests {
         // 未配置工作区时用默认目录，属于预期行为，不算回退
         let root = project_root().expect("project_root 不应失败");
         assert!(root.is_absolute(), "默认目录应为绝对路径: {root:?}");
+    }
+
+    #[test]
+    fn test_create_workspace_dir_creates_missing_path() {
+        let dir = fresh_dir("create-ws").join("nested-new");
+        assert!(!dir.exists());
+        create_workspace_dir(&dir).expect("应能创建缺失目录");
+        assert!(dir.is_dir());
+        // 幂等：已存在再调一次不报错
+        create_workspace_dir(&dir).expect("已存在时应空操作成功");
+    }
+
+    #[test]
+    fn test_create_workspace_dir_rejects_impossible_path() {
+        // 用不存在的盘符（Windows）或根下无权限路径模拟失败
+        #[cfg(windows)]
+        let bad = PathBuf::from(r"Z:\php-stack-no-such-drive-xyz\ws");
+        #[cfg(not(windows))]
+        let bad = PathBuf::from("/proc/php-stack-cannot-create/ws");
+
+        let err = create_workspace_dir(&bad).expect_err("不可能的路径应失败");
+        assert!(
+            err.contains("无法创建工作区目录"),
+            "错误信息应说明创建失败: {err}"
+        );
+        assert!(!bad.exists());
     }
 }

@@ -1,3 +1,4 @@
+use crate::app_log;
 use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverride};
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::engine::workspace_manager::WorkspaceManager;
@@ -56,6 +57,8 @@ pub struct WorkspaceInfo {
     pub effective_path: String,
     /// 配置路径不可用时为 true，数据正写到 effective_path
     pub using_fallback: bool,
+    /// 配置路径不存在，需用户选择：重建 / 选新路径 / 临时回退
+    pub path_missing: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -76,6 +79,7 @@ pub fn get_workspace_info() -> Result<Option<WorkspaceInfo>, String> {
         workspace_path: config.workspace_path,
         effective_path: resolved.path.to_string_lossy().to_string(),
         using_fallback: resolved.fell_back,
+        path_missing: resolved.path_missing,
         fallback_reason: resolved.reason,
         last_updated: config.last_updated,
     }))
@@ -89,6 +93,20 @@ pub fn set_workspace_path(path: String) -> Result<(), String> {
         return Err("指定的工作目录路径不存在".to_string());
     }
     WorkspaceManager::save_workspace(&path)
+}
+
+/// 按用户确认重建配置中的工作区目录（不再静默 create_dir_all）
+#[tauri::command]
+pub fn recreate_workspace_dir() -> Result<WorkspaceInfo, String> {
+    let path = paths::recreate_configured_workspace()?;
+    app_log!(
+        info,
+        "commands::recreate_workspace_dir",
+        "已按用户确认重建工作区: {}",
+        path.display()
+    );
+
+    get_workspace_info()?.ok_or_else(|| "重建后仍无法读取工作区信息".to_string())
 }
 
 /// 获取所有可用的版本映射配置

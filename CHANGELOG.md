@@ -27,6 +27,7 @@
 - 修复配置的工作区目录不存在时数据被静默写到默认目录的问题（改为先创建目录；创建失败才回退并在界面告警）
 - 修复镜像拉取命令为同步执行、下载大镜像时整个窗口「未响应」的问题（改为 async + spawn_blocking）
 - 修复 `envConfig` 语言节点下存在两个同名 `toast`、JSON 解析时后者静默覆盖前者，导致应用配置后的成功提示直接显示为裸 key（`envConfig.toast.applySuccess` / `backedUp`）的问题（合并节点，恢复被覆盖的 8 条文案）
+- 修复 Nginx 容器启动即崩溃、无限重启的问题：Dockerfile 末尾 `USER nginx` 使 master 进程无权限创建 `/var/cache/nginx/client_temp`、也无法 bind 80 端口（改为 root 运行 master，worker 仍为 `nginx`，PUID/PGID 映射不变）
 
 ### 🔧 改进
 - 环境配置页 .env 解析主体抽为纯函数并以真断言测试覆盖

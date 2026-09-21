@@ -132,8 +132,10 @@ const showVersionHelp = ref(false);
 const imagePresences = ref<ImagePresence[]>([]);
 const showPullConfirm = ref(false);
 const pulling = ref(false);
-/// 单镜像拉取进度（tag -> 0-100，目前简化：不细分到下载进度，整体 boolean）
+/// 单镜像拉取进度（tag -> 0-100）：开始拉=10，成功=100，失败=0
 const pullProgress = ref<Record<string, number>>({});
+/// 拉取进行中的状态文案，如「正在拉取 php:8.2-fpm（1/3）」
+const pullStatusText = ref('');
 /// 用户是否在「覆盖确认」弹窗里勾选了备份。
 ///
 /// 必须是 ref 而非 handleApply 的局部变量：走「镜像缺失 → 拉取 → 再 apply」
@@ -643,36 +645,75 @@ async function handleApply() {
   }
 }
 
-/// 用户在 pullConfirm 弹窗点击"确认拉取"：拉取缺失的镜像，然后继续 apply
+/// 用户在 pullConfirm 弹窗点击"确认拉取"：逐个拉取缺失镜像，然后继续 apply
 async function confirmPullAndApply(missingTags: string[]) {
   pulling.value = true;
-  // 清空/初始化进度
+  pullStatusText.value = '';
+  const results: PullImageResultItem[] = [];
   for (const t of missingTags) pullProgress.value[t] = 0;
-  try {
-    const results = await invoke<PullImageResultItem[]>('pull_service_images', {
-      imageTags: missingTags,
-    });
-    pulling.value = false;
-    showPullConfirm.value = false;
 
-    const failures = results.filter(r => !r.success);
-    if (failures.length > 0) {
-      // 部分/全部失败：仍继续 apply，让后端 fallback 模板兜底
-      const failSummary = failures.map(f => `${f.tag} (${f.error || 'unknown'})`).join(', ');
-      if (failures.length === results.length) {
-        showToast(t('envConfig.toast.pullAllFailed'), 'warning', 5000);
-      } else {
-        showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'warning', 5000);
+  try {
+    // 逐个拉取，才能在 UI 显示「当前正在拉 xxx / 第 n/m」
+    for (let i = 0; i < missingTags.length; i++) {
+      const tag = missingTags[i];
+      pullStatusText.value = t('envConfig.pullConfirm.pullingItem', {
+        tag,
+        current: i + 1,
+        total: missingTags.length,
+      });
+      pullProgress.value = { ...pullProgress.value, [tag]: 10 };
+
+      try {
+        const batch = await invoke<PullImageResultItem[]>('pull_service_images', {
+          imageTags: [tag],
+        });
+        const item = batch[0] ?? { tag, success: false, error: 'empty result' };
+        results.push(item);
+        pullProgress.value = {
+          ...pullProgress.value,
+          [tag]: item.success ? 100 : 0,
+        };
+      } catch (e) {
+        results.push({ tag, success: false, error: String(e) });
+        pullProgress.value = { ...pullProgress.value, [tag]: 0 };
       }
+    }
+
+    pullStatusText.value = '';
+    const failures = results.filter(r => !r.success);
+
+    if (failures.length > 0 && failures.length === results.length) {
+      // 全部失败：二次确认，避免用户误以为镜像已就绪却静默用模板兜底
+      const confirmed = await showConfirm({
+        title: t('envConfig.confirmPullFailed.title'),
+        message: t('envConfig.confirmPullFailed.message', {
+          details: failures.map(f => `• ${f.tag}`).join('\n'),
+        }),
+        confirmText: t('envConfig.confirmPullFailed.continue'),
+        cancelText: t('common.cancel'),
+        type: 'warning',
+      });
+      if (!confirmed) {
+        pulling.value = false;
+        applying.value = false;
+        return;
+      }
+      showToast(t('envConfig.toast.pullAllFailed'), 'warning', 5000);
+    } else if (failures.length > 0) {
+      const failSummary = failures.map(f => `${f.tag} (${f.error || 'unknown'})`).join(', ');
+      showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'warning', 5000);
     } else if (results.length > 0) {
       showToast(t('envConfig.toast.pullAllSuccess', { count: results.length }), 'success', 3000);
     }
-    // 重新计算 presences（拉取成功的应该已经 present）
+
+    pulling.value = false;
+    showPullConfirm.value = false;
+
     const config = buildConfig();
     imagePresences.value = await invoke<ImagePresence[]>('check_service_images_presence', { config });
-    // 沿用用户在覆盖确认里的备份选择（不能硬编码 true，否则覆盖用户意愿）
     await doApplyCore(config, enableBackup.value);
   } catch (e) {
+    pullStatusText.value = '';
     pulling.value = false;
     showPullConfirm.value = false;
     showError(formatErrorMessage(e));
@@ -1236,6 +1277,7 @@ const goToMirrorSettings = () => {
       :presences="imagePresences"
       :pulling="pulling"
       :progress="pullProgress"
+      :status-text="pullStatusText"
       @confirm="confirmPullAndApply"
       @cancel="cancelPull"
     />

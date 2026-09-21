@@ -24,6 +24,8 @@ const props = defineProps<{
   pulling?: boolean;
   /** 单条进度（可选）：tag → 0-100 */
   progress?: Record<string, number>;
+  /** 拉取进行中文案，如「正在拉取 php:8.2-fpm（1/3）」 */
+  statusText?: string;
 }>();
 
 const emit = defineEmits<{
@@ -71,7 +73,14 @@ const summary = computed(() => {
 
       <!-- Summary banner -->
       <div
-        v-if="missing.length > 0"
+        v-if="pulling && statusText"
+        class="px-4 sm:px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 text-xs font-medium"
+        data-testid="pull-status"
+      >
+        {{ statusText }}
+      </div>
+      <div
+        v-else-if="missing.length > 0"
         class="px-4 sm:px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs"
       >
         ⚠️ {{ summary }}
@@ -136,7 +145,7 @@ const summary = computed(() => {
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
           </svg>
-          <span>{{ pulling ? $t('envConfig.pullConfirm.pulling') : $t('envConfig.pullConfirm.confirmPull', { count: missing.length }) }}</span>
+          <span>{{ pulling ? (statusText || $t('envConfig.pullConfirm.pulling')) : $t('envConfig.pullConfirm.confirmPull', { count: missing.length }) }}</span>
         </button>
       </div>
     </div>

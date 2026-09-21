@@ -246,7 +246,7 @@
       "nginxConfigOpened": "已打开 {dir} 配置目录",
       "nginxConfigFailed": "打开目录失败，请手动打开 services/{dir}/conf.d/",
       "pullPartialSuccess": "⚠️ 部分镜像拉取失败：{details}。失败的将回退到 fallback 模板。",
-      "pullAllFailed": "❌ 所有镜像拉取失败，已使用 fallback 模板应用配置",
+      "pullAllFailed": "❌ 所有镜像拉取失败，已按确认使用 fallback 模板应用配置",
       "pullAllSuccess": "✅ {count} 个镜像全部拉取成功"
     },
     "error": {
@@ -307,7 +307,13 @@
       "toPull": "待拉取",
       "tip": "镜像一旦拉取到本地，\"一键启动\"会直接复用本地缓存，不会重复下载。后续启动更快速。",
       "confirmPull": "确认拉取 {count} 个",
-      "pulling": "拉取中…"
+      "pulling": "拉取中…",
+      "pullingItem": "正在拉取 {tag}（{current}/{total}）"
+    },
+    "confirmPullFailed": {
+      "title": "镜像全部拉取失败",
+      "message": "以下镜像均未能拉取成功：\n{details}\n\n若继续应用，将使用内置 fallback 模板（可能与目标版本不完全一致）。确定继续吗？",
+      "continue": "仍使用模板继续"
     }
   },
   "settings": {

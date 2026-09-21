@@ -57,11 +57,31 @@ RUN if [ -n "$COMPOSER_MIRROR" ] && [ "$COMPOSER_MIRROR" != "https://packagist.o
 ARG PUID=1000
 ARG PGID=1000
 
-# Dynamically adjust www-data user ID to match host
-RUN if [ "${PUID}" != "1000" ] || [ "${PGID}" != "1000" ]; then \
-      groupmod -o -g ${PGID} www-data && \
-      usermod -o -u ${PUID} -g ${PGID} www-data && \
-      echo "Adjusted www-data to UID=${PUID}, GID=${PGID}"; \
-    fi
+# 把容器内 www-data 用户的 UID/GID 对齐宿主机，避免挂载目录里写出的文件属主不匹配。
+#
+# 这里修掉了原实现的两个坑：
+#   1. 原条件是 `PUID != 1000 || PGID != 1000`，而默认值本身就是 1000 ——
+#      等于默认配置下永远不执行，映射形同虚设。现在改为「与目标不一致才调整」。
+#   2. 原实现只用 debian 的 groupmod/usermod。用户若把基础镜像换成 alpine 版
+#      （如 php:8.2-fpm-alpine），构建会直接 `groupmod: not found` 失败。
+#      现在按可用命令分发两种改法。
+#
+# 只在与目标不一致时才改动，保证默认构建层可缓存。
+RUN set -eux; \
+    if [ "$(id -u www-data)" != "${PUID}" ] || [ "$(id -g www-data)" != "${PGID}" ]; then \
+      if command -v usermod >/dev/null 2>&1; then \
+        groupmod -o -g "${PGID}" www-data; \
+        usermod -o -u "${PUID}" -g "${PGID}" www-data; \
+      elif command -v adduser >/dev/null 2>&1; then \
+        deluser www-data; \
+        # alpine 的 deluser 会连带删掉同名组，delgroup 再删会报 unknown group
+        delgroup www-data 2>/dev/null || true; \
+        addgroup -g "${PGID}" www-data; \
+        adduser -u "${PUID}" -G www-data -s /bin/sh -D www-data; \
+      else \
+        echo "skip: 未识别的基础镜像，沿用镜像默认的 www-data 用户"; \
+      fi; \
+    fi; \
+    echo "www-data uid=$(id -u www-data) gid=$(id -g www-data)"
 
 WORKDIR /www

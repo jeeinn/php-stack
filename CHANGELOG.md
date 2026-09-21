@@ -28,6 +28,8 @@
 - 修复镜像拉取命令为同步执行、下载大镜像时整个窗口「未响应」的问题（改为 async + spawn_blocking）
 - 修复 `envConfig` 语言节点下存在两个同名 `toast`、JSON 解析时后者静默覆盖前者，导致应用配置后的成功提示直接显示为裸 key（`envConfig.toast.applySuccess` / `backedUp`）的问题（合并节点，恢复被覆盖的 8 条文案）
 - 修复 Nginx 容器启动即崩溃、无限重启的问题：Dockerfile 末尾 `USER nginx` 使 master 进程无权限创建 `/var/cache/nginx/client_temp`、也无法 bind 80 端口（改为 root 运行 master，worker 仍为 `nginx`，PUID/PGID 映射不变）
+- 修复 PUID/PGID 用户映射在默认配置下从不生效的问题：判断条件写成「PUID/PGID 不等于 1000 才调整」，而默认值本身就是 1000，等于永远跳过（改为「与镜像内当前 UID/GID 不一致才调整」）
+- 修复 Nginx 镜像模板只支持 alpine 基础镜像的问题：原实现用 `deluser/adduser`，若把 `NGINX*_VERSION` 换成 debian 版（如 `nginx:1.28`）则构建直接失败；现在按基础镜像分发命令（alpine 用 `deluser/adduser`，debian 用 `groupmod/usermod`）。PHP 模板同样补齐 alpine 版兼容性
 
 ### 🔧 改进
 - 环境配置页 .env 解析主体抽为纯函数并以真断言测试覆盖

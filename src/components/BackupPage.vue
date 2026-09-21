@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import type { BackupOptions, BackupProgress } from '../types/env-config';
+import { createBackup, convertToRelativePath, normalizeError } from '../api';
 import { showToast, addLog } from '../composables/useToast';
 
 const { t } = useI18n();
@@ -27,13 +27,10 @@ async function selectProjectFolder() {
   });
   if (selected) {
     try {
-      const relativePath = await invoke<string>('convert_to_relative_path', { 
-        absolutePath: selected,
-        isDirectory: true
-      });
+      const relativePath = await convertToRelativePath(selected as string, true);
       appendPattern(relativePath);
     } catch (e) {
-      handlePathError(e as string);
+      handlePathError(normalizeError(e));
     }
   }
 }
@@ -46,13 +43,10 @@ async function selectProjectFile() {
   });
   if (selected) {
     try {
-      const relativePath = await invoke<string>('convert_to_relative_path', { 
-        absolutePath: selected,
-        isDirectory: false
-      });
+      const relativePath = await convertToRelativePath(selected as string, false);
       appendPattern(relativePath);
     } catch (e) {
-      handlePathError(e as string);
+      handlePathError(normalizeError(e));
     }
   }
 }
@@ -117,11 +111,11 @@ async function handleBackup() {
         : [],
     };
 
-    await invoke('create_backup', { savePath, options: backupOptions });
+    await createBackup(savePath, backupOptions);
     showToast(t('backup.toast.success', { path: savePath }), 'success');
     progress.value = { step: '✅', percentage: 100 };
   } catch (e) {
-    showToast(e as string, 'error');
+    showToast(normalizeError(e), 'error');
   } finally {
     backing.value = false;
   }

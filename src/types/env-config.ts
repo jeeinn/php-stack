@@ -99,6 +99,8 @@ export interface PortConflict {
 export interface RestorePreview {
   manifest: BackupManifest;
   file_count: number;
+  /** 预览时检测到的宿主机端口冲突（提示改端口，不阻断恢复） */
+  port_conflicts: PortConflict[];
 }
 
 export interface BackupProgress {
@@ -109,6 +111,21 @@ export interface BackupProgress {
 export interface RestoreProgress {
   step: string;
   percentage: number;
+}
+
+/// 后端 `RestoreResult` 序列化形态
+///
+/// 恢复命令始终返回该结构（U2）：
+/// - success=true：全部成功
+/// - success=false 且 restored_files 非空：部分失败
+/// - success=false 且 restored_files 为空：致命失败（包打不开 / zip-slip 等）
+/// 前端用结果面板展示明细与回滚包快捷入口，不只弹 toast。
+export interface RestoreResult {
+  success: boolean;
+  restored_files: string[];
+  errors: string[];
+  /// 恢复前自动生成的回滚包绝对路径（R2）。无回滚包时后端省略该字段。
+  rollback_path?: string | null;
 }
 
 // Docker 容器端口冲突信息

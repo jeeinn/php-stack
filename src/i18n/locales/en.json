@@ -26,7 +26,9 @@
     "dashboard": "Dashboard",
     "envConfig": "Environment",
     "settings": "Settings",
-    "migration": "Migration"
+    "migration": "Migration",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
   },
   "dashboard": {
     "title": "Status",
@@ -73,9 +75,18 @@
       "action": "Confirm Restart"
     },
     "log": {
-      "title": "Live Logs",
-      "copy": "📋 Copy",
-      "bottom": "⬇️ Bottom",
+  "title": "Live Logs",
+  "copy": "Copy",
+  "copyTip": "Copy the logs shown in this panel (keeps the latest 200 entries)",
+  "clear": "Clear",
+  "clearTip": "Clear the log panel",
+  "export": "Export",
+  "exportTip": "Export the full file log (including rotations; not limited to the panel)",
+  "cleared": "Log panel cleared",
+  "exported": "Log exported to {path}",
+  "exportFailed": "Export failed: {error}",
+  "bottom": "⬇️ Bottom",
+  "panelHint": "Panel shows the latest {limit} lines; use Export for full logs",
       "show": "Show",
       "hide": "Hide",
       "empty": "Waiting for operations...",
@@ -88,8 +99,9 @@
       "refreshFailed": "Refresh failed: {error}",
       "containerUpdated": "Container list updated ({count} containers)",
       "containerNoChange": "Container status unchanged",
-      "dockerUnavailable": "Docker unavailable, container list cleared",
-      "dockerCheckFailed": "Docker check failed: {error}",
+  "dockerUnavailable": "Docker unavailable, container list cleared",
+  "dockerCheckFailed": "Docker check failed: {error}",
+  "dockerRestored": "Docker is available again, polling interval back to 5s",
       "serviceStarting": "Starting service: {name}...",
       "serviceStarted": "Service {name} started",
       "serviceStopping": "Stopping service: {name}...",
@@ -235,7 +247,10 @@
       "backupPartialFail": "\n\n⚠️  Note: Some files failed to backup (may be in use). Please close related programs and retry.",
       "startSuccess": "Environment started!\n{result}",
       "nginxConfigOpened": "Opened {dir} config directory",
-      "nginxConfigFailed": "Failed to open directory, please manually open services/{dir}/conf.d/"
+      "nginxConfigFailed": "Failed to open directory, please manually open services/{dir}/conf.d/",
+      "pullPartialSuccess": "⚠️ Some images failed to pull: {details}. Fallback templates will be used for those.",
+      "pullAllFailed": "❌ All images failed to pull. Continuing with built-in templates as confirmed.",
+      "pullAllSuccess": "✅ {count} images pulled successfully"
     },
     "error": {
       "dockerNotRunning": "❌ Docker Not Running\n\nPlease start Docker Desktop and try again.",
@@ -295,12 +310,13 @@
       "toPull": "To pull",
       "tip": "Once pulled, \"One-click start\" reuses the local cache — it won't re-download on subsequent runs.",
       "confirmPull": "Pull {count}",
-      "pulling": "Pulling…"
+      "pulling": "Pulling…",
+      "pullingItem": "Pulling {tag} ({current}/{total})"
     },
-    "toast": {
-      "pullPartialSuccess": "⚠️ Some images failed to pull: {details}. Fallback templates will be used for those.",
-      "pullAllFailed": "❌ All images failed to pull. Falling back to built-in templates.",
-      "pullAllSuccess": "✅ {count} images pulled successfully"
+    "confirmPullFailed": {
+      "title": "All image pulls failed",
+      "message": "None of these images could be pulled:\n{details}\n\nContinuing will use built-in fallback templates (may not match the target version exactly). Continue anyway?",
+      "continue": "Continue with templates"
     }
   },
   "settings": {
@@ -313,6 +329,11 @@
       "auto": "Auto",
       "light": "Light",
       "dark": "Dark"
+    },
+    "about": {
+      "title": "About PHP-Stack",
+      "hint": "In-app auto-update is not wired yet. Open GitHub Releases to see if a newer build is available.",
+      "checkUpdate": "Check for updates"
     }
   },
   "mirror": {
@@ -522,6 +543,9 @@
       "fileCount": "File Count",
       "fileCountValue": "{count} files",
       "serviceList": "Services",
+      "portConflicts": "Port Conflicts",
+      "portConflictsHint": "These host ports are already in use. Restore still writes the original config; change ports in .env or stop the occupying process before starting. Suggested ports are for reference only:",
+      "portConflictItem": "{service}: {port} → suggest {suggested}",
       "warnings": "Backup Warnings",
       "done": "✓ Preview Complete",
       "next": "Next: Verify →"
@@ -548,6 +572,22 @@
       "title": "Environment Restored!",
       "description": "You can restart Docker containers to apply the new configuration"
     },
+    "partialSuccess": {
+      "title": "Restore finished with errors",
+      "description": "Files that could not be restored are listed below. Use the rollback bundle to undo this restore if needed."
+    },
+    "fatal": {
+      "title": "Restore failed",
+      "description": "No files were written. See the error below. If a rollback bundle was created, you can use it to restore the previous configuration."
+    },
+    "result": {
+      "restoredFiles": "Restored files",
+      "filesCount": "{count} files",
+      "errors": "Errors",
+      "rollbackTitle": "Pre-restore rollback bundle",
+      "rollbackHint": "Your previous configuration was backed up automatically. To undo, load this bundle into the restore wizard:",
+      "rollbackAction": "Restore from this bundle"
+    },
     "progress": {
       "title": "📊 Restore Progress"
     },
@@ -556,11 +596,18 @@
       "message": "⚠️ Warning: Existing config files will be overwritten. Consider backing up first.\n\n💡 After restore, click \"Start All\" to run the environment.",
       "start": "Start Restore"
     },
+    "rollbackConfirm": {
+      "title": "Restore from rollback bundle?",
+      "message": "This loads the rollback bundle into the restore wizard (preview → verify → confirm). Current workspace config will be overwritten again.",
+      "confirm": "Load rollback bundle"
+    },
     "toast": {
       "previewDone": "Preview complete, check backup contents",
       "verifyPassed": "Verification passed, ready to restore",
       "verifyFailed": "Verification failed, backup may be corrupted",
-      "success": "Environment restored successfully!"
+      "success": "Environment restored successfully!",
+      "partialSuccess": "⚠️ Restore finished with errors, see details below",
+      "fatalFailed": "Restore failed, see error details below"
     }
   },
   "workspace": {
@@ -573,10 +620,25 @@
     "error": {
       "invalidPath": "Please select a valid directory as workspace"
     },
+    "banner": {
+      "title": "Workspace path unavailable",
+      "action": "Open Env Config",
+      "handle": "Fix workspace"
+    },
+    "missing": {
+      "title": "Workspace directory missing",
+      "description": "Configured path: {configured}\nTemporarily writing to: {effective}\n\nWe will not create an empty directory automatically. Choose next step:",
+      "recreate": "Recreate this directory",
+      "chooseNew": "Choose a new path",
+      "tempFallback": "Use fallback for this session",
+      "resolved": "Workspace is ready",
+      "tempToast": "This session writes to the fallback directory; the banner stays as a reminder"
+    },
     "status": {
       "loading": "Loading...",
       "notConfigured": "Not configured",
-      "loadFailed": "Load failed"
+      "loadFailed": "Load failed",
+      "fallback": "Configured workspace is unavailable; data is written to {effective}. {reason}"
     }
   }
 }

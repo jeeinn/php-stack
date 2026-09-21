@@ -27,6 +27,7 @@ dist-ssr
 .vscode
 .claude
 .workbuddy
+.cursor
 
 # Generated files (runtime generated, not templates)
 workspace.json

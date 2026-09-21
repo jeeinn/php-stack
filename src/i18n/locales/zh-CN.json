@@ -26,7 +26,9 @@
     "dashboard": "环境管理",
     "envConfig": "环境配置",
     "settings": "其他设置",
-    "migration": "环境迁移"
+    "migration": "环境迁移",
+    "expand": "展开侧边栏",
+    "collapse": "收缩侧边栏"
   },
   "dashboard": {
     "title": "运行状态",
@@ -73,9 +75,18 @@
       "action": "确认重启"
     },
     "log": {
-      "title": "实时日志",
-      "copy": "📋 复制",
-      "bottom": "⬇️ 底部",
+  "title": "实时日志",
+  "copy": "复制",
+  "copyTip": "复制面板中显示的日志（保留最近 200 条）",
+  "clear": "清空",
+  "clearTip": "清空面板中的日志显示",
+  "export": "导出",
+  "exportTip": "导出完整文件日志（含轮转历史，不限面板条数）",
+  "cleared": "日志面板已清空",
+  "exported": "日志已导出到 {path}",
+  "exportFailed": "导出失败: {error}",
+  "bottom": "⬇️ 底部",
+  "panelHint": "面板仅显示最近 {limit} 条；完整排查请点「导出」",
       "show": "显示",
       "hide": "隐藏",
       "empty": "等待操作中...",
@@ -88,8 +99,9 @@
       "refreshFailed": "刷新失败: {error}",
       "containerUpdated": "容器列表已更新 ({count} 个容器)",
       "containerNoChange": "容器状态未变化",
-      "dockerUnavailable": "Docker 不可用，已清空容器列表",
-      "dockerCheckFailed": "Docker 检查失败: {error}",
+  "dockerUnavailable": "Docker 不可用，已清空容器列表",
+  "dockerCheckFailed": "Docker 检查失败: {error}",
+  "dockerRestored": "Docker 已恢复可用，轮询间隔已回到 5 秒",
       "serviceStarting": "正在启动服务: {name}...",
       "serviceStarted": "服务 {name} 已启动",
       "serviceStopping": "正在停止服务: {name}...",
@@ -235,7 +247,10 @@
       "backupPartialFail": "\n\n⚠️  注意：部分文件备份失败（可能文件被占用），请关闭相关程序后重试。",
       "startSuccess": "环境启动成功！\n{result}",
       "nginxConfigOpened": "已打开 {dir} 配置目录",
-      "nginxConfigFailed": "打开目录失败，请手动打开 services/{dir}/conf.d/"
+      "nginxConfigFailed": "打开目录失败，请手动打开 services/{dir}/conf.d/",
+      "pullPartialSuccess": "⚠️ 部分镜像拉取失败：{details}。失败的将回退到 fallback 模板。",
+      "pullAllFailed": "❌ 所有镜像拉取失败，已按确认使用 fallback 模板应用配置",
+      "pullAllSuccess": "✅ {count} 个镜像全部拉取成功"
     },
     "error": {
       "dockerNotRunning": "❌ Docker 未运行\n\n请启动 Docker Desktop 后重试。",
@@ -295,12 +310,13 @@
       "toPull": "待拉取",
       "tip": "镜像一旦拉取到本地，\"一键启动\"会直接复用本地缓存，不会重复下载。后续启动更快速。",
       "confirmPull": "确认拉取 {count} 个",
-      "pulling": "拉取中…"
+      "pulling": "拉取中…",
+      "pullingItem": "正在拉取 {tag}（{current}/{total}）"
     },
-    "toast": {
-      "pullPartialSuccess": "⚠️ 部分镜像拉取失败：{details}。失败的将回退到 fallback 模板。",
-      "pullAllFailed": "❌ 所有镜像拉取失败，已使用 fallback 模板应用配置",
-      "pullAllSuccess": "✅ {count} 个镜像全部拉取成功"
+    "confirmPullFailed": {
+      "title": "镜像全部拉取失败",
+      "message": "以下镜像均未能拉取成功：\n{details}\n\n若继续应用，将使用内置 fallback 模板（可能与目标版本不完全一致）。确定继续吗？",
+      "continue": "仍使用模板继续"
     }
   },
   "settings": {
@@ -313,6 +329,11 @@
       "auto": "自动",
       "light": "明亮",
       "dark": "暗黑"
+    },
+    "about": {
+      "title": "关于 PHP-Stack",
+      "hint": "自动更新尚未接入；可打开 GitHub Releases 查看是否有新版本。",
+      "checkUpdate": "检查更新"
     }
   },
   "mirror": {
@@ -522,6 +543,9 @@
       "fileCount": "文件数量",
       "fileCountValue": "{count} 个文件",
       "serviceList": "服务列表",
+      "portConflicts": "端口冲突",
+      "portConflictsHint": "以下宿主机端口已被占用。恢复仍会写入原配置；启动环境前请改 .env 端口，或停止占用进程。建议端口仅供参考：",
+      "portConflictItem": "{service}：{port} → 建议 {suggested}",
       "warnings": "备份时的警告",
       "done": "✓ 预览完成",
       "next": "下一步：校验 →"
@@ -548,6 +572,22 @@
       "title": "环境恢复成功！",
       "description": "您可以重新启动 Docker 容器以应用新的配置"
     },
+    "partialSuccess": {
+      "title": "恢复完成，但有部分失败",
+      "description": "下方列出了未能恢复的文件。如需撤销本次恢复，可使用回滚包还原。"
+    },
+    "fatal": {
+      "title": "恢复失败",
+      "description": "未能写入任何文件。下方是错误原因；若已生成回滚包，可用它还原恢复前的配置。"
+    },
+    "result": {
+      "restoredFiles": "已恢复文件",
+      "filesCount": "共 {count} 个文件",
+      "errors": "错误明细",
+      "rollbackTitle": "恢复前回滚包",
+      "rollbackHint": "恢复开始前已自动备份当前配置，如需撤销可一键用此包重新走恢复向导：",
+      "rollbackAction": "用此包重新恢复"
+    },
     "progress": {
       "title": "📊 恢复进度"
     },
@@ -556,11 +596,18 @@
       "message": "⚠️ 注意: 现有配置文件将被覆盖，建议先备份当前环境\n\n💡 恢复完成后，点击\"一键启动\"即可运行环境",
       "start": "开始恢复"
     },
+    "rollbackConfirm": {
+      "title": "用回滚包重新恢复？",
+      "message": "将把该回滚包载入恢复向导（预览 → 校验 → 确认）。这会再次覆盖当前工作区配置。",
+      "confirm": "载入回滚包"
+    },
     "toast": {
       "previewDone": "预览完成，请查看备份内容",
       "verifyPassed": "校验通过，可以开始恢复",
       "verifyFailed": "校验失败，备份文件可能已损坏",
-      "success": "环境恢复成功！"
+      "success": "环境恢复成功！",
+      "partialSuccess": "⚠️ 恢复完成但存在错误，请查看下方明细",
+      "fatalFailed": "恢复失败，请查看下方错误明细"
     }
   },
   "workspace": {
@@ -573,10 +620,25 @@
     "error": {
       "invalidPath": "请选择一个有效的目录作为工作区"
     },
+    "banner": {
+      "title": "工作区路径不可用",
+      "action": "查看环境配置",
+      "handle": "处理工作区"
+    },
+    "missing": {
+      "title": "工作区目录不存在",
+      "description": "配置的路径：{configured}\n当前临时写入：{effective}\n\n不会自动创建空目录，请选择下一步：",
+      "recreate": "重建该目录",
+      "chooseNew": "选择新路径",
+      "tempFallback": "本会话临时使用回退目录",
+      "resolved": "工作区已就绪",
+      "tempToast": "本会话将写入回退目录；横幅会保持提醒"
+    },
     "status": {
       "loading": "加载中...",
       "notConfigured": "未配置",
-      "loadFailed": "获取失败"
+      "loadFailed": "获取失败",
+      "fallback": "配置的工作区不可用，数据实际写入 {effective}。{reason}"
     }
   }
 }

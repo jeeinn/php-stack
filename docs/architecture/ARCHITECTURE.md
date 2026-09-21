@@ -264,8 +264,25 @@ php-stack/
 ├── .env                             # 生成的环境变量
 ├── docker-compose.yml               # 生成的 Compose 文件
 ├── .user_version_overrides.json     # 用户版本覆盖配置
-└── workspace.json                   # 工作目录配置
+└── workspace.json                   # 工作目录配置（现位于 app_data_dir）
 ```
+
+---
+
+## 5.1 应用写入清单（单一事实来源）
+
+> 路径以运行时解析为准；`app_data_dir` 为 Tauri 官方应用数据目录（Windows `%APPDATA%\com.php-stack.dev` 等）。
+
+| 写入物 | 落点 | 负责模块 | 说明 |
+|--------|------|----------|------|
+| `.env` / `docker-compose.yml` | **工作区**（`workspace.json` 配置路径） | `config_generator` / `env_config` | 可视化配置生成 |
+| `services/` / `data/` / `logs/` | 工作区 | `config_generator` / Docker 挂载 | 模板与运行时数据 |
+| `.user_mirror_config.json` | 工作区 | `mirror_config_manager` | 用户镜像源覆盖 |
+| `.user_version_overrides.json` | 工作区 | `user_override_manager` | 用户镜像 tag 覆盖 |
+| 备份 ZIP / `.restore_rollback_*.zip` | 用户选择路径 / 工作区 | `backup_engine` / `commands::backup` | 备份与恢复前回滚包 |
+| `workspace.json` | **app_data_dir** | `workspace_manager` | 工作区路径持久化 |
+| `php-stack.log` | **app_data_dir** | `logging` | 文件日志（轮转） |
+| `services/version_manifest.json`（可选） | **app_data_dir** | `version_manifest` | 外部版本清单覆盖；缺失则用二进制内置 |
 
 ---
 

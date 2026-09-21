@@ -86,14 +86,13 @@ impl MirrorManager {
             .ok_or_else(|| format!("未找到预设方案: {preset_name}"))?;
 
         let content = if env_path.exists() {
-            std::fs::read_to_string(env_path)
-                .map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            std::fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
         } else {
             String::new()
         };
 
-        let mut env_file = EnvFile::parse(&content)
-            .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+        let mut env_file =
+            EnvFile::parse(&content).map_err(|e| format!("解析 .env 文件失败: {e}"))?;
 
         env_file.set("DOCKER_REGISTRY_MIRROR", &preset.docker_registry);
         env_file.set("APT_MIRROR", preset.apt.as_str());
@@ -101,8 +100,7 @@ impl MirrorManager {
         env_file.set("NPM_MIRROR", &preset.npm);
 
         let output = env_file.format();
-        std::fs::write(env_path, output)
-            .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+        std::fs::write(env_path, output).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
 
         Ok(())
     }
@@ -111,11 +109,7 @@ impl MirrorManager {
     ///
     /// category: "docker", "apt", "composer", "npm", "github"
     /// 只更新指定类别的键，其他类别保持不变。
-    pub fn update_single(
-        category: &str,
-        value: &str,
-        env_path: &Path,
-    ) -> Result<(), String> {
+    pub fn update_single(category: &str, value: &str, env_path: &Path) -> Result<(), String> {
         let key = match category {
             "docker_registry" => "DOCKER_REGISTRY_MIRROR",
             "apt" => "APT_MIRROR",
@@ -126,20 +120,18 @@ impl MirrorManager {
         };
 
         let content = if env_path.exists() {
-            std::fs::read_to_string(env_path)
-                .map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            std::fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
         } else {
             String::new()
         };
 
-        let mut env_file = EnvFile::parse(&content)
-            .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+        let mut env_file =
+            EnvFile::parse(&content).map_err(|e| format!("解析 .env 文件失败: {e}"))?;
 
         env_file.set(key, value);
 
         let output = env_file.format();
-        std::fs::write(env_path, output)
-            .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+        std::fs::write(env_path, output).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
 
         Ok(())
     }
@@ -159,7 +151,9 @@ impl MirrorManager {
             .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
         match client.head(url).send().await {
-            Ok(response) => Ok(response.status().is_success() || response.status().is_redirection()),
+            Ok(response) => {
+                Ok(response.status().is_success() || response.status().is_redirection())
+            }
             Err(e) => {
                 if e.is_timeout() || e.is_connect() {
                     Ok(false)
@@ -175,14 +169,12 @@ impl MirrorManager {
     /// 从 .env 文件中读取 4 个镜像源键的值。
     pub fn get_current_status(env_path: &Path) -> Result<MirrorStatus, String> {
         let content = if env_path.exists() {
-            std::fs::read_to_string(env_path)
-                .map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            std::fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
         } else {
             String::new()
         };
 
-        let env_file = EnvFile::parse(&content)
-            .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+        let env_file = EnvFile::parse(&content).map_err(|e| format!("解析 .env 文件失败: {e}"))?;
 
         Ok(MirrorStatus {
             docker_registry: env_file
@@ -222,7 +214,9 @@ impl MirrorManager {
         if status.docker_registry.is_empty()
             && (status.apt == "default" || status.apt.is_empty())
             && (status.composer == "default" || status.composer.is_empty())
-            && (status.npm == "default" || status.npm.is_empty() || status.npm == "https://registry.npmjs.org")
+            && (status.npm == "default"
+                || status.npm.is_empty()
+                || status.npm == "https://registry.npmjs.org")
         {
             return Ok("官方默认".to_string());
         }
@@ -282,7 +276,9 @@ mod tests {
         MirrorManager::apply_preset("阿里云全套", &env_path).expect("应用预设失败");
 
         let content = fs::read_to_string(&env_path).expect("读取文件失败");
-        assert!(content.contains("DOCKER_REGISTRY_MIRROR=https://registry.cn-hangzhou.aliyuncs.com"));
+        assert!(
+            content.contains("DOCKER_REGISTRY_MIRROR=https://registry.cn-hangzhou.aliyuncs.com")
+        );
         assert!(content.contains("APT_MIRROR=aliyun"));
         assert!(content.contains("COMPOSER_MIRROR=aliyun"));
         assert!(content.contains("NPM_MIRROR=https://registry.npmmirror.com"));

@@ -1,5 +1,5 @@
+use crate::engine::mirror_config_manager::{MergedMirrorCategory, MirrorConfigManager};
 use crate::engine::mirror_manager::{MirrorManager as UnifiedMirrorManager, MirrorPreset};
-use crate::engine::mirror_config_manager::{MirrorConfigManager, MergedMirrorCategory};
 
 use super::get_project_root;
 
@@ -32,10 +32,10 @@ pub async fn apply_mirror_preset(preset_name: String) -> Result<(), String> {
 pub fn update_single_mirror(category: String, source: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     let env_path = project_root.join(".env");
-    
+
     // 标准化镜像源地址（去除尾部斜杠）
     let normalized_source = normalize_mirror_url(&source);
-    
+
     UnifiedMirrorManager::update_single(&category, &normalized_source, &env_path)
 }
 
@@ -51,8 +51,7 @@ pub fn get_mirror_status() -> Result<serde_json::Value, String> {
     let project_root = get_project_root()?;
     let env_path = project_root.join(".env");
     let status = UnifiedMirrorManager::get_current_status(&env_path)?;
-    serde_json::to_value(&status)
-        .map_err(|e| format!("序列化镜像源状态失败: {e}"))
+    serde_json::to_value(&status).map_err(|e| format!("序列化镜像源状态失败: {e}"))
 }
 
 /// 获取当前匹配的预设名称
@@ -74,10 +73,7 @@ pub fn get_merged_mirror_list() -> Result<Vec<MergedMirrorCategory>, String> {
 
 /// 保存用户选择的镜像源选项
 #[tauri::command]
-pub fn save_selected_mirror_option(
-    category_id: String,
-    option_id: String,
-) -> Result<(), String> {
+pub fn save_selected_mirror_option(category_id: String, option_id: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     MirrorConfigManager::save_selected_option(&project_root, &category_id, &option_id)
 }
@@ -90,21 +86,26 @@ pub fn save_user_mirror_category(
     description: Option<String>,
 ) -> Result<(), String> {
     let project_root = get_project_root()?;
-    
+
     // 标准化镜像源地址（去除尾部斜杠）
     let normalized_source = normalize_mirror_url(&source);
-    
-    MirrorConfigManager::save_user_category(&project_root, &category_id, &normalized_source, description)
+
+    MirrorConfigManager::save_user_category(
+        &project_root,
+        &category_id,
+        &normalized_source,
+        description,
+    )
 }
 
 /// 删除用户自定义的类别配置
 #[tauri::command]
 pub fn remove_user_mirror_category(category_id: String) -> Result<(), String> {
     let project_root = get_project_root()?;
-    
+
     // 1. 从用户配置中删除
     MirrorConfigManager::remove_user_category(&project_root, &category_id)?;
-    
+
     // 2. 同步更新 .env 文件，恢复为默认值
     let env_path = project_root.join(".env");
     let default_value = match category_id.as_str() {
@@ -115,7 +116,7 @@ pub fn remove_user_mirror_category(category_id: String) -> Result<(), String> {
         "github_proxy" => "",
         _ => return Err(format!("未知的镜像源类别: {category_id}")),
     };
-    
+
     UnifiedMirrorManager::update_single(&category_id, default_value, &env_path)
 }
 

@@ -1,7 +1,10 @@
-#!/usr/bin/env node
 /**
  * 从上游（docker-library/official-images + endoflife.date）拉取版本元数据，
  * 与 src-tauri/services/version_manifest.json 对比，生成可审计的差异报告。
+ *
+ * 注意：本文件不含 shebang。vitest 解析 ESM 时不会剥离 `#!` 行，
+ * 会导致 scripts/__tests__ 下的单元测试报 "Invalid or unexpected token"。
+ * 统一通过 `node scripts/sync-version-manifest.mjs` 调用（package.json 已封装为 npm scripts）。
  *
  * 背景：version_manifest.json 之前是手工维护的，结果严重滞后（项目 PHP 还在
  * 8.5，但上游已有 8.6-RC；MySQL 跳过了整条 9.x）。本脚本在仓库侧 / CI 跑，

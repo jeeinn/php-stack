@@ -9,6 +9,9 @@ interface ToastItem {
   duration?: number;
 }
 
+/** UI 日志面板保留条数；超出丢弃最早的。完整排查请用「导出」。 */
+export const UI_LOG_LIMIT = 200;
+
 const toasts = ref<ToastItem[]>([]);
 const logs = ref<string[]>([]);
 let nextId = 0;
@@ -17,12 +20,19 @@ let nextId = 0;
 export function addLog(message: string) {
   const time = new Date().toLocaleTimeString();
   logs.value.push(`[${time}] ${message}`);
-  if (logs.value.length > 50) logs.value.shift();
+  while (logs.value.length > UI_LOG_LIMIT) {
+    logs.value.shift();
+  }
 }
 
 // 获取当前所有日志
 export function getLogs() {
   return logs;
+}
+
+// 清空日志面板
+export function clearLogs() {
+  logs.value = [];
 }
 
 // 显示 Toast

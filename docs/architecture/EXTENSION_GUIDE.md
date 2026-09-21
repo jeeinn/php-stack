@@ -70,13 +70,29 @@ cp src-tauri/services/php85/php.ini src-tauri/services/php90/
 cp src-tauri/services/php85/php-fpm.conf src-tauri/services/php90/
 ```
 
-### 步骤 3: 重新编译
+### 步骤 3: 使清单生效
+
+**方式 A（推荐，无需重新发版）**：将更新后的 `version_manifest.json` 放到应用数据目录：
+
+| 平台 | 路径 |
+|------|------|
+| Windows | `%APPDATA%\com.php-stack.dev\services\version_manifest.json` |
+| macOS | `~/Library/Application Support/com.php-stack.dev/services/version_manifest.json` |
+| Linux | `~/.local/share/com.php-stack.dev/services/version_manifest.json` |
+
+启动时优先加载该覆盖文件；解析失败则回退内置清单并写警告日志。
+
+**方式 B**：改仓库内 `src-tauri/services/version_manifest.json` 后重新编译（`include_str!` 嵌入二进制）。
 
 ```bash
 cd src-tauri && cargo build
 ```
 
-**无需修改任何 Rust 代码！** manifest 通过 `include_str!` 嵌入到二进制中，编译时自动加载。
+---
+
+## 1.1 不重新发版也能用上新版本
+
+覆盖路径见上文「方式 A」。可用仓库内 `scripts/sync-version-manifest.mjs` 生成最新清单后拷贝到该路径。
 
 ---
 
@@ -173,6 +189,32 @@ const result = await invoke('my_new_command', { param: 'test' });
 ### 步骤 4: 更新权限（如需要）
 
 如果新命令需要特殊权限（如文件系统访问、剪贴板等），在 `src-tauri/capabilities/default.json` 中添加对应权限。
+
+---
+
+## 4. 新增服务类型（如 PostgreSQL）Checklist
+
+当前服务类型写死为 PHP / MySQL / Redis / Nginx。新增一种类型需要同步改下列位置（按顺序勾选）：
+
+### 后端
+- [ ] `engine/config_generator.rs` — `ServiceType` 枚举 + compose / `.env` 生成分支
+- [ ] `engine/version_manifest.rs` — `ServiceType` + `ManifestFile` 字段 + `from_json` 插入
+- [ ] `services/version_manifest.json` — 新服务块与至少 1 个版本条目
+- [ ] `services/<newtype>/` — Dockerfile / 配置模板（如有）
+- [ ] `commands/env_config.rs` — `parse_env_to_services` 已由 manifest 驱动，一般只需补 `collect_services_from_manifest` 调用
+- [ ] 集成测试：配置生成、备份 manifest 中的服务端口
+
+### 前端
+- [ ] `src/types/env-config.ts` — `ServiceType` / `ServiceTypeLower` / `VersionMappings`
+- [ ] `EnvConfigPage.vue` — 服务列表 `ref`、增删、模板面板、版本下拉（目前四组结构相近，长期目标是配置驱动收敛，见 IMPROVEMENT_REPORT E2）
+- [ ] `SoftwareSettings.vue` — `serviceLabels` 与 tab
+- [ ] i18n：`envConfig.<service>.*`、`software.*` 中英 key
+
+### 文档
+- [ ] 更新本文件与 `ARCHITECTURE.md` 服务列表
+- [ ] `AGENTS.md` 待完善项（如有）
+
+> **不做**：远程自动拉取服务定义、通用插件系统（违背「简单」原则）。
 
 ---
 

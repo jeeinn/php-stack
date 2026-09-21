@@ -131,7 +131,10 @@ impl ConfigExtractor {
             .status()
             .map_err(|e| format!("docker pull 启动失败: {e}"))?;
         if !status.success() {
-            return Err(format!("docker pull {image_tag} 失败（exit code: {:?}）", status.code()));
+            return Err(format!(
+                "docker pull {image_tag} 失败（exit code: {:?}）",
+                status.code()
+            ));
         }
         app_log!(
             info,
@@ -317,12 +320,10 @@ impl ConfigExtractor {
                     "redis.conf".to_string(),
                 ))
             }
-            VmServiceType::Nginx => {
-                Ok((
-                    vec!["/etc/nginx/nginx.conf".to_string()],
-                    "nginx.conf".to_string(),
-                ))
-            }
+            VmServiceType::Nginx => Ok((
+                vec!["/etc/nginx/nginx.conf".to_string()],
+                "nginx.conf".to_string(),
+            )),
         }
     }
 
@@ -358,11 +359,20 @@ mod tests {
         assert_eq!(ConfigExtractor::major_version_from_tag("php:5.6-fpm"), 5);
         assert_eq!(ConfigExtractor::major_version_from_tag("mysql:8.4"), 8);
         assert_eq!(ConfigExtractor::major_version_from_tag("mysql:5.7"), 5);
-        assert_eq!(ConfigExtractor::major_version_from_tag("redis:7.2-alpine"), 7);
+        assert_eq!(
+            ConfigExtractor::major_version_from_tag("redis:7.2-alpine"),
+            7
+        );
         assert_eq!(ConfigExtractor::major_version_from_tag("redis:8.0"), 8);
-        assert_eq!(ConfigExtractor::major_version_from_tag("nginx:1.27-alpine"), 1);
+        assert_eq!(
+            ConfigExtractor::major_version_from_tag("nginx:1.27-alpine"),
+            1
+        );
         // 边缘情况
-        assert_eq!(ConfigExtractor::major_version_from_tag("library/php:8.5-fpm"), 8);
+        assert_eq!(
+            ConfigExtractor::major_version_from_tag("library/php:8.5-fpm"),
+            8
+        );
         assert_eq!(ConfigExtractor::major_version_from_tag("invalid"), 0);
         assert_eq!(ConfigExtractor::major_version_from_tag(""), 0);
     }
@@ -370,16 +380,19 @@ mod tests {
     #[test]
     fn test_extract_paths_php() {
         // 5.6 走老路径
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Php, "php:5.6-fpm").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Php, "php:5.6-fpm").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/php/php.ini"]);
         assert_eq!(dest, "php.ini");
 
         // 7.x+ 走 -production
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Php, "php:7.4-fpm").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Php, "php:7.4-fpm").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/php/php.ini-production"]);
         assert_eq!(dest, "php.ini");
 
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Php, "php:8.5-fpm").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Php, "php:8.5-fpm").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/php/php.ini-production"]);
         assert_eq!(dest, "php.ini");
     }
@@ -387,12 +400,14 @@ mod tests {
     #[test]
     fn test_extract_paths_mysql() {
         // 5.x 走 /etc/mysql/my.cnf
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Mysql, "mysql:5.7").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Mysql, "mysql:5.7").unwrap();
         assert_eq!(srcs, vec!["/etc/mysql/my.cnf"]);
         assert_eq!(dest, "mysql.cnf");
 
         // 8.x 走 /etc/my.cnf
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Mysql, "mysql:8.4").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Mysql, "mysql:8.4").unwrap();
         assert_eq!(srcs, vec!["/etc/my.cnf"]);
         assert_eq!(dest, "mysql.cnf");
     }
@@ -400,18 +415,21 @@ mod tests {
     #[test]
     fn test_extract_paths_redis() {
         // 全部版本统一
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Redis, "redis:7.2-alpine").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Redis, "redis:7.2-alpine").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/redis/redis.conf"]);
         assert_eq!(dest, "redis.conf");
 
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Redis, "redis:8.2-alpine").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Redis, "redis:8.2-alpine").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/redis/redis.conf"]);
         assert_eq!(dest, "redis.conf");
     }
 
     #[test]
     fn test_extract_paths_nginx() {
-        let (srcs, dest) = ConfigExtractor::extract_paths(&VmServiceType::Nginx, "nginx:1.27-alpine").unwrap();
+        let (srcs, dest) =
+            ConfigExtractor::extract_paths(&VmServiceType::Nginx, "nginx:1.27-alpine").unwrap();
         assert_eq!(srcs, vec!["/etc/nginx/nginx.conf"]);
         assert_eq!(dest, "nginx.conf");
     }
@@ -435,12 +453,8 @@ mod tests {
         let dest_file = dest_dir.join("mysql.cnf");
         fs::write(&dest_file, "user customized content").unwrap();
 
-        let result = ConfigExtractor::extract_config(
-            &VmServiceType::Mysql,
-            svc_dir,
-            "mysql:5.6",
-            &tmp,
-        );
+        let result =
+            ConfigExtractor::extract_config(&VmServiceType::Mysql, svc_dir, "mysql:5.6", &tmp);
         match result {
             ExtractOutcome::SkippedExists => {
                 // 验证文件未被覆盖

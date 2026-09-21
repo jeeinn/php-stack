@@ -1,19 +1,20 @@
-use crate::engine::version_manifest::{VersionManifest, ServiceType as VmServiceType};
+use crate::app_log;
 use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverride};
+use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::engine::workspace_manager::WorkspaceManager;
 
-use super::get_project_root;
+use super::{get_log_file, get_project_root, paths};
 
 /// 打开指定服务的配置文件目录
 #[tauri::command]
 pub fn open_service_config(service_name: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     let service_dir = project_root.join("services").join(&service_name);
-    
+
     if !service_dir.exists() {
         return Err(format!("服务配置目录不存在: {}", service_dir.display()));
     }
-    
+
     // 在 Windows 上使用 explorer 打开目录
     #[cfg(target_os = "windows")]
     {
@@ -22,7 +23,7 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("无法打开目录: {e}"))?;
     }
-    
+
     // 在 macOS 上使用 open 命令
     #[cfg(target_os = "macos")]
     {
@@ -31,7 +32,7 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("无法打开目录: {}", e))?;
     }
-    
+
     // 在 Linux 上使用 xdg-open 命令
     #[cfg(target_os = "linux")]
     {
@@ -40,14 +41,48 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("无法打开目录: {}", e))?;
     }
-    
+
     Ok(())
 }
 
+/// 工作区信息。
+///
+/// `workspace_path` 是用户配置的值，`effective_path` 是**数据真正落到的地方**。
+/// 两者不一致（`using_fallback`）时必须让用户看到，否则配置看起来"没生效"。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WorkspaceInfo {
+    /// 用户配置的工作区路径
+    pub workspace_path: String,
+    /// 实际生效的数据落点
+    pub effective_path: String,
+    /// 配置路径不可用时为 true，数据正写到 effective_path
+    pub using_fallback: bool,
+    /// 配置路径不存在，需用户选择：重建 / 选新路径 / 临时回退
+    pub path_missing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_updated: Option<String>,
+}
+
 /// 获取当前工作目录信息
+///
+/// 未配置过工作区时返回 `None`，前端据此弹出初始化对话框。
 #[tauri::command]
-pub fn get_workspace_info() -> Result<Option<crate::engine::workspace_manager::WorkspaceConfig>, String> {
-    WorkspaceManager::load_workspace()
+pub fn get_workspace_info() -> Result<Option<WorkspaceInfo>, String> {
+    let Some(config) = WorkspaceManager::load_workspace()? else {
+        return Ok(None);
+    };
+
+    let resolved = paths::resolve_workspace()?;
+    Ok(Some(WorkspaceInfo {
+        workspace_path: config.workspace_path,
+        effective_path: resolved.path.to_string_lossy().to_string(),
+        using_fallback: resolved.fell_back,
+        path_missing: resolved.path_missing,
+        fallback_reason: resolved.reason,
+        last_updated: config.last_updated,
+    }))
 }
 
 /// 设置工作目录路径
@@ -60,16 +95,30 @@ pub fn set_workspace_path(path: String) -> Result<(), String> {
     WorkspaceManager::save_workspace(&path)
 }
 
+/// 按用户确认重建配置中的工作区目录（不再静默 create_dir_all）
+#[tauri::command]
+pub fn recreate_workspace_dir() -> Result<WorkspaceInfo, String> {
+    let path = paths::recreate_configured_workspace()?;
+    app_log!(
+        info,
+        "commands::recreate_workspace_dir",
+        "已按用户确认重建工作区: {}",
+        path.display()
+    );
+
+    get_workspace_info()?.ok_or_else(|| "重建后仍无法读取工作区信息".to_string())
+}
+
 /// 获取所有可用的版本映射配置
 #[tauri::command]
 pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     use std::collections::HashMap;
-    
+
     let manifest = VersionManifest::new();
     let project_root = get_project_root()?;
     let override_manager = UserOverrideManager::new(&project_root);
     let mut result = HashMap::new();
-    
+
     // 使用辅助函数处理每种服务类型
     let service_types = [
         ("php", VmServiceType::Php),
@@ -77,18 +126,19 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
         ("redis", VmServiceType::Redis),
         ("nginx", VmServiceType::Nginx),
     ];
-    
+
     for (key, service_type) in &service_types {
         let mut versions = Vec::new();
         let entries = manifest.get_available_entries(service_type);
-        
+
         for (id, entry) in entries {
             // 使用合并后的配置（用户覆盖优先）
-            let merged_entry = override_manager.get_merged_entry(service_type, id)
+            let merged_entry = override_manager
+                .get_merged_entry(service_type, id)
                 .unwrap_or_else(|| entry.clone());
-            
+
             let has_user_override = override_manager.has_user_override(service_type, id);
-            
+
             versions.push(serde_json::json!({
                 "id": id,
                 "display_name": merged_entry.display_name,
@@ -103,7 +153,7 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
         }
         result.insert(key.to_string(), serde_json::Value::Array(versions));
     }
-    
+
     serde_json::to_value(result).map_err(|e| format!("序列化失败: {e}"))
 }
 
@@ -118,7 +168,7 @@ pub fn validate_version(service_type: String, version: String) -> Result<bool, S
         "nginx" => VmServiceType::Nginx,
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
-    
+
     Ok(manifest.is_id_valid(&vm_service_type, &version))
 }
 
@@ -133,8 +183,10 @@ pub fn get_recommended_version(service_type: String) -> Result<Option<String>, S
         "nginx" => VmServiceType::Nginx,
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
-    
-    Ok(manifest.get_recommended_entry(&vm_service_type).map(|(id, _)| id.to_string()))
+
+    Ok(manifest
+        .get_recommended_entry(&vm_service_type)
+        .map(|(id, _)| id.to_string()))
 }
 
 /// 保存用户自定义版本覆盖
@@ -147,7 +199,7 @@ pub fn save_user_override(
 ) -> Result<(), String> {
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
-    
+
     let vm_service_type = match service_type.as_str() {
         "php" => VmServiceType::Php,
         "mysql" => VmServiceType::Mysql,
@@ -155,12 +207,12 @@ pub fn save_user_override(
         "nginx" => VmServiceType::Nginx,
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
-    
+
     let override_config = UserVersionOverride {
         image_tag,
         description,
     };
-    
+
     manager.save_user_override(&project_root, vm_service_type, id, override_config)
 }
 
@@ -169,7 +221,7 @@ pub fn save_user_override(
 pub fn remove_user_override(service_type: String, id: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
-    
+
     let vm_service_type = match service_type.as_str() {
         "php" => VmServiceType::Php,
         "mysql" => VmServiceType::Mysql,
@@ -177,7 +229,7 @@ pub fn remove_user_override(service_type: String, id: String) -> Result<(), Stri
         "nginx" => VmServiceType::Nginx,
         _ => return Err(format!("不支持的服务类型: {service_type}")),
     };
-    
+
     manager.remove_user_override(&project_root, &vm_service_type, &id)
 }
 
@@ -186,39 +238,37 @@ pub fn remove_user_override(service_type: String, id: String) -> Result<(), Stri
 pub fn reset_all_overrides() -> Result<(), String> {
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
-    
+
     manager.reset_all_overrides(&project_root)
 }
 
-/// 导出当前会话日志
+/// 把完整文件日志导出到用户指定位置
+///
+/// 与 `export_logs`（返回文本内容，供复制）不同，这里直接落盘，
+/// 对应日志面板的"导出"动作。
 #[tauri::command]
-pub fn export_logs() -> Result<String, String> {
-    // 获取项目根目录（与 get_project_root 逻辑一致）
-    let log_dir = if cfg!(debug_assertions) {
-        // 开发模式：使用项目根目录
-        std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {e}"))?
-            .parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .ok_or("无法获取项目根目录")?
-            .to_path_buf()
-    } else {
-        // 生产模式：使用可执行文件所在目录
-        std::env::current_exe()
-            .map_err(|e| format!("获取程序路径失败: {e}"))?
-            .parent()
-            .ok_or("无法获取程序所在目录")?
-            .to_path_buf()
-    };
-    
-    let log_path = log_dir.join("php-stack.log");
-    
+pub fn export_logs_to(dest: String) -> Result<(), String> {
+    let log_path = get_log_file()?;
+
     if !log_path.exists() {
         return Err("日志文件不存在，请先执行一些操作".to_string());
     }
-    
-    std::fs::read_to_string(&log_path)
-        .map_err(|e| format!("读取日志失败: {e}"))
+
+    std::fs::copy(&log_path, &dest).map_err(|e| format!("导出日志失败: {e}"))?;
+
+    Ok(())
+}
+
+/// 导出当前会话日志
+///
+/// 日志文件位于应用数据目录（路径由 `paths::log_file()` 统一给出）。
+#[tauri::command]
+pub fn export_logs() -> Result<String, String> {
+    let log_path = get_log_file()?;
+
+    if !log_path.exists() {
+        return Err("日志文件不存在，请先执行一些操作".to_string());
+    }
+
+    std::fs::read_to_string(&log_path).map_err(|e| format!("读取日志失败: {e}"))
 }

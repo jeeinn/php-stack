@@ -38,10 +38,7 @@ async fn test_list_all_running_containers() {
         );
     }
 
-    assert!(
-        !containers.is_empty(),
-        "宿主机应至少有一个运行中的容器"
-    );
+    assert!(!containers.is_empty(), "宿主机应至少有一个运行中的容器");
 }
 
 #[tokio::test]

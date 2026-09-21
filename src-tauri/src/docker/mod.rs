@@ -1,2 +1,3 @@
 pub mod manager;
-pub mod tests;
+#[cfg(test)]
+mod tests;

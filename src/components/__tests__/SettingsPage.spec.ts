@@ -8,6 +8,14 @@ vi.mock('../../i18n', () => ({
   getLocale: vi.fn(() => 'zh-CN'),
 }))
 
+vi.mock('@tauri-apps/api/app', () => ({
+  getVersion: vi.fn(async () => '0.3.1'),
+}))
+
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: vi.fn(),
+}))
+
 // Mock composables
 vi.mock('../../composables/useTheme', () => ({
   useTheme: vi.fn(() => ({

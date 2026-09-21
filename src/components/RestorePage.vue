@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
-import type { RestorePreview, RestoreProgress } from '../types/env-config';
+import type { RestorePreview, RestoreProgress, RestoreResult } from '../types/env-config';
+import { previewRestore, verifyBackup, executeRestore, normalizeError } from '../api';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
@@ -18,6 +18,14 @@ const verified = ref<boolean | null>(null);
 const restoring = ref(false);
 const loading = ref(false);
 const progress = ref<RestoreProgress | null>(null);
+// U2: 恢复结果明细（已恢复文件 / 错误列表 / 回滚包路径）
+const restoreResult = ref<RestoreResult | null>(null);
+
+/// 无任何文件恢复成功的失败视为「致命失败」（含引擎直接 Err 的结构化包装）
+const isFatalRestoreFailure = computed(() => {
+  const r = restoreResult.value;
+  return !!r && !r.success && r.restored_files.length === 0;
+});
 
 const currentStep = ref<RestoreStep>('select');
 const completedSteps = ref<Set<RestoreStep>>(new Set());
@@ -101,11 +109,11 @@ async function handlePreview() {
   if (!zipPath.value) return;
   loading.value = true;
   try {
-    preview.value = await invoke<RestorePreview>('preview_restore', { zipPath: zipPath.value });
+    preview.value = await previewRestore(zipPath.value);
     markStepCompleted('preview');
     showToast(t('restore.toast.previewDone'), 'success');
   } catch (e) {
-    showToast(e as string, 'error');
+    showToast(normalizeError(e), 'error');
   } finally {
     loading.value = false;
   }
@@ -115,7 +123,7 @@ async function handleVerify() {
   if (!zipPath.value) return;
   loading.value = true;
   try {
-    verified.value = await invoke<boolean>('verify_backup', { zipPath: zipPath.value });
+    verified.value = await verifyBackup(zipPath.value);
     if (verified.value) {
       markStepCompleted('verify');
       showToast(t('restore.toast.verifyPassed'), 'success');
@@ -123,7 +131,7 @@ async function handleVerify() {
       showToast(t('restore.toast.verifyFailed'), 'error');
     }
   } catch (e) {
-    showToast(e as string, 'error');
+    showToast(normalizeError(e), 'error');
     verified.value = false;
   } finally {
     loading.value = false;
@@ -146,18 +154,63 @@ async function handleRestore() {
   restoring.value = true;
   progress.value = { step: t('common.loading'), percentage: 0 };
 
+  restoreResult.value = null;
+
   try {
-    await invoke('execute_restore', {
-      zipPath: zipPath.value,
-    });
-    showToast(t('restore.toast.success'), 'success');
-    progress.value = { step: '✅', percentage: 100 };
-    markStepCompleted('restore');
+    // 成功 / 部分失败 / 致命失败均返回 RestoreResult，明细进结果面板
+    const result = await executeRestore(zipPath.value);
+    restoreResult.value = result;
+
+    if (result.success) {
+      showToast(t('restore.toast.success'), 'success');
+      progress.value = { step: '✅', percentage: 100 };
+      markStepCompleted('restore');
+    } else if (result.restored_files.length === 0) {
+      showToast(t('restore.toast.fatalFailed'), 'error');
+      progress.value = null;
+    } else {
+      // 部分失败：不静默吞掉，明细留在页面上供用户逐条查看
+      showToast(t('restore.toast.partialSuccess'), 'warning');
+      progress.value = null;
+    }
   } catch (e) {
-    showToast(e as string, 'error');
+    // 仅命令前置失败（如工作区路径）仍可能抛 Err
+    restoreResult.value = {
+      success: false,
+      restored_files: [],
+      errors: [normalizeError(e)],
+      rollback_path: null,
+    };
+    showToast(t('restore.toast.fatalFailed'), 'error');
+    progress.value = null;
   } finally {
     restoring.value = false;
   }
+}
+
+/// 用回滚包重新走预览→校验→恢复向导（快捷入口，避免用户手动找 zip）
+async function useRollbackBundle() {
+  const path = restoreResult.value?.rollback_path;
+  if (!path) return;
+
+  const confirmed = await showConfirm({
+    title: t('restore.rollbackConfirm.title'),
+    message: t('restore.rollbackConfirm.message'),
+    confirmText: t('restore.rollbackConfirm.confirm'),
+    cancelText: t('common.cancel'),
+    type: 'warning',
+  });
+  if (!confirmed) return;
+
+  zipPath.value = path;
+  preview.value = null;
+  verified.value = null;
+  restoreResult.value = null;
+  progress.value = null;
+  resetSteps();
+  markStepCompleted('select');
+  goToStep('preview');
+  await handlePreview();
 }
 
 function formatTimestamp(ts: string): string {
@@ -271,6 +324,22 @@ function formatTimestamp(ts: string): string {
                 </div>
               </div>
 
+              <div
+                v-if="preview.port_conflicts && preview.port_conflicts.length > 0"
+                data-testid="port-conflicts"
+                class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+              >
+                <div class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{{ $t('restore.preview.portConflicts') }}</div>
+                <p class="text-xs text-amber-600/90 dark:text-amber-300/90 mb-2">{{ $t('restore.preview.portConflictsHint') }}</p>
+                <div
+                  v-for="c in preview.port_conflicts"
+                  :key="`${c.service}-${c.port}`"
+                  class="text-xs font-mono text-amber-700 dark:text-amber-200"
+                >
+                  {{ $t('restore.preview.portConflictItem', { service: c.service, port: c.port, suggested: c.suggested_port }) }}
+                </div>
+              </div>
+
               <div v-if="preview.manifest.errors.length > 0" class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <div class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{{ $t('restore.preview.warnings') }}</div>
                 <div v-for="err in preview.manifest.errors" :key="err" class="text-xs text-amber-600 dark:text-amber-300">{{ err }}</div>
@@ -344,6 +413,56 @@ function formatTimestamp(ts: string): string {
               </div>
               <h3 class="text-xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">{{ $t('restore.success.title') }}</h3>
               <p class="text-sm text-slate-600 dark:text-slate-400">{{ $t('restore.success.description') }}</p>
+            </div>
+
+            <!-- U2: 恢复结果明细（成功 / 部分失败 / 致命失败都展示） -->
+            <div v-if="restoreResult" class="mt-6 text-left space-y-4" data-testid="restore-result">
+              <div
+                v-if="isFatalRestoreFailure"
+                class="p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg"
+                data-testid="restore-fatal"
+              >
+                <h3 class="font-bold text-rose-700 dark:text-rose-400">{{ $t('restore.fatal.title') }}</h3>
+                <p class="text-sm text-rose-700 dark:text-rose-400 mt-1">{{ $t('restore.fatal.description') }}</p>
+              </div>
+              <div
+                v-else-if="!restoreResult.success"
+                class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg"
+              >
+                <h3 class="font-bold text-amber-700 dark:text-amber-400">{{ $t('restore.partialSuccess.title') }}</h3>
+                <p class="text-sm text-amber-700 dark:text-amber-400 mt-1">{{ $t('restore.partialSuccess.description') }}</p>
+              </div>
+
+              <div v-if="restoreResult.restored_files.length">
+                <h4 class="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                  {{ $t('restore.result.restoredFiles') }}
+                  <span class="text-slate-500 dark:text-slate-500">({{ $t('restore.result.filesCount', { count: restoreResult.restored_files.length }) }})</span>
+                </h4>
+                <ul class="max-h-48 overflow-y-auto text-xs space-y-1 bg-slate-50 dark:bg-slate-800 rounded-lg p-3" data-testid="restored-files">
+                  <li v-for="file in restoreResult.restored_files" :key="file" class="font-mono text-slate-600 dark:text-slate-400">{{ file }}</li>
+                </ul>
+              </div>
+
+              <div v-if="restoreResult.errors.length">
+                <h4 class="font-semibold text-sm text-red-700 dark:text-red-400 mb-2">{{ $t('restore.result.errors') }}</h4>
+                <ul class="max-h-48 overflow-y-auto text-xs space-y-1 bg-red-50 dark:bg-red-900/20 rounded-lg p-3" data-testid="restore-errors">
+                  <li v-for="(err, idx) in restoreResult.errors" :key="idx" class="font-mono text-red-600 dark:text-red-400 whitespace-pre-wrap">{{ err }}</li>
+                </ul>
+              </div>
+
+              <div v-if="restoreResult.rollback_path" class="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <h4 class="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-1">{{ $t('restore.result.rollbackTitle') }}</h4>
+                <p class="text-xs text-slate-600 dark:text-slate-400 mb-2">{{ $t('restore.result.rollbackHint') }}</p>
+                <code class="block break-all text-xs font-mono text-slate-700 dark:text-slate-300 mb-3" data-testid="rollback-path">{{ restoreResult.rollback_path }}</code>
+                <button
+                  type="button"
+                  data-testid="rollback-action"
+                  @click="useRollbackBundle"
+                  class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+                >
+                  {{ $t('restore.result.rollbackAction') }}
+                </button>
+              </div>
             </div>
           </section>
         </Transition>

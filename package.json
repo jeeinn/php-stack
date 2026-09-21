@@ -15,7 +15,8 @@
     "sync:dockerfile": "node scripts/sync-php-dockerfile.mjs",
     "check:dockerfile": "node scripts/sync-php-dockerfile.mjs --check",
     "sync:manifest": "node scripts/sync-version-manifest.mjs --apply",
-    "check:manifest": "node scripts/sync-version-manifest.mjs --check"
+    "check:manifest": "node scripts/sync-version-manifest.mjs --check",
+    "check:i18n": "node scripts/check-i18n-keys.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

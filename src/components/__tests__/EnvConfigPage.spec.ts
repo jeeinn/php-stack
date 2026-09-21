@@ -147,4 +147,47 @@ describe('EnvConfigPage', () => {
     expect(text).toContain('MySQL 8.0')
     expect(text).toContain('mysql:8.0')
   })
+
+  it('custom extension inputs are independent across multiple PHP services', async () => {
+    const wrapper = mount(EnvConfigPage)
+    await flushPromises()
+
+    // 在 PHP 分区内点击"添加版本"，得到两个 PHP 服务卡片
+    const sections = wrapper.findAll('section')
+    const phpSection = sections.find(s => s.text().includes('PHP 服务'))!
+    const addBtn = phpSection.findAll('button').find(b => b.text().includes('添加版本'))!
+    await addBtn.trigger('click')
+
+    // 展开两个服务的扩展面板（默认收起）
+    const panelToggles = phpSection
+      .findAll('button')
+      .filter(b => b.text().includes('预设扩展库'))
+    expect(panelToggles.length).toBe(2)
+    for (const toggle of panelToggles) {
+      await toggle.trigger('click')
+    }
+
+    // 找到两个"自定义扩展"输入框（placeholder 定位）
+    const customInputs = phpSection.findAll('input[placeholder="例如: grpc protobuf"]')
+    expect(customInputs.length).toBe(2)
+
+    // 给第一个服务的输入框填写内容
+    await customInputs[0].setValue('xdebug')
+    expect((customInputs[0].element as HTMLInputElement).value).toBe('xdebug')
+
+    // 给第二个服务的输入框填写不同内容（修复前共享同一个 ref，会覆盖第一个输入框）
+    await customInputs[1].setValue('swoole')
+
+    const v1 = (customInputs[0].element as HTMLInputElement).value
+    const v2 = (customInputs[1].element as HTMLInputElement).value
+    expect(v1).toBe('xdebug')
+    expect(v2).toBe('swoole')
+    expect(v1).not.toBe(v2)
+
+    // blur 触发各自的合并逻辑，输入框内容保持独立
+    await customInputs[0].trigger('blur')
+    await customInputs[1].trigger('blur')
+    expect((customInputs[0].element as HTMLInputElement).value).toBe('xdebug')
+    expect((customInputs[1].element as HTMLInputElement).value).toBe('swoole')
+  })
 })

@@ -70,24 +70,24 @@
 
 ### 4. 环境恢复（RestorePage）
 - **需求覆盖**: 需求 4.1-4.10
-- **实现状态**: ✅ 完成
+- **实现状态**: ✅ 完成（端口冲突检测除外，见「待完善功能」）
 - **核心功能**:
   - 备份包预览（manifest 解析、文件统计）
   - SHA256 完整性验证
-  - 端口冲突检测与自动分配
+  - 路径遍历防护（zip-slip，恶意备份包整体拒绝）
   - 配置文件、项目文件、SQL 文件还原（SQL 导入执行待完善）
   - 进度通知与错误汇总
 
 ### 5. 基础设施模块
 - **env_parser.rs**: .env 文件可靠读写，保留注释和空行（Property 9, 10）
 - **backup_manifest.rs**: Manifest 序列化/反序列化（Property 11, 12）
-- **测试覆盖**: 后端单元测试 + 3 个集成测试（backup_restore、config_generation、workspace_commands）+ 前端 8 个组件测试（Vitest），含属性测试（proptest）
+- **测试覆盖**: 后端单元测试 + 4 个集成测试（backup_restore、config_generation、workspace_commands、docker_manager）+ 前端组件测试（Vitest）
 
 ## ✅ v0.2.0 / v0.3.0 新增功能
 
 ### 1. 前端国际化（i18n）
 - 中/英双语支持，运行时动态切换（vue-i18n）
-- 后端日志英文化
+- ⚠️ 后端用户可见日志（ui_log!）当前为中文，i18n 化待完善
 
 ### 2. 主题预设系统
 - 自动 / 明亮 / 暗黑三种模式，全组件适配
@@ -115,9 +115,9 @@
 3. **测试**: 
    - **单元测试**：放在源文件内的 `#[cfg(test)] mod tests { ... }` 模块中
    - **集成测试**：放在 `src-tauri/tests/integration/` 目录下
-   - 纯函数模块（env_parser、backup_manifest、config_generator）使用 `proptest` 进行属性测试
-   - 标签格式：`// Feature: env-config-and-backup, Property N: {property_text}`
-   - 运行测试：`cargo test`
+   - 解析/生成类纯函数应抽为可直接测试的函数，测试必须包含真断言（禁止 `assert!(true)` 占位）
+   - 安全或回归类测试建议标注：`// Feature: {feature}, Property: {描述}`
+   - 运行测试：`cargo test`；CI 同时执行 `cargo fmt --check` 与 `cargo clippy --all-targets -- -D warnings`
 4. **模块注册**: 
    - 新增引擎模块需在 `engine/mod.rs` 中声明 `pub mod xxx;`
    - 新增命令子模块需在 `commands/mod.rs` 中声明并 re-export
@@ -183,8 +183,8 @@
 - 特性：
   - 备份预览（manifest 解析）
   - SHA256 完整性验证
-  - 端口冲突检测与自动分配
-  - 配置文件、项目文件还原（数据库 SQL 导入待完善）
+  - 路径遍历防护（zip-slip）
+  - 配置文件、项目文件还原（端口冲突检测、数据库 SQL 导入待完善）
 
 ### 7. 备份清单（v0.1.0 新增）
 - 位置：`src-tauri/src/engine/backup_manifest.rs`
@@ -302,7 +302,7 @@
 3. **权限校验**: 若新增了 Tauri 插件调用，请务必更新 `src-tauri/capabilities/default.json`。
 4. **TDD 流程**: 
    - 优先编写单元测试
-   - 纯函数模块使用 proptest 进行属性测试
+   - 解析/生成类逻辑先抽纯函数再测
    - 运行 `cargo test` 确保所有测试通过
 5. **类型同步**: 修改 Rust 数据结构后，同步更新 `src/types/` 中的 TypeScript 类型定义。
 
@@ -339,6 +339,11 @@
 
 ### 待完善功能
 
+#### 恢复端口冲突检测（中优先级）
+- **当前状态**：恢复预览读取 `manifest.services` 端口映射，用本机 `TcpListener` 绑定探测占用；冲突时在预览页展示服务/占用端口/建议端口
+- **说明**：恢复仍写入备份包原配置，不自动改写端口；启动前用户可手动改 `.env` 或停止占用进程
+- **未做**：恢复时按建议端口自动改写 `.env` / compose（设计稿中的 `port_overrides`）
+
 #### 数据库备份/恢复（低优先级）
 - **目标**：完善备份/恢复引擎中的数据库导出与导入
 - **当前状态**：备份不导出数据库（`BackupOptions` 无 `include_database`），恢复仅提取 SQL 文件到本地、不执行导入
@@ -347,6 +352,10 @@
   - SQL 导入执行（mysql client 或 bollard exec）
   - 事务性恢复（失败时回滚）
 - **优先级**: 低（当前版本可使用手动方式备份/恢复数据库）
+
+#### 后端日志 i18n（低优先级）
+- **当前状态**：`ui_log!` 输出的用户可见日志为中文 + emoji，英文界面下日志面板仍显示中文
+- **策略（已定）**：不做完整后端 i18n。结构化字段保持英文；面向用户的固定短语如需双语，由前端按 key 翻译。承认「UI 日志当前主要面向中文用户」。
 
 ### 开发建议
 1. **稳定优先**: v0.3.1 重点是稳定性和用户体验优化

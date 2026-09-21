@@ -1,7 +1,20 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  getWorkspaceInfo,
+  checkConfigFilesExist,
+  getVersionMappings,
+  loadExistingConfig as apiLoadExistingConfig,
+  generateEnvConfig,
+  previewCompose,
+  applyEnvConfig,
+  checkServiceImagesPresence,
+  pullServiceImages,
+  openServiceConfig,
+  startEnvironment,
+  normalizeError,
+} from '../api';
 import { open } from '@tauri-apps/plugin-shell';
 import type { ServiceEntry, EnvConfig, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
 import { showToast } from '../composables/useToast';
@@ -9,6 +22,7 @@ import { showConfirm } from '../composables/useConfirmDialog';
 import CustomSelect from './CustomSelect.vue';
 import VersionHelpModal from './VersionHelpModal.vue';
 import ImagePullConfirmModal from './ImagePullConfirmModal.vue';
+import { WORKSPACE_CHANGED_EVENT } from '../utils/workspaceEvents';
 
 const { t } = useI18n();
 
@@ -36,7 +50,7 @@ const commonExtensions = [
   'imagick', 'exif', 'pcntl', 'sockets'
 ];
 
-const customExtInput = ref('');
+const customExtInput = ref<Record<number, string>>({}); // 为每个 PHP 服务维护独立的自定义扩展输入
 // 为每个 PHP 服务维护独立的扩展面板展开状态
 const phpExtensionsPanelState = ref<Record<number, boolean>>({});
 
@@ -132,8 +146,10 @@ const showVersionHelp = ref(false);
 const imagePresences = ref<ImagePresence[]>([]);
 const showPullConfirm = ref(false);
 const pulling = ref(false);
-/// 单镜像拉取进度（tag -> 0-100，目前简化：不细分到下载进度，整体 boolean）
+/// 单镜像拉取进度（tag -> 0-100）：开始拉=10，成功=100，失败=0
 const pullProgress = ref<Record<string, number>>({});
+/// 拉取进行中的状态文案，如「正在拉取 php:8.2-fpm（1/3）」
+const pullStatusText = ref('');
 /// 用户是否在「覆盖确认」弹窗里勾选了备份。
 ///
 /// 必须是 ref 而非 handleApply 的局部变量：走「镜像缺失 → 拉取 → 再 apply」
@@ -151,11 +167,17 @@ onMounted(async () => {
   await loadVersionMappings();
   await checkEnvFileExists();
   await loadExistingConfig();
+  window.addEventListener(WORKSPACE_CHANGED_EVENT, loadWorkspaceInfo);
 });
 
+onUnmounted(() => {
+  window.removeEventListener(WORKSPACE_CHANGED_EVENT, loadWorkspaceInfo);
+});
+
+/// 工作区路径展示（回退告警已提升为 App 全局横幅，此处只显示配置值）
 async function loadWorkspaceInfo() {
   try {
-    const info = await invoke<any>('get_workspace_info');
+    const info = await getWorkspaceInfo();
     if (info) {
       workspacePath.value = info.workspace_path;
     } else {
@@ -169,9 +191,8 @@ async function loadWorkspaceInfo() {
 // 检查 .env 文件是否存在
 async function checkEnvFileExists() {
   try {
-    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
-    console.log('[EnvConfig] .env 文件存在:', hasEnvFile.value);
   } catch (e) {
     console.error('[EnvConfig] 检查配置文件失败:', e);
     hasEnvFile.value = false;
@@ -180,27 +201,21 @@ async function checkEnvFileExists() {
 
 // 从后端加载版本映射
 async function loadVersionMappings() {
-  console.log('[EnvConfig] 开始加载版本映射...');
   try {
-    const mappings = await invoke<any>('get_version_mappings');
-    console.log('[EnvConfig] 版本映射:', mappings);
+    const mappings = await getVersionMappings();
     
     // 提取版本信息列表（包含 id、display_name、image_tag、service_dir 等完整信息）
     if (mappings.php) {
       phpVersions.value = mappings.php;
-      console.log('[EnvConfig] PHP 版本:', phpVersions.value);
     }
     if (mappings.mysql) {
       mysqlVersions.value = mappings.mysql;
-      console.log('[EnvConfig] MySQL 版本:', mysqlVersions.value);
     }
     if (mappings.redis) {
       redisVersions.value = mappings.redis;
-      console.log('[EnvConfig] Redis 版本:', redisVersions.value);
     }
     if (mappings.nginx) {
       nginxVersions.value = mappings.nginx;
-      console.log('[EnvConfig] Nginx 版本:', nginxVersions.value);
     }
 
     // 加载成功：清除上一次可能残留的错误态（用户修正清单后重试成功时）
@@ -224,8 +239,8 @@ async function retryLoadVersionMappings() {
 }
 
 // 错误信息格式化
-function formatErrorMessage(error: any): string {
-  const errorMsg = String(error);
+function formatErrorMessage(error: unknown): string {
+  const errorMsg = normalizeError(error);
   
   if (errorMsg.includes('Docker') || errorMsg.includes('docker')) {
     if (errorMsg.includes('not running') || errorMsg.includes('unavailable')) {
@@ -260,10 +275,8 @@ function showError(message: string) {
 }
 
 async function loadExistingConfig() {
-  console.log('[EnvConfig] 开始加载现有配置...');
   try {
-    const config = await invoke<EnvConfig | null>('load_existing_config');
-    console.log('[EnvConfig] 加载结果:', config);
+    const config = await apiLoadExistingConfig();
     
     if (config) {
       // Parse services
@@ -273,7 +286,6 @@ async function loadExistingConfig() {
       const nginxSvcs: ServiceEntry[] = [];
       
       config.services.forEach(s => {
-        console.log('[EnvConfig] 解析服务:', s);
         if (s.service_type === 'PHP') {
           phpSvcs.push({ ...s, extensions: s.extensions ? [...s.extensions] : [] });
         } else if (s.service_type === 'MySQL') {
@@ -285,10 +297,6 @@ async function loadExistingConfig() {
         }
       });
       
-      console.log('[EnvConfig] PHP 服务:', phpSvcs);
-      console.log('[EnvConfig] MySQL 服务:', mysqlSvcs);
-      console.log('[EnvConfig] Redis 服务:', redisSvcs);
-      console.log('[EnvConfig] Nginx 服务:', nginxSvcs);
       
       phpServices.value = phpSvcs.length > 0 ? phpSvcs : [{
         service_type: 'PHP',
@@ -327,9 +335,7 @@ async function loadExistingConfig() {
         mysqlRootPassword.value = config.mysql_root_password;
       }
       
-      console.log('[EnvConfig] 配置加载成功');
     } else {
-      console.log('[EnvConfig] 未找到现有配置，使用默认值');
       // Default config
       phpServices.value = [{
         service_type: 'PHP',
@@ -428,8 +434,9 @@ function addPhpVersion() {
     host_port: 9000 + phpServices.value.length,
     extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'curl'],
   });
-  // 初始化新添加的 PHP 服务的扩展面板状态为关闭
+  // 初始化新添加的 PHP 服务的扩展面板状态与自定义扩展输入
   phpExtensionsPanelState.value[newIndex] = false;
+  customExtInput.value[newIndex] = '';
 }
 
 function removePhpVersion(index: number) {
@@ -437,6 +444,7 @@ function removePhpVersion(index: number) {
   phpServices.value.splice(index, 1);
   // 清理已删除服务的状态
   delete phpExtensionsPanelState.value[index];
+  delete customExtInput.value[index];
   // 重新索引后续服务的状态
   const newState: Record<number, boolean> = {};
   Object.keys(phpExtensionsPanelState.value).forEach(key => {
@@ -448,6 +456,16 @@ function removePhpVersion(index: number) {
     }
   });
   phpExtensionsPanelState.value = newState;
+  const newInputs: Record<number, string> = {};
+  Object.keys(customExtInput.value).forEach(key => {
+    const numKey = Number(key);
+    if (numKey > index) {
+      newInputs[numKey - 1] = customExtInput.value[numKey];
+    } else {
+      newInputs[numKey] = customExtInput.value[numKey];
+    }
+  });
+  customExtInput.value = newInputs;
 }
 
 // Add MySQL version
@@ -513,16 +531,16 @@ function toggleExtension(phpIndex: number, ext: string) {
 function syncCustomExtensions(phpIndex: number) {
   const service = phpServices.value[phpIndex];
   if (!service.extensions) service.extensions = [];
-  
+
   // 获取当前已选的预设扩展
   const presetExts = service.extensions.filter(e => commonExtensions.includes(e));
-  
-  // 解析用户输入的自定义扩展
-  const customExts = customExtInput.value
+
+  // 解析该服务自己的自定义扩展输入
+  const customExts = (customExtInput.value[phpIndex] || '')
     .split(/[,\s]+/)
     .map(s => s.trim())
     .filter(s => s.length > 0 && !commonExtensions.includes(s));
-  
+
   // 合并并去重
   service.extensions = [...new Set([...presetExts, ...customExts])];
 }
@@ -553,8 +571,8 @@ async function handlePreview() {
   try {
     const config = buildConfig();
     const [envContent, composeContent] = await Promise.all([
-      invoke<string>('generate_env_config', { config }),
-      invoke<string>('preview_compose', { config }),
+      generateEnvConfig(config),
+      previewCompose(config),
     ]);
     previewEnv.value = envContent;
     previewCompose.value = composeContent;
@@ -576,7 +594,7 @@ async function handleApply() {
   // 检查配置文件是否存在（结果写入 enableBackup ref，供后续拉取路径复用）
   enableBackup.value = false;
   try {
-    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    const existingFiles = await checkConfigFilesExist();
     if (existingFiles.length > 0) {
       // 有文件存在，显示确认对话框
       const fileList = existingFiles.map(f => `• ${f}`).join('\n');
@@ -610,7 +628,7 @@ async function handleApply() {
   applying.value = true;
   try {
     const config = buildConfig();
-    const presences = await invoke<ImagePresence[]>('check_service_images_presence', { config });
+    const presences = await checkServiceImagesPresence(config);
     imagePresences.value = presences;
     const missing = presences.filter(p => p.status === 'missing');
 
@@ -630,36 +648,73 @@ async function handleApply() {
   }
 }
 
-/// 用户在 pullConfirm 弹窗点击"确认拉取"：拉取缺失的镜像，然后继续 apply
+/// 用户在 pullConfirm 弹窗点击"确认拉取"：逐个拉取缺失镜像，然后继续 apply
 async function confirmPullAndApply(missingTags: string[]) {
   pulling.value = true;
-  // 清空/初始化进度
+  pullStatusText.value = '';
+  const results: PullImageResultItem[] = [];
   for (const t of missingTags) pullProgress.value[t] = 0;
-  try {
-    const results = await invoke<PullImageResultItem[]>('pull_service_images', {
-      imageTags: missingTags,
-    });
-    pulling.value = false;
-    showPullConfirm.value = false;
 
-    const failures = results.filter(r => !r.success);
-    if (failures.length > 0) {
-      // 部分/全部失败：仍继续 apply，让后端 fallback 模板兜底
-      const failSummary = failures.map(f => `${f.tag} (${f.error || 'unknown'})`).join(', ');
-      if (failures.length === results.length) {
-        showToast(t('envConfig.toast.pullAllFailed'), 'warning', 5000);
-      } else {
-        showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'warning', 5000);
+  try {
+    // 逐个拉取，才能在 UI 显示「当前正在拉 xxx / 第 n/m」
+    for (let i = 0; i < missingTags.length; i++) {
+      const tag = missingTags[i];
+      pullStatusText.value = t('envConfig.pullConfirm.pullingItem', {
+        tag,
+        current: i + 1,
+        total: missingTags.length,
+      });
+      pullProgress.value = { ...pullProgress.value, [tag]: 10 };
+
+      try {
+        const batch = await pullServiceImages([tag]);
+        const item = batch[0] ?? { tag, success: false, error: 'empty result' };
+        results.push(item);
+        pullProgress.value = {
+          ...pullProgress.value,
+          [tag]: item.success ? 100 : 0,
+        };
+      } catch (e) {
+        results.push({ tag, success: false, error: normalizeError(e) });
+        pullProgress.value = { ...pullProgress.value, [tag]: 0 };
       }
+    }
+
+    pullStatusText.value = '';
+    const failures = results.filter(r => !r.success);
+
+    if (failures.length > 0 && failures.length === results.length) {
+      // 全部失败：二次确认，避免用户误以为镜像已就绪却静默用模板兜底
+      const confirmed = await showConfirm({
+        title: t('envConfig.confirmPullFailed.title'),
+        message: t('envConfig.confirmPullFailed.message', {
+          details: failures.map(f => `• ${f.tag}`).join('\n'),
+        }),
+        confirmText: t('envConfig.confirmPullFailed.continue'),
+        cancelText: t('common.cancel'),
+        type: 'warning',
+      });
+      if (!confirmed) {
+        pulling.value = false;
+        applying.value = false;
+        return;
+      }
+      showToast(t('envConfig.toast.pullAllFailed'), 'warning', 5000);
+    } else if (failures.length > 0) {
+      const failSummary = failures.map(f => `${f.tag} (${f.error || 'unknown'})`).join(', ');
+      showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'warning', 5000);
     } else if (results.length > 0) {
       showToast(t('envConfig.toast.pullAllSuccess', { count: results.length }), 'success', 3000);
     }
-    // 重新计算 presences（拉取成功的应该已经 present）
+
+    pulling.value = false;
+    showPullConfirm.value = false;
+
     const config = buildConfig();
-    imagePresences.value = await invoke<ImagePresence[]>('check_service_images_presence', { config });
-    // 沿用用户在覆盖确认里的备份选择（不能硬编码 true，否则覆盖用户意愿）
+    imagePresences.value = await checkServiceImagesPresence(config);
     await doApplyCore(config, enableBackup.value);
   } catch (e) {
+    pullStatusText.value = '';
     pulling.value = false;
     showPullConfirm.value = false;
     showError(formatErrorMessage(e));
@@ -678,7 +733,7 @@ async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
   applying.value = true;
   showNginxHint.value = false;
   try {
-    const backedUpFiles = await invoke<string[]>('apply_env_config', { config, enableBackup });
+    const backedUpFiles = await applyEnvConfig(config, enableBackup);
     
     // 显示成功消息
     let successMsg = t('envConfig.toast.applySuccess', { 
@@ -735,7 +790,7 @@ async function openNginxConfigDir(serviceDir?: string) {
   try {
     // 如果没有指定服务目录，默认打开第一个 Nginx 的配置目录
     const targetDir = serviceDir || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
-    await invoke('open_service_config', { serviceName: targetDir });
+    await openServiceConfig(targetDir);
     showToast(t('envConfig.toast.nginxConfigOpened', { dir: targetDir }), 'success');
   } catch (e) {
     console.error('打开目录失败:', e);
@@ -753,7 +808,7 @@ async function confirmStart() {
   showStartConfirm.value = false;
   starting.value = true;
   try {
-    const result = await invoke<string>('start_environment');
+    const result = await startEnvironment();
     showToast(t('envConfig.toast.startSuccess', { result }), 'success', 5000);
   } catch (e) {
     showError(formatErrorMessage(e));
@@ -970,8 +1025,8 @@ const goToMirrorSettings = () => {
                 <!-- 自定义扩展输入区 -->
                 <div class="pt-3 border-t border-slate-200 dark:border-slate-700/50">
                   <label class="block text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">{{ $t('envConfig.php.customExtensions') }}</label>
-                  <input 
-                    v-model="customExtInput" 
+                  <input
+                    v-model="customExtInput[idx]"
                     @blur="syncCustomExtensions(idx)"
                     :placeholder="$t('envConfig.php.customExtPlaceholder')"  
                     class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono outline-none focus:ring-2 focus:ring-emerald-500/50"
@@ -1223,6 +1278,7 @@ const goToMirrorSettings = () => {
       :presences="imagePresences"
       :pulling="pulling"
       :progress="pullProgress"
+      :status-text="pullStatusText"
       @confirm="confirmPullAndApply"
       @cancel="cancelPull"
     />

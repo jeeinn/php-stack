@@ -107,6 +107,16 @@ describe('ImagePullConfirmModal', () => {
     expect(wrapper.text()).toContain('42%')
   })
 
+  it('拉取中展示 statusText', () => {
+    const wrapper = mountModal({
+      pulling: true,
+      statusText: '正在拉取 mysql:8.0（1/2）',
+    })
+    const status = wrapper.find('[data-testid="pull-status"]')
+    expect(status.exists()).toBe(true)
+    expect(status.text()).toContain('mysql:8.0')
+  })
+
   it('渲染文本中不含未翻译的 i18n key 残片', () => {
     const wrapper = mountModal()
     const text = wrapper.text()

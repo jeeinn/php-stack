@@ -10,8 +10,46 @@
 ### 待发布功能
 - 虚拟主机管理（Nginx 站点配置）
 
+### 🐛 修复
+- 一键停止改用 `docker compose stop`，保留容器并展示已停用状态
+- 统一服务模板解析路径，释放后不覆盖用户修改
+- 容器状态 running 文案中文化
+- 恢复引擎拒绝含路径遍历条目的备份包，堵住 zip-slip 漏洞
+- 修复 Nginx 多版本配置回读时非默认端口被错误重置为 80 的问题
+- 修复环境配置页多 PHP 服务时自定义扩展输入互相串扰的问题
+- 修复 `scripts/` 下两个同步脚本的单元测试因 shebang 被 vitest 报 SyntaxError、整个 suite 无法加载的问题
+- 修复日志文件每次启动被清空、现场日志一重启即丢失的问题（改为轮转保留最近 3 份）
+- 修复日志锁被毒化后每次写日志连锁 panic 的问题
+- 修复备份打包大文件时整体读入内存的问题（改为 64KB 分块流式写入）
+- 修复 `path.file_name().unwrap()` 对无名路径 panic 的问题
+- 修复 Docker 不可用时仍每 5 秒全量轮询、且每轮都刷一条失败日志的问题
+- 修复日志面板「复制」按钮复制的是后端文件日志全文、与界面显示内容对不上的问题
+- 修复配置的工作区目录不存在时数据被静默写到默认目录的问题（改为先创建目录；创建失败才回退并在界面告警）
+- 修复镜像拉取命令为同步执行、下载大镜像时整个窗口「未响应」的问题（改为 async + spawn_blocking）
+- 修复 `envConfig` 语言节点下存在两个同名 `toast`、JSON 解析时后者静默覆盖前者，导致应用配置后的成功提示直接显示为裸 key（`envConfig.toast.applySuccess` / `backedUp`）的问题（合并节点，恢复被覆盖的 8 条文案）
+- 修复 Nginx 容器启动即崩溃、无限重启的问题：Dockerfile 末尾 `USER nginx` 使 master 进程无权限创建 `/var/cache/nginx/client_temp`、也无法 bind 80 端口（改为 root 运行 master，worker 仍为 `nginx`，PUID/PGID 映射不变）
+- 修复 PUID/PGID 用户映射在默认配置下从不生效的问题：判断条件写成「PUID/PGID 不等于 1000 才调整」，而默认值本身就是 1000，等于永远跳过（改为「与镜像内当前 UID/GID 不一致才调整」）
+- 修复 Nginx 镜像模板只支持 alpine 基础镜像的问题：原实现用 `deluser/adduser`，若把 `NGINX*_VERSION` 换成 debian 版（如 `nginx:1.28`）则构建直接失败；现在按基础镜像分发命令（alpine 用 `deluser/adduser`，debian 用 `groupmod/usermod`）。PHP 模板同样补齐 alpine 版兼容性
+
+### 🔧 改进
+- 环境配置页 .env 解析主体抽为纯函数并以真断言测试覆盖
+- 配置生成集成测试替换为端到端断言（validate / .env / compose / 自定义变量保留）
+- 清理死代码：未注册使用的占位命令、无效占位测试、未使用的 proptest 依赖
+- 新增 CI 测试流水线（fmt / clippy / cargo test / 前端测试 / 构建）
+- 补充 MIT LICENSE 文件，声明 Cargo `license` 字段
+- 恢复前自动生成回滚包（`.restore_rollback_<时间戳>.zip`），恢复出错可据此回退
+- 恢复结果由「成功/失败一句话」改为返回完整明细，前端展示已恢复文件列表、逐条错误与回滚包路径
+- 环境启动流程的 Docker 同步调用（`compose down`、`up` 等待、日志轮询）统一走 `spawn_blocking`，不再阻塞 async 执行线程
+- **容器状态改为前后端共享的枚举契约**（`running`/`exited`/...），替换此前 `format!("{:?}")` 产出 `"Some(RUNNING)"` 再由前端 `includes('running')` 猜测的脆弱做法
+- **路径解析收口为 `commands/paths.rs` 单一模块**；用户级配置 `workspace.json` 与日志迁至 Tauri 官方 `app_data_dir`，解决装进 `Program Files` 后无写权限的问题，首次启动自动从旧位置迁移
+- 日志面板新增「清空」与「导出」动作（导出走后端文件日志，落盘到用户指定位置）
+- 轮询间隔随 Docker 连续失败次数退避（5s → 15s → 30s），恢复后立即回到 5s
+- 容器状态灯改为仅运行中时脉冲，停止状态不再一直闪烁
+- 新增 `pnpm check:i18n` 检查脚本（`scripts/check-i18n-keys.mjs`）：扫描语言包同层级重复 key、中英 key 集合一致性、源码 `t()` 引用的 key 是否存在，并配 10 条单元测试防回归
+
 ### 📁 文档
 - 合并 `doc/` 与 `docs/` 为统一的 `docs/` 目录，更新 README、AGENTS、文档索引中的路径引用
+- 修订 AGENTS.md 与实际实现不符的描述（proptest 属性测试、恢复端口冲突检测、后端日志英文化），未实现项移入「待完善功能」
 
 ---
 

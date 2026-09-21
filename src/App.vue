@@ -1,9 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  checkDocker,
+  listContainers,
+  startContainer,
+  stopContainer,
+  openServiceConfig as openServiceConfigApi,
+  startEnvironment,
+  stopEnvironment,
+  restartEnvironment,
+  getWorkspaceInfo,
+  checkConfigFilesExist,
+  exportLogsTo,
+  normalizeError,
+  isPortConflictError,
+  stripProtocolPrefix,
+  PORT_CONFLICT_PREFIX,
+  type WorkspaceInfo,
+} from './api';
 import { listen } from '@tauri-apps/api/event';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { save } from '@tauri-apps/plugin-dialog';
 import { getVersion } from '@tauri-apps/api/app';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
@@ -11,21 +29,17 @@ import MigrationPage from './components/MigrationPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
-import { getLogs, addLog, showToast } from './composables/useToast';
+import WorkspaceMissingDialog from './components/WorkspaceMissingDialog.vue';
+import { getLogs, addLog, clearLogs, showToast, UI_LOG_LIMIT } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
+import { WORKSPACE_CHANGED_EVENT } from './utils/workspaceEvents';
+import type { Container } from './types/docker';
+import { isContainerRunning } from './types/docker';
+import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
 
 const { t } = useI18n();
 
 const appVersion = ref('v0.0.0'); // 应用版本号
-
-interface Container {
-  id: String;
-  name: String;
-  image: String;
-  status: String;
-  state: String;
-  ports: number[];
-}
 
 const containers = ref<Container[]>([]);
 const loading = ref(false);
@@ -41,23 +55,21 @@ const showRestartConfirm = ref(false); // 控制重启确认弹窗
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
+let consecutiveFailures = 0; // Docker 连续失败次数（用于轮询退避）
+let pollTimer: ReturnType<typeof setTimeout> | null = null; // 轮询定时器
 const hasEnvFile = ref(false); // .env 文件是否存在
+/// 工作区回退告警（配置路径不可用、数据写到别处）。全局横幅展示，不限环境配置页。
+const workspaceFallbackMsg = ref('');
+/// 配置路径不存在时弹出三选一对话框
+const showWorkspaceMissing = ref(false);
+const workspaceMissingInfo = ref<{ workspace_path: string; effective_path: string } | null>(null);
+/// 本会话已选「临时回退」则不再反复弹窗（横幅仍保留）
+const workspaceMissingDismissed = ref(false);
+
 
 // 判断是否有运行中的 ps- 容器
 const hasRunningContainers = computed(() => {
-  return containers.value.some(c => isRunning(String(c.state)));
-});
-
-// 判断是否有任何 ps- 容器（不管状态）
-// @ts-ignore - 用于后续功能扩展，暂时未使用
-const hasAnyContainers = computed(() => {
-  return containers.value.length > 0;
-});
-
-// 判断是否有任何停止的 ps- 容器
-// @ts-ignore - 用于后续功能扩展，暂时未使用
-const hasStoppedContainers = computed(() => {
-  return containers.value.some(c => !isRunning(String(c.state)));
+  return containers.value.some(c => isContainerRunning(c.state));
 });
 
 // 判断是否可以启动（没有任何容器或所有容器都已停止，且存在 .env 文件）
@@ -75,21 +87,22 @@ const canStop = computed(() => {
   return hasRunningContainers.value;
 });
 
-// 判断容器是否运行中（兼容多种格式）
-const isRunning = (state: string): boolean => {
-  // 后端返回的格式："Some(RUNNING)" 或 "Some(Exceeded)" 等
-  const normalized = state.toLowerCase();
-  return normalized.includes('running');
-};
-
 const checkDocker = async () => {
   try {
-    await invoke('check_docker');
+    await checkDocker();
+    // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
+    if (dockerError.value !== null) {
+      addLog(t('dashboard.toast.dockerRestored'));
+    }
     dockerError.value = null;
     return true;
   } catch (e) {
+    // 只在状态由可用翻转为不可用时记一条，之后静默退避
+    const wasAvailable = dockerError.value === null;
     dockerError.value = e as string;
-    addLog(t('dashboard.toast.dockerCheckFailed', { error: e }));
+    if (wasAvailable) {
+      addLog(t('dashboard.toast.dockerCheckFailed', { error: e }));
+    }
     return false;
   }
 };
@@ -100,6 +113,7 @@ const refreshContainers = async (silent = false) => {
     addLog(t('dashboard.toast.refreshing'));
   }
   if (!(await checkDocker())) {
+    consecutiveFailures += 1;
     containers.value = [];
     if (!silent) {
       loading.value = false;
@@ -108,7 +122,8 @@ const refreshContainers = async (silent = false) => {
     return;
   }
   try {
-    const result = await invoke('list_containers') as Container[];
+    const result = await listContainers();
+    consecutiveFailures = 0;
     
     // 只有当内容真正改变时才更新，减少 DOM 抖动
     if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
@@ -118,6 +133,7 @@ const refreshContainers = async (silent = false) => {
       addLog(t('dashboard.toast.containerNoChange'));
     }
   } catch (e) {
+    consecutiveFailures += 1;
     if (!silent) addLog(t('dashboard.toast.refreshFailed', { error: e }));
   } finally {
     if (!silent) {
@@ -127,10 +143,10 @@ const refreshContainers = async (silent = false) => {
   }
 };
 
-const startService = async (name: String) => {
+const startService = async (name: string) => {
   try {
     addLog(t('dashboard.toast.serviceStarting', { name }));
-    await invoke('start_container', { name });
+    await startContainer(String(name));
     addLog(t('dashboard.toast.serviceStarted', { name }));
     await refreshContainers(true);
   } catch (e) {
@@ -138,10 +154,10 @@ const startService = async (name: String) => {
   }
 };
 
-const stopService = async (name: String) => {
+const stopService = async (name: string) => {
   try {
     addLog(t('dashboard.toast.serviceStopping', { name }));
-    await invoke('stop_container', { name });
+    await stopContainer(String(name));
     addLog(t('dashboard.toast.serviceStopped', { name }));
     await refreshContainers(true);
   } catch (e) {
@@ -149,34 +165,15 @@ const stopService = async (name: String) => {
   }
 };
 
-const openServiceConfig = async (name: String) => {
+const openServiceConfig = async (name: string) => {
   try {
     addLog(t('dashboard.toast.configOpening', { name }));
-    // 从容器名称提取服务目录名称
-    const containerName = String(name);
-    let serviceName = '';
-    
-    if (containerName.startsWith('ps-php')) {
-      // PHP 容器：ps-php56 -> php56, ps-php85 -> php85
-      serviceName = containerName.replace('ps-', '');
-    } else if (containerName.startsWith('ps-mysql')) {
-      // MySQL 容器：ps-mysql57 -> mysql57, ps-mysql84 -> mysql84
-      serviceName = containerName.replace('ps-', '');
-    } else if (containerName.startsWith('ps-redis')) {
-      // Redis 容器：ps-redis62 -> redis62, ps-redis72 -> redis72
-      serviceName = containerName.replace('ps-', '');
-    } else if (containerName.startsWith('ps-nginx')) {
-      // Nginx 容器：ps-nginx127 -> nginx127
-      serviceName = containerName.replace('ps-', '');
-    } else {
-      // 其他情况，尝试去掉 ps- 前缀
-      serviceName = containerName.replace(/^ps-/, '');
-    }
-    
-    await invoke('open_service_config', { serviceName });
+    // 容器名统一为 ps-{serviceDir}（如 ps-php82），去掉前缀即得服务配置目录
+    const serviceName = String(name).replace(/^ps-/, '');
+    await openServiceConfigApi(serviceName);
     addLog(t('dashboard.toast.configOpened', { name: serviceName }));
   } catch (e) {
-    addLog(t('dashboard.toast.configOpenFailed', { error: e }));
+    addLog(t('dashboard.toast.configOpenFailed', { error: normalizeError(e) }));
   }
 };
 
@@ -197,7 +194,7 @@ const handleStopEnvironment = async () => {
   addLog(t('dashboard.toast.envStopping'));
   
   try {
-    await invoke('stop_environment');
+    await stopEnvironment();
     addLog(t('dashboard.toast.envStopped'));
     
     // 等待 1 秒让 Docker API 状态更新
@@ -223,19 +220,19 @@ const confirmStart = async () => {
   addLog(t('dashboard.toast.envStarting'));
   
   try {
-    await invoke('start_environment');
+    await startEnvironment();
     addLog(t('dashboard.toast.envStarted'));
     
     // 等待 1 秒让 Docker API 状态更新
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     await refreshContainers();
-  } catch (e: any) {
-    const errorMsg = String(e);
+  } catch (e: unknown) {
+    const errorMsg = normalizeError(e);
     
     // 检查是否是端口冲突错误
-    if (errorMsg.startsWith('PORT_CONFLICT:')) {
-      const conflictDetails = errorMsg.substring('PORT_CONFLICT:'.length);
+    if (isPortConflictError(errorMsg)) {
+      const conflictDetails = stripProtocolPrefix(errorMsg, PORT_CONFLICT_PREFIX);
       const formattedConflicts = conflictDetails.replace(/; /g, '\n• ');
       
       // 显示自定义确认对话框
@@ -251,7 +248,7 @@ const confirmStart = async () => {
         // 用户选择继续
         addLog(t('dashboard.toast.portConflictIgnore'));
         try {
-          await invoke('start_environment');
+          await startEnvironment();
           addLog(t('dashboard.toast.envStarted'));
           
           // 等待 1 秒让 Docker API 状态更新
@@ -285,7 +282,7 @@ const confirmRestart = async () => {
   addLog(t('dashboard.toast.envRestarting'));
   
   try {
-    await invoke('restart_environment');
+    await restartEnvironment();
     addLog(t('dashboard.toast.envRestarted'));
     
     // 等待 1 秒让 Docker API 状态更新
@@ -308,14 +305,63 @@ const goToMirrorSettings = () => {
 // 检查 .env 文件是否存在
 const checkEnvFileExists = async () => {
   try {
-    const existingFiles = await invoke<string[]>('check_config_files_exist');
+    const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
-    console.log('[App] .env 文件存在:', hasEnvFile.value);
   } catch (e) {
     console.error('[App] 检查配置文件失败:', e);
     hasEnvFile.value = false;
   }
 };
+
+/// 加载工作区状态：配置路径不可用时必须全局可见，否则备份/恢复也会写到错误位置。
+async function loadWorkspaceFallbackBanner() {
+  try {
+    const info = await getWorkspaceInfo();
+    if (info?.using_fallback) {
+      workspaceFallbackMsg.value = t('workspace.status.fallback', {
+        effective: info.effective_path,
+        reason: info.fallback_reason || '',
+      });
+    } else {
+      workspaceFallbackMsg.value = '';
+    }
+
+    if (info?.path_missing && !workspaceMissingDismissed.value) {
+      workspaceMissingInfo.value = {
+        workspace_path: info.workspace_path,
+        effective_path: info.effective_path,
+      };
+      showWorkspaceMissing.value = true;
+    } else if (!info?.path_missing) {
+      showWorkspaceMissing.value = false;
+      workspaceMissingInfo.value = null;
+      workspaceMissingDismissed.value = false;
+    }
+  } catch {
+    workspaceFallbackMsg.value = '';
+  }
+}
+
+async function onWorkspaceMissingResolved() {
+  showWorkspaceMissing.value = false;
+  workspaceMissingDismissed.value = false;
+  await loadWorkspaceFallbackBanner();
+  showToast(t('workspace.missing.resolved'), 'success');
+}
+
+function onWorkspaceMissingTemp() {
+  showWorkspaceMissing.value = false;
+  workspaceMissingDismissed.value = true;
+  showToast(t('workspace.missing.tempToast'), 'warning');
+}
+
+function openWorkspaceMissingOrConfig() {
+  if (workspaceMissingInfo.value && !showWorkspaceMissing.value) {
+    showWorkspaceMissing.value = true;
+    return;
+  }
+  activeTab.value = 'env-config';
+}
 
 // 监听 tab 切换，回到 dashboard 时刷新 .env 检测状态
 watch(activeTab, async (newTab) => {
@@ -323,6 +369,27 @@ watch(activeTab, async (newTab) => {
     await checkEnvFileExists();
   }
 });
+
+function stopPolling() {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+// 自适应轮询：正常 5 秒；Docker 连续失败后逐级退避到 15s / 30s，恢复后回到 5 秒。
+// 用自调度的 setTimeout 而非 setInterval，间隔才能随失败次数变化。
+async function pollOnce() {
+  await refreshContainers(true);
+  // stopPolling() 可能在 await 期间被调用（组件卸载），此时不再续期
+  if (pollTimer === null) return;
+  pollTimer = setTimeout(pollOnce, nextPollDelay(consecutiveFailures));
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS);
+}
 
 onMounted(async () => {
   // 获取应用版本号
@@ -335,14 +402,28 @@ onMounted(async () => {
   
   refreshContainers();
   checkEnvFileExists(); // 检查 .env 文件是否存在
-  // 每 5 秒自动静默刷新一次
-  setInterval(() => refreshContainers(true), 5000);
+  loadWorkspaceFallbackBanner();
+  startPolling();
   
   // 监听后端发送的日志事件
   listen('env-log', (event) => {
     const msg = event.payload as string;
     addLog(msg);
   });
+
+  // 工作区初始化/切换后刷新，不再整页 reload
+  window.addEventListener(WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
+});
+
+async function onWorkspaceChanged() {
+  await loadWorkspaceFallbackBanner();
+  await checkEnvFileExists();
+}
+
+onUnmounted(() => {
+  stopPolling();
+  if (scrollTimeout) clearTimeout(scrollTimeout);
+  window.removeEventListener(WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
 });
 
 // 监听日志变化，自动滚动到底部（用户未手动滚动时）
@@ -387,14 +468,39 @@ const scrollToBottom = async () => {
   }
 };
 
-// 复制日志到剪贴板
+// 复制面板里当前可见的日志（此前复制的是后端文件日志全文，
+// 与界面看到的内容对不上——面板只保留最近 UI_LOG_LIMIT 条）
 async function copyLogs() {
+  if (logs.value.length === 0) {
+    showToast(t('dashboard.log.empty'), 'warning');
+    return;
+  }
   try {
-    const logs = await invoke('export_logs');
-    await writeText(logs as string);
+    await writeText(logs.value.join('\n'));
     showToast(t('dashboard.log.copied'), 'success');
   } catch (e) {
     showToast(t('dashboard.log.copyFailed', { error: e }), 'error');
+  }
+}
+
+// 清空面板（长会话下满屏历史，此前没有出口）
+function clearLogPanel() {
+  clearLogs();
+  showToast(t('dashboard.log.cleared'), 'success');
+}
+
+// 导出完整文件日志到用户指定位置（走后端，与面板显示范围无关）
+async function exportLogs() {
+  try {
+    const dest = await save({
+      defaultPath: 'php-stack.log',
+      filters: [{ name: 'Log', extensions: ['log', 'txt'] }],
+    });
+    if (!dest) return; // 用户取消
+    await exportLogsTo(dest);
+    showToast(t('dashboard.log.exported', { path: dest }), 'success');
+  } catch (e) {
+    showToast(t('dashboard.log.exportFailed', { error: e }), 'error');
   }
 }
 </script>
@@ -414,7 +520,8 @@ async function copyLogs() {
       
       <!-- Menu Items -->
       <div class="flex flex-col gap-2">
-        <div 
+        <button
+          type="button"
           @click="activeTab = 'dashboard'"
           :class="{ 'active': activeTab === 'dashboard' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -422,8 +529,9 @@ async function copyLogs() {
         >
           <span class="text-base sm:text-lg">🏠</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.dashboard') }}</span>
-        </div>
-        <div 
+        </button>
+        <button
+          type="button"
           @click="activeTab = 'env-config'"
           :class="{ 'active': activeTab === 'env-config' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -431,8 +539,9 @@ async function copyLogs() {
         >
           <span class="text-base sm:text-lg">🛠️</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.envConfig') }}</span>
-        </div>
-        <div 
+        </button>
+        <button
+          type="button"
           @click="activeTab = 'mirrors-unified'"
           :class="{ 'active': activeTab === 'mirrors-unified' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -440,8 +549,9 @@ async function copyLogs() {
         >
           <span class="text-base sm:text-lg">⚙️</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.settings') }}</span>
-        </div>
-        <div 
+        </button>
+        <button
+          type="button"
           @click="activeTab = 'migration'"
           :class="{ 'active': activeTab === 'migration' }" 
           class="sidebar-item text-sm sm:text-base"
@@ -449,7 +559,7 @@ async function copyLogs() {
         >
           <span class="text-base sm:text-lg">📦</span>
           <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline">{{ $t('sidebar.migration') }}</span>
-        </div>
+        </button>
       </div>
       
       <!-- Version & Toggle Button -->
@@ -462,7 +572,7 @@ async function copyLogs() {
         <button 
           @click="sidebarCollapsed = !sidebarCollapsed"
           class="w-full py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          :title="sidebarCollapsed ? '展开侧边栏' : '收缩侧边栏'"
+          :title="sidebarCollapsed ? $t('sidebar.expand') : $t('sidebar.collapse')"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
@@ -481,6 +591,25 @@ async function copyLogs() {
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-hidden p-3 sm:p-4 md:p-5 lg:p-6">
+      <!-- 工作区回退全局告警：备份/恢复/启动都走 effective_path，必须跨页可见 -->
+      <div
+        v-if="workspaceFallbackMsg"
+        data-testid="workspace-fallback-banner"
+        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3 text-amber-700 dark:text-amber-400"
+      >
+        <div class="flex-1 min-w-0">
+          <h3 class="font-bold text-sm sm:text-base mb-0.5">{{ $t('workspace.banner.title') }}</h3>
+          <p class="text-xs sm:text-sm opacity-90 break-words">{{ workspaceFallbackMsg }}</p>
+        </div>
+        <button
+          type="button"
+          @click="openWorkspaceMissingOrConfig"
+          class="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap"
+        >
+          {{ workspaceMissingInfo ? $t('workspace.banner.handle') : $t('workspace.banner.action') }}
+        </button>
+      </div>
+
       <!-- 1. 环境管理 (Dashboard) -->
       <div v-if="activeTab === 'dashboard'" class="flex-1 flex flex-col overflow-hidden">
         <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
@@ -565,11 +694,11 @@ async function copyLogs() {
             <div class="flex justify-between items-start mb-4">
               <span class="text-slate-500 dark:text-slate-400 text-xs font-mono uppercase tracking-wider">{{ String(c.image).split(':')[0] }}</span>
               <span 
-                :class="isRunning(String(c.state)) ? 'text-emerald-400' : 'text-rose-400'"
+                :class="isContainerRunning(c.state) ? 'text-emerald-400' : 'text-rose-400'"
                 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-tighter"
               >
-                <span :class="isRunning(String(c.state)) ? 'bg-emerald-500' : 'bg-rose-500'" class="w-2 h-2 rounded-full animate-pulse"></span>
-                {{ isRunning(String(c.state)) ? $t('dashboard.container.running') : $t('dashboard.container.stopped') }}
+                <span :class="[isContainerRunning(c.state) ? 'bg-emerald-500' : 'bg-rose-500', { 'animate-pulse': isContainerRunning(c.state) }]" class="w-2 h-2 rounded-full"></span>
+                {{ isContainerRunning(c.state) ? $t('dashboard.container.running') : $t('dashboard.container.stopped') }}
               </span>
             </div>
             <div class="text-xl font-bold mb-1 truncate text-slate-900 dark:text-slate-200" :title="String(c.name)">{{ String(c.name) }}</div>
@@ -580,7 +709,7 @@ async function copyLogs() {
             
             <div class="flex gap-2">
               <button 
-                v-if="!isRunning(String(c.state))"
+                v-if="!isContainerRunning(c.state)"
                 @click="startService(String(c.name))"
                 class="flex-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 rounded text-sm font-medium transition-all"
               >
@@ -636,9 +765,23 @@ async function copyLogs() {
             <button 
               @click="copyLogs"
               class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
-              title="复制日志到剪贴板"
+              :title="$t('dashboard.log.copyTip')"
             >
-              📋 {{ $t('common.copy') }}
+              📋 {{ $t('dashboard.log.copy') }}
+            </button>
+            <button 
+              @click="clearLogPanel"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              :title="$t('dashboard.log.clearTip')"
+            >
+              🗑️ {{ $t('dashboard.log.clear') }}
+            </button>
+            <button 
+              @click="exportLogs"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              :title="$t('dashboard.log.exportTip')"
+            >
+              💾 {{ $t('dashboard.log.export') }}
             </button>
             <button 
               @click="scrollToBottom"
@@ -672,6 +815,9 @@ async function copyLogs() {
             <div v-if="logs.length === 0" class="text-slate-500 dark:text-slate-600 italic">{{ $t('dashboard.log.empty') }}</div>
           </div>
         </transition>
+        <p v-if="showLogs" class="mt-1.5 text-[10px] sm:text-xs text-slate-500 dark:text-slate-500">
+          {{ $t('dashboard.log.panelHint', { limit: UI_LOG_LIMIT }) }}
+        </p>
       </div>
     </div>
 
@@ -683,6 +829,14 @@ async function copyLogs() {
     
     <!-- Workspace Initialization Dialog -->
     <WorkspaceInitDialog />
+
+    <!-- 配置工作区目录不存在：重建 / 选新路径 / 临时回退 -->
+    <WorkspaceMissingDialog
+      :open="showWorkspaceMissing"
+      :info="workspaceMissingInfo"
+      @resolved="onWorkspaceMissingResolved"
+      @dismiss-temp="onWorkspaceMissingTemp"
+    />
 
     <!-- Start Environment Confirmation Dialog -->
     <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -749,7 +903,7 @@ async function copyLogs() {
 @reference "tailwindcss";
 
 .sidebar-item {
-  @apply px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent flex items-center;
+  @apply w-full text-left px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent flex items-center bg-transparent;
 }
 .sidebar-item.active {
   @apply bg-blue-600/10 text-blue-600 dark:text-blue-400 border-blue-600/20;

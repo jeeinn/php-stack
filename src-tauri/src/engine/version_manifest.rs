@@ -79,12 +79,70 @@ pub struct VersionManifest {
 }
 
 impl VersionManifest {
-    /// 从嵌入的 JSON 数据加载版本清单
+    /// 加载版本清单：优先 `app_data_dir/services/version_manifest.json`，失败或缺失时用内置嵌入。
+    ///
+    /// 用户可在不重新发版的情况下覆盖清单（例如同步脚本生成新版本后拷贝到应用数据目录）。
     pub fn new() -> Self {
+        if let Some(m) = Self::try_load_override() {
+            return m;
+        }
+        Self::from_embedded()
+    }
+
+    /// 从嵌入的 JSON 数据加载版本清单
+    fn from_embedded() -> Self {
         let json_data = include_str!("../../services/version_manifest.json");
-        // 解析为显式结构：`_provenance` 等元信息键不会再因类型不匹配导致整份解析失败
+        Self::from_json(json_data).unwrap_or_else(|e| {
+            panic!("Failed to parse embedded version_manifest.json: {e}");
+        })
+    }
+
+    /// 尝试从用户覆盖路径加载；解析失败时记日志并回退内置。
+    fn try_load_override() -> Option<Self> {
+        let path = crate::commands::paths::app_data_dir()
+            .ok()?
+            .join("services")
+            .join("version_manifest.json");
+        if !path.is_file() {
+            return None;
+        }
+        match std::fs::read_to_string(&path) {
+            Ok(content) => match Self::from_json(&content) {
+                Ok(m) => {
+                    crate::app_log!(
+                        info,
+                        "engine::version_manifest",
+                        "已加载外部版本清单: {}",
+                        path.display()
+                    );
+                    Some(m)
+                }
+                Err(e) => {
+                    crate::app_log!(
+                        warn,
+                        "engine::version_manifest",
+                        "外部版本清单解析失败，回退内置: {} ({e})",
+                        path.display()
+                    );
+                    None
+                }
+            },
+            Err(e) => {
+                crate::app_log!(
+                    warn,
+                    "engine::version_manifest",
+                    "读取外部版本清单失败，回退内置: {} ({e})",
+                    path.display()
+                );
+                None
+            }
+        }
+    }
+
+    /// 从 JSON 字符串解析清单（供单测与外部覆盖共用）
+    pub fn from_json(json_data: &str) -> Result<Self, String> {
         let file: ManifestFile =
-            serde_json::from_str(json_data).expect("Failed to parse version_manifest.json");
+            serde_json::from_str(json_data).map_err(|e| format!("解析 version_manifest 失败: {e}"))?;
 
         let mut versions = HashMap::new();
         versions.insert(ServiceType::Php, file.php);
@@ -92,10 +150,10 @@ impl VersionManifest {
         versions.insert(ServiceType::Redis, file.redis);
         versions.insert(ServiceType::Nginx, file.nginx);
 
-        Self {
+        Ok(Self {
             versions,
             provenance: file._provenance,
-        }
+        })
     }
 
     /// 清单溯源信息（若清单中未声明则为 None）
@@ -120,13 +178,11 @@ impl VersionManifest {
         prefix: &str,
     ) -> Option<(&String, &VersionEntry)> {
         let prefix_lower = prefix.to_lowercase();
-        self.versions
-            .get(service_type)
-            .and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|(_, entry)| entry.service_dir == prefix_lower)
-            })
+        self.versions.get(service_type).and_then(|entries| {
+            entries
+                .iter()
+                .find(|(_, entry)| entry.service_dir == prefix_lower)
+        })
     }
 
     /// 获取指定服务的所有可用版本条目，按版本号降序排列
@@ -171,12 +227,12 @@ impl VersionManifest {
         self.get_entry(service_type, id)
             .filter(|entry| entry.eol)
             .and_then(|entry| {
-                entry.description.as_ref().map(|desc| {
-                    format!("⚠️ {desc} - 建议使用更新版本")
-                })
+                entry
+                    .description
+                    .as_ref()
+                    .map(|desc| format!("⚠️ {desc} - 建议使用更新版本"))
             })
     }
-
 }
 
 /// 从 ID 中提取版本数字用于排序（如 "php82" → (8, 2), "nginx128" → (1, 28)）
@@ -216,6 +272,39 @@ mod tests {
         assert!(!manifest.versions.is_empty());
         // 应该有 4 种服务类型
         assert_eq!(manifest.versions.len(), 4);
+    }
+
+    #[test]
+    fn test_from_json_parses_minimal_manifest() {
+        let json = r#"{
+            "php": {
+              "php99": {
+                "display_name": "PHP 9.9",
+                "image_tag": "php:9.9-fpm",
+                "service_dir": "php99",
+                "default_port": 9000,
+                "show_port": false,
+                "eol": false
+              }
+            },
+            "mysql": {},
+            "redis": {},
+            "nginx": {}
+        }"#;
+        let m = VersionManifest::from_json(json).expect("minimal manifest should parse");
+        assert!(m.is_id_valid(&ServiceType::Php, "php99"));
+        assert_eq!(
+            m.get_entry(&ServiceType::Php, "php99").unwrap().image_tag,
+            "php:9.9-fpm"
+        );
+    }
+
+    #[test]
+    fn test_from_json_rejects_invalid() {
+        assert!(
+            VersionManifest::from_json("{not json").is_err(),
+            "非法 JSON 应返回 Err"
+        );
     }
 
     #[test]
@@ -396,8 +485,7 @@ mod tests {
             "_provenance": { "updated_at": "2026-01-01" },
             "mysql": {}
         }"#;
-        let file: ManifestFile =
-            serde_json::from_str(json).expect("字段部分缺失时仍应解析成功");
+        let file: ManifestFile = serde_json::from_str(json).expect("字段部分缺失时仍应解析成功");
         let provenance = file._provenance.expect("_provenance 应被解析");
 
         assert_eq!(provenance.updated_at.as_deref(), Some("2026-01-01"));
@@ -426,6 +514,9 @@ mod tests {
 
         assert_eq!(provenance.updated_at.as_deref(), Some("2026-02-02"));
         let sources = provenance.sources.expect("sources 应被解析");
-        assert_eq!(sources.get("future_key").map(String::as_str), Some("some://url"));
+        assert_eq!(
+            sources.get("future_key").map(String::as_str),
+            Some("some://url")
+        );
     }
 }

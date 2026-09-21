@@ -4,7 +4,7 @@
  * Phase 3 三段式 apply 流程的测试：
  *   ① 探测镜像存在性（check_service_images_presence）
  *   ② 缺失则弹 ImagePullConfirmModal 让用户确认
- *   ③ 确认后批量拉取 → 重新探测 → apply_env_config
+ *   ③ 确认后逐个拉取 → 重新探测 → apply_env_config
  *
  * 之所以独立成文件：这三个步骤需要在同一个 mount 里有状态地推进，
  * 与 EnvConfigPage.spec.ts 的「渲染/数据加载」关注点不同，
@@ -161,13 +161,20 @@ describe('EnvConfigPage — Phase 3 三段式 apply', () => {
   })
 
   it('⑤ 拉取部分失败仍继续 apply（后端 fallback 兜底）', async () => {
-    const partial: PullImageResultItem[] = [
-      { tag: 'mysql:8.0', success: true },
-      { tag: 'redis:8.2-alpine', success: false, error: 'manifest unknown' },
-    ]
     setupInvoke({
       check_service_images_presence: ONE_MISSING,
-      pull_service_images: partial,
+    })
+    // 逐个拉取：按 tag 返回不同结果
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === 'pull_service_images') {
+        const tag = args?.imageTags?.[0]
+        if (tag === 'redis:8.2-alpine') {
+          return [{ tag, success: false, error: 'manifest unknown' }]
+        }
+        return [{ tag, success: true }]
+      }
+      if (cmd === 'check_service_images_presence') return ONE_MISSING
+      return baseInvoke[cmd] ?? null
     })
 
     const wrapper = await mountPage()
@@ -175,21 +182,19 @@ describe('EnvConfigPage — Phase 3 三段式 apply', () => {
     pullModal(wrapper).vm.$emit('confirm', ['mysql:8.0', 'redis:8.2-alpine'])
     await flushPromises()
 
-    // 关键语义：部分失败不阻断，apply 必须仍然发生
+    expect(callsTo('pull_service_images').length).toBe(2)
     expect(callsTo('apply_env_config').length).toBe(1)
-    // 且给了 warning 级别的提示
     const warnCall = vi.mocked(showToast).mock.calls.find((c) => c[1] === 'warning')
     expect(warnCall, '部分失败应给出 warning 提示').toBeTruthy()
   })
 
-  it('⑥ 拉取全部失败也继续 apply（不阻断用户）', async () => {
-    const allFailed: PullImageResultItem[] = [
-      { tag: 'mysql:8.0', success: false, error: 'network unreachable' },
-    ]
+  it('⑥ 拉取全部失败时二次确认：同意后才 apply', async () => {
     setupInvoke({
       check_service_images_presence: ONE_MISSING,
-      pull_service_images: allFailed,
+      pull_service_images: [{ tag: 'mysql:8.0', success: false, error: 'network unreachable' }],
     })
+    // 覆盖确认默认 true；全部失败时的二次确认也默认同意
+    vi.mocked(showConfirm).mockResolvedValue(true as any)
 
     const wrapper = await mountPage()
     await clickApply(wrapper)
@@ -197,8 +202,23 @@ describe('EnvConfigPage — Phase 3 三段式 apply', () => {
     await flushPromises()
 
     expect(callsTo('apply_env_config').length).toBe(1)
-    const warnCall = vi.mocked(showToast).mock.calls.find((c) => c[1] === 'warning')
-    expect(warnCall, '全部失败应给出 warning 提示').toBeTruthy()
+    // 二次确认应被调用（除可能的覆盖确认外，至少有一次 boolean 确认）
+    expect(vi.mocked(showConfirm).mock.calls.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('⑥b 拉取全部失败时二次确认：取消则不 apply', async () => {
+    setupInvoke({
+      check_service_images_presence: ONE_MISSING,
+      pull_service_images: [{ tag: 'mysql:8.0', success: false, error: 'network unreachable' }],
+    })
+    vi.mocked(showConfirm).mockResolvedValue(false as any)
+
+    const wrapper = await mountPage()
+    await clickApply(wrapper)
+    pullModal(wrapper).vm.$emit('confirm', ['mysql:8.0'])
+    await flushPromises()
+
+    expect(callsTo('apply_env_config').length).toBe(0)
   })
 
   it('⑦ 用户在覆盖确认里取消备份时，走拉取路径后仍应保持不备份', async () => {

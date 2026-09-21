@@ -41,6 +41,23 @@ const FETCH_TIMEOUT_MS = 60_000;
 
 export const SERVICES = ['php', 'mysql', 'redis', 'nginx'];
 
+// ─── 协议层字符串 ───
+// 这几条不是给人看的展示文案，而是被程序判定消费的契约：throw 出去的 Error 前缀、
+// skipped[].reason 的取值、fetchFailures 的过滤条件、以及单测构造的 reason 数据，
+// 四处必须指向同一份定义。改其中任意一处文案都要走这里的常量，否则
+// --check 会把「fetch 全挂」误判成「完全同步」并放绿灯。
+export const REASON = {
+  /** 网络失败或解析失败 */
+  NETWORK: 'network/parse failure',
+  /** --offline 但缓存为空 */
+  OFFLINE_NO_CACHE: 'offline without cache',
+  /** 上游有该 cycle，但 tag 变体不在 resolver 规则覆盖内 */
+  PARSE_UNMATCHED: 'parse did not match (tag variant not covered by rules)',
+};
+
+/** 离线无缓存时抛出的 Error 前缀；offlineNoCache 判定靠 includes 匹配它。 */
+export const OFFLINE_ERR_PREFIX = 'offline mode';
+
 // docker-library/official-images 的 library/ 文件：用 Tag 段匹配 cycle。
 // endoflife.date API：返回 [{cycle, eol, latest, ...}]，cycle 即 "major.minor"。
 const URLS = {
@@ -292,16 +309,20 @@ async function main() {
       // --offline 且缓存为空时不会抛错，而是返回空数据 —— 若不拦截，
       // 后续会因"零上游数据"得出"零差异"，CI 的 --check 会静默放行。
       if (offline && !data.library && (data.eol || []).length === 0) {
-        throw new Error(`离线模式但 .workbuddy/sync-cache/ 下无 ${svc} 缓存`);
+        throw new Error(
+          `${OFFLINE_ERR_PREFIX} but no cache for ${svc} under .workbuddy/sync-cache/`,
+        );
       }
     } catch (e) {
       console.error(`⚠️  failed to fetch ${svc} data: ${e.message}`);
       // 离线但缓存为空时，reason 不能归到"网络失败"——用户需要的是"先联网跑一次"
-      const offlineNoCache = offline && e.message.includes('离线模式');
+      const offlineNoCache = offline && e.message.includes(OFFLINE_ERR_PREFIX);
       skipped.push({
         svc,
         cycle: '-',
-        reason: offlineNoCache ? `离线无缓存: ${e.message}` : `网络/解析失败: ${e.message}`,
+        reason: offlineNoCache
+          ? `${REASON.OFFLINE_NO_CACHE}: ${e.message}`
+          : `${REASON.NETWORK}: ${e.message}`,
       });
       continue;
     }
@@ -317,7 +338,7 @@ async function main() {
           seg.tags.some((t) => majorMinor(t) === cycle && !PRERELEASE_RE.test(t))
         );
         if (upstreamHasDir) {
-          skipped.push({ svc, cycle, reason: '解析未匹配（tag 变体不在规则覆盖内）' });
+          skipped.push({ svc, cycle, reason: REASON.PARSE_UNMATCHED });
         } else if (eolRow.eol === true || (typeof eolRow.eol === 'string' && new Date(eolRow.eol) < new Date(TODAY))) {
           // 上游完全停止维护该 cycle，但 eol api 标了 EOL——记到 eolOnlyRows 用于比对 manifest
           eolOnlyRows.push({ svc, cycle, eol: eolRow.eol });
@@ -429,7 +450,9 @@ async function main() {
 
   // --apply 必须保证所有 fetch 都通了；网络不稳时不能写半截。
   const fetchFailures = skipped.filter(
-    (s) => s.reason.startsWith('网络/解析失败') || s.reason.startsWith('离线无缓存'),
+    (s) =>
+      s.reason.startsWith(REASON.NETWORK) ||
+      s.reason.startsWith(REASON.OFFLINE_NO_CACHE),
   );
   if (apply && fetchFailures.length > 0) {
     console.error(`\n💥 --apply mode: ${fetchFailures.length} fetch failure(s), write aborted.`);

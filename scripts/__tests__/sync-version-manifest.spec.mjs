@@ -31,6 +31,7 @@ import {
   cycleToId,
   buildExistingIdMap,
   exitCodeFor,
+  REASON,
 } from '../sync-version-manifest.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -328,7 +329,11 @@ describe('金标准：resolver 必须能重现 manifest 现有的 image_tag', ()
 
 describe('exitCodeFor', () => {
   const none = [];
-  const oneFailure = [{ svc: 'php', cycle: '-', reason: '网络/解析失败: fetch failed' }];
+  // reason 必须走 REASON 常量：main() 里 fetchFailures 是靠 startsWith 匹配的，
+  // 这里若写死另一份文案，测试就会在「判定已失效」的情况下仍然通过。
+  const oneFailure = [
+    { svc: 'php', cycle: '-', reason: `${REASON.NETWORK}: fetch failed` },
+  ];
 
   // 这条是全套测试里最要紧的一条：网络全挂时差异数必然为 0，
   // 若 --check 不阻断，CI 会把"什么都不知道"当成"完全同步"放绿灯。
@@ -339,7 +344,9 @@ describe('exitCodeFor', () => {
   });
 
   it('--check 在离线无缓存时同样失败', () => {
-    const offline = [{ svc: 'php', cycle: '-', reason: '离线无缓存: ...' }];
+    const offline = [
+      { svc: 'php', cycle: '-', reason: `${REASON.OFFLINE_NO_CACHE}: ...` },
+    ];
     expect(
       exitCodeFor({ checkOnly: true, apply: false, hasDiff: false, fetchFailures: offline }),
     ).toBe(1);

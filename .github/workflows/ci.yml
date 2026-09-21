@@ -64,5 +64,10 @@ jobs:
       - name: Frontend tests
         run: npm run test:run
 
+      # 语言包重复 key 会被 JSON.parse 静默折叠，界面上直接显示裸 key，
+      # 肉眼看不出问题，只能靠脚本兜底
+      - name: i18n key integrity check
+        run: npm run check:i18n
+
       - name: Frontend type-check & build
         run: npm run build

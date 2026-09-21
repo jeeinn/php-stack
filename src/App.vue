@@ -6,7 +6,7 @@ import {
   listContainers,
   startContainer,
   stopContainer,
-  openServiceConfig,
+  openServiceConfig as openServiceConfigApi,
   startEnvironment,
   stopEnvironment,
   restartEnvironment,
@@ -170,10 +170,10 @@ const openServiceConfig = async (name: string) => {
     addLog(t('dashboard.toast.configOpening', { name }));
     // 容器名统一为 ps-{serviceDir}（如 ps-php82），去掉前缀即得服务配置目录
     const serviceName = String(name).replace(/^ps-/, '');
-    await openServiceConfig(serviceName);
+    await openServiceConfigApi(serviceName);
     addLog(t('dashboard.toast.configOpened', { name: serviceName }));
   } catch (e) {
-    addLog(t('dashboard.toast.configOpenFailed', { error: e }));
+    addLog(t('dashboard.toast.configOpenFailed', { error: normalizeError(e) }));
   }
 };
 

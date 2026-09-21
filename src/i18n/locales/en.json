@@ -244,7 +244,10 @@
       "backupPartialFail": "\n\n⚠️  Note: Some files failed to backup (may be in use). Please close related programs and retry.",
       "startSuccess": "Environment started!\n{result}",
       "nginxConfigOpened": "Opened {dir} config directory",
-      "nginxConfigFailed": "Failed to open directory, please manually open services/{dir}/conf.d/"
+      "nginxConfigFailed": "Failed to open directory, please manually open services/{dir}/conf.d/",
+      "pullPartialSuccess": "⚠️ Some images failed to pull: {details}. Fallback templates will be used for those.",
+      "pullAllFailed": "❌ All images failed to pull. Falling back to built-in templates.",
+      "pullAllSuccess": "✅ {count} images pulled successfully"
     },
     "error": {
       "dockerNotRunning": "❌ Docker Not Running\n\nPlease start Docker Desktop and try again.",
@@ -305,11 +308,6 @@
       "tip": "Once pulled, \"One-click start\" reuses the local cache — it won't re-download on subsequent runs.",
       "confirmPull": "Pull {count}",
       "pulling": "Pulling…"
-    },
-    "toast": {
-      "pullPartialSuccess": "⚠️ Some images failed to pull: {details}. Fallback templates will be used for those.",
-      "pullAllFailed": "❌ All images failed to pull. Falling back to built-in templates.",
-      "pullAllSuccess": "✅ {count} images pulled successfully"
     }
   },
   "settings": {

@@ -244,7 +244,10 @@
       "backupPartialFail": "\n\n⚠️  注意：部分文件备份失败（可能文件被占用），请关闭相关程序后重试。",
       "startSuccess": "环境启动成功！\n{result}",
       "nginxConfigOpened": "已打开 {dir} 配置目录",
-      "nginxConfigFailed": "打开目录失败，请手动打开 services/{dir}/conf.d/"
+      "nginxConfigFailed": "打开目录失败，请手动打开 services/{dir}/conf.d/",
+      "pullPartialSuccess": "⚠️ 部分镜像拉取失败：{details}。失败的将回退到 fallback 模板。",
+      "pullAllFailed": "❌ 所有镜像拉取失败，已使用 fallback 模板应用配置",
+      "pullAllSuccess": "✅ {count} 个镜像全部拉取成功"
     },
     "error": {
       "dockerNotRunning": "❌ Docker 未运行\n\n请启动 Docker Desktop 后重试。",
@@ -305,11 +308,6 @@
       "tip": "镜像一旦拉取到本地，\"一键启动\"会直接复用本地缓存，不会重复下载。后续启动更快速。",
       "confirmPull": "确认拉取 {count} 个",
       "pulling": "拉取中…"
-    },
-    "toast": {
-      "pullPartialSuccess": "⚠️ 部分镜像拉取失败：{details}。失败的将回退到 fallback 模板。",
-      "pullAllFailed": "❌ 所有镜像拉取失败，已使用 fallback 模板应用配置",
-      "pullAllSuccess": "✅ {count} 个镜像全部拉取成功"
     }
   },
   "settings": {

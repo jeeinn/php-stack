@@ -994,6 +994,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
 
 #[cfg(test)]
 mod tests {
+    use super::PullImageResult;
     use std::fs;
 
     /// 测试 load_existing_config 解析多版本 Redis
@@ -1066,4 +1067,37 @@ NGINX127_HTTP_HOST_PORT=80
         fs::remove_dir_all(&temp_dir).ok();
     }
 
+    // ─── 前后端 serde 契约 ──────────────────────────────────────
+    // 前端 `PullImageResultItem` 按 `success` 判定成功/失败、按 `error` 展示原因。
+    // pull_service_images 的失败是「部分失败也继续」语义，因此 error 字段的
+    // 有无必须稳定：成功时省略（skip_serializing_if），失败时必带。
+
+    #[test]
+    fn test_pull_image_result_serde_contract_success() {
+        let ok = PullImageResult {
+            tag: "mysql:8.4".to_string(),
+            success: true,
+            error: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&ok).unwrap();
+        assert_eq!(json["tag"], "mysql:8.4");
+        assert_eq!(json["success"], true);
+        assert!(
+            json.get("error").is_none(),
+            "成功时 error 应被省略（skip_serializing_if），前端依赖此形态"
+        );
+    }
+
+    #[test]
+    fn test_pull_image_result_serde_contract_failure() {
+        let failed = PullImageResult {
+            tag: "redis:8.2-alpine".to_string(),
+            success: false,
+            error: Some("manifest unknown".to_string()),
+        };
+        let json: serde_json::Value = serde_json::to_value(&failed).unwrap();
+        assert_eq!(json["tag"], "redis:8.2-alpine");
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "manifest unknown");
+    }
 }

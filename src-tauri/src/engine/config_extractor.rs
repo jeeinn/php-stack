@@ -451,4 +451,74 @@ mod tests {
         }
         let _ = fs::remove_dir_all(&tmp);
     }
+
+    // ─── 前后端 serde 契约 ──────────────────────────────────────
+    // 前端 `src/types/env-config.ts` 的 ImagePresence / ExtractResult 按字面量
+    // 判断 `status` / `outcome` 字段。Rust 侧改 `rename_all` 或加 `rename`
+    // 会静默破坏前端分支判断，这里把 JSON 形状锁死。
+    //
+    // ⚠️ 注意 `SkippedExists` → "skippedexists"（lowercase 不加下划线），
+    //    若将来改成 snake_case 必须同步改前端类型。
+
+    #[test]
+    fn test_image_status_serde_contract() {
+        let present = ImageStatus::Present {
+            tag: "mysql:8.4".to_string(),
+            size: Some("1.08GB".to_string()),
+        };
+        let json: serde_json::Value = serde_json::to_value(&present).unwrap();
+        assert_eq!(json["status"], "present", "Present 的 tag 字段应为 present");
+        assert_eq!(json["tag"], "mysql:8.4");
+        assert_eq!(json["size"], "1.08GB");
+
+        let missing = ImageStatus::Missing {
+            tag: "redis:8.2-alpine".to_string(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&missing).unwrap();
+        assert_eq!(json["status"], "missing", "Missing 的 tag 字段应为 missing");
+        assert_eq!(json["tag"], "redis:8.2-alpine");
+        // Missing 不带 size —— 前端按可选字段处理，出现即类型漂移
+        assert!(
+            json.get("size").is_none(),
+            "Missing 不应携带 size 字段，否则前端类型需同步"
+        );
+    }
+
+    #[test]
+    fn test_image_status_present_omits_size_when_none() {
+        let present = ImageStatus::Present {
+            tag: "nginx:1.28-alpine".to_string(),
+            size: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&present).unwrap();
+        assert_eq!(json["status"], "present");
+        // size 为 null 时序列化为 null，前端声明 `size?: string | null` 可兼容
+        assert!(json["size"].is_null(), "size=None 应序列化为 null");
+    }
+
+    #[test]
+    fn test_extract_outcome_serde_contract() {
+        let extracted = ExtractOutcome::Extracted {
+            dest: "services/php85/php.ini".to_string(),
+            bytes: 72431,
+        };
+        let json: serde_json::Value = serde_json::to_value(&extracted).unwrap();
+        assert_eq!(json["outcome"], "extracted");
+        assert_eq!(json["dest"], "services/php85/php.ini");
+        assert_eq!(json["bytes"], 72431);
+
+        let skipped = ExtractOutcome::SkippedExists;
+        let json: serde_json::Value = serde_json::to_value(&skipped).unwrap();
+        assert_eq!(
+            json["outcome"], "skippedexists",
+            "SkippedExists 序列化为 skippedexists（无下划线），前端类型依赖此字面量"
+        );
+
+        let failed = ExtractOutcome::Failed {
+            reason: "docker daemon not running".to_string(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&failed).unwrap();
+        assert_eq!(json["outcome"], "failed");
+        assert_eq!(json["reason"], "docker daemon not running");
+    }
 }

@@ -336,4 +336,96 @@ mod tests {
         assert_eq!(extract_version_numbers("nginx128"), (1, 28, 0));
         assert_eq!(extract_version_numbers("redis72"), (7, 2, 0));
     }
+
+    // ─── _provenance 溯源信息 ────────────────────────────────────
+    // 这些测试锁住「元信息可选、不影响主流程解析」的契约：
+    // 缺少 _provenance 或只写部分字段时，清单仍必须能正常加载。
+
+    #[test]
+    fn test_provenance_parsed_from_embedded_manifest() {
+        let manifest = VersionManifest::new();
+        let provenance = manifest
+            .provenance()
+            .expect("内置清单应声明 _provenance，否则无法追溯数据来源");
+
+        // 只校验 YYYY-MM-DD 格式，不锁具体日期（每次同步都会变）
+        let updated_at = provenance
+            .updated_at
+            .as_deref()
+            .expect("_provenance.updated_at 应有值");
+        assert_eq!(updated_at.len(), 10, "updated_at 应为 YYYY-MM-DD 格式");
+        assert_eq!(&updated_at[4..5], "-", "updated_at 第 5 位应为 -");
+        assert_eq!(&updated_at[7..8], "-", "updated_at 第 8 位应为 -");
+
+        let sources = provenance
+            .sources
+            .as_ref()
+            .expect("_provenance.sources 应有值");
+        assert!(!sources.is_empty(), "sources 不应为空");
+        // 这两个来源是版本数据的权威入口，缺失即失去溯源意义
+        assert!(sources.contains_key("versions"), "缺少 versions 来源");
+        assert!(sources.contains_key("eol"), "缺少 eol 来源");
+
+        assert!(provenance.config_baseline.is_some(), "缺少 config_baseline");
+        assert!(provenance.notes.is_some(), "缺少 notes");
+    }
+
+    #[test]
+    fn test_provenance_absent_when_not_declared() {
+        let json = r#"{
+            "php": {
+                "php85": {
+                    "display_name": "PHP 8.5",
+                    "image_tag": "php:8.5-fpm",
+                    "service_dir": "php85",
+                    "default_port": 9000,
+                    "show_port": false
+                }
+            }
+        }"#;
+        let file: ManifestFile =
+            serde_json::from_str(json).expect("未声明 _provenance 的清单应正常解析");
+        assert!(file._provenance.is_none(), "未声明 _provenance 时应为 None");
+        assert_eq!(file.php.len(), 1, "版本条目本身不应受影响");
+    }
+
+    #[test]
+    fn test_provenance_tolerates_partial_fields() {
+        // 只声明 updated_at，其余字段全部缺失 —— 所有字段可选，解析不应失败
+        let json = r#"{
+            "_provenance": { "updated_at": "2026-01-01" },
+            "mysql": {}
+        }"#;
+        let file: ManifestFile =
+            serde_json::from_str(json).expect("字段部分缺失时仍应解析成功");
+        let provenance = file._provenance.expect("_provenance 应被解析");
+
+        assert_eq!(provenance.updated_at.as_deref(), Some("2026-01-01"));
+        assert!(provenance.sources.is_none(), "未声明的 sources 应为 None");
+        assert!(
+            provenance.config_baseline.is_none(),
+            "未声明的 config_baseline 应为 None"
+        );
+        assert!(provenance.notes.is_none(), "未声明的 notes 应为 None");
+    }
+
+    #[test]
+    fn test_provenance_ignores_unknown_shape() {
+        // 即使是完全陌生的嵌套结构（而非字符串/对象），也不能让整份清单解析失败
+        let json = r#"{
+            "_provenance": {
+                "updated_at": "2026-02-02",
+                "sources": { "future_key": "some://url" },
+                "unknown_meta": { "anything": 42 }
+            },
+            "redis": {}
+        }"#;
+        let file: ManifestFile =
+            serde_json::from_str(json).expect("含未知字段的 _provenance 应被容错");
+        let provenance = file._provenance.expect("_provenance 应被解析");
+
+        assert_eq!(provenance.updated_at.as_deref(), Some("2026-02-02"));
+        let sources = provenance.sources.expect("sources 应被解析");
+        assert_eq!(sources.get("future_key").map(String::as_str), Some("some://url"));
+    }
 }

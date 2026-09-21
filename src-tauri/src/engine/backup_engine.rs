@@ -1,7 +1,7 @@
 use glob::glob;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{Seek, Write};
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 use zip::write::FileOptions;
 
@@ -35,17 +35,14 @@ impl BackupEngine {
         Self::emit_progress(app_handle, "打包环境配置...", 10);
         let env_path = project_root.join(".env");
         if env_path.exists() {
-            let content = fs::read(&env_path).map_err(|e| format!("读取 .env 失败: {e}"))?;
-            Self::add_file_to_zip(&mut zip, ".env", &content, &mut manifest)?;
+            Self::add_file_to_zip(&mut zip, ".env", &env_path, &mut manifest)?;
         }
 
         // Step 2: Pack docker-compose.yml (20%)
         Self::emit_progress(app_handle, "打包 Docker 配置...", 20);
         let compose_path = project_root.join("docker-compose.yml");
         if compose_path.exists() {
-            let content = fs::read(&compose_path)
-                .map_err(|e| format!("读取 docker-compose.yml 失败: {e}"))?;
-            Self::add_file_to_zip(&mut zip, "docker-compose.yml", &content, &mut manifest)?;
+            Self::add_file_to_zip(&mut zip, "docker-compose.yml", &compose_path, &mut manifest)?;
         }
 
         // Step 3: Pack services/ configs (30%)
@@ -61,12 +58,10 @@ impl BackupEngine {
         // .user_mirror_config.json - User mirror source configuration
         let user_mirror_config_path = project_root.join(".user_mirror_config.json");
         if user_mirror_config_path.exists() {
-            let content = fs::read(&user_mirror_config_path)
-                .map_err(|e| format!("读取 .user_mirror_config.json 失败: {e}"))?;
             Self::add_file_to_zip(
                 &mut zip,
                 ".user_mirror_config.json",
-                &content,
+                &user_mirror_config_path,
                 &mut manifest,
             )?;
         }
@@ -74,12 +69,10 @@ impl BackupEngine {
         // .user_version_overrides.json - User version override configuration
         let user_version_overrides_path = project_root.join(".user_version_overrides.json");
         if user_version_overrides_path.exists() {
-            let content = fs::read(&user_version_overrides_path)
-                .map_err(|e| format!("读取 .user_version_overrides.json 失败: {e}"))?;
             Self::add_file_to_zip(
                 &mut zip,
                 ".user_version_overrides.json",
-                &content,
+                &user_version_overrides_path,
                 &mut manifest,
             )?;
         }
@@ -122,34 +115,24 @@ impl BackupEngine {
                             match entry {
                                 Ok(path) if path.is_file() => {
                                     matched_count += 1;
-                                    match fs::read(&path) {
-                                        Ok(content) => {
-                                            // 计算相对于项目根目录的路径
-                                            let relative_path =
-                                                pathdiff::diff_paths(&path, project_root)
-                                                    .map(|p| p.to_string_lossy().replace('\\', "/"))
-                                                    .unwrap_or_else(|| path.display().to_string());
-                                            let zip_path = format!("projects/{relative_path}");
-                                            app_log!(
-                                                debug,
-                                                "engine::backup",
-                                                "添加文件: {}",
-                                                zip_path
-                                            );
-                                            Self::add_file_to_zip(
-                                                &mut zip,
-                                                &zip_path,
-                                                &content,
-                                                &mut manifest,
-                                            )?;
-                                        }
-                                        Err(e) => {
-                                            manifest.errors.push(format!(
-                                                "读取项目文件失败 {}: {}",
-                                                path.display(),
-                                                e
-                                            ));
-                                        }
+                                    // 计算相对于项目根目录的路径
+                                    let relative_path = pathdiff::diff_paths(&path, project_root)
+                                        .map(|p| p.to_string_lossy().replace('\\', "/"))
+                                        .unwrap_or_else(|| path.display().to_string());
+                                    let zip_path = format!("projects/{relative_path}");
+                                    app_log!(debug, "engine::backup", "添加文件: {}", zip_path);
+                                    // 流式写入：单个大文件不再整体进内存
+                                    if let Err(e) = Self::add_file_to_zip(
+                                        &mut zip,
+                                        &zip_path,
+                                        &path,
+                                        &mut manifest,
+                                    ) {
+                                        manifest.errors.push(format!(
+                                            "打包项目文件失败 {}: {}",
+                                            path.display(),
+                                            e
+                                        ));
                                     }
                                 }
                                 Ok(path) => {
@@ -228,21 +211,40 @@ impl BackupEngine {
         }
     }
 
-    /// Helper: add a file to ZIP and record in manifest with SHA256.
+    /// Helper: add a file to ZIP and record its SHA256 in the manifest.
+    ///
+    /// 以 64KB 分块流式读取：同一趟既喂给 SHA256 也写进 ZIP，文件不再整体进内存。
+    /// 勾选"包含项目文件"时可能命中数据库 dump、视频素材等大文件，
+    /// 旧实现 `fs::read` 全量读入会让内存随文件大小线性飙升。
     fn add_file_to_zip<W: Write + Seek>(
         zip: &mut zip::ZipWriter<W>,
         zip_path: &str,
-        content: &[u8],
+        source: &Path,
         manifest: &mut BackupManifest,
     ) -> Result<(), String> {
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(zip_path, zip_options)
             .map_err(|e| format!("创建 ZIP 条目失败: {e}"))?;
-        zip.write_all(content)
-            .map_err(|e| format!("写入 ZIP 内容失败: {e}"))?;
 
-        let sha256 = Self::compute_sha256(content);
+        let mut file = fs::File::open(source)
+            .map_err(|e| format!("打开文件失败 {}: {}", source.display(), e))?;
+
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let read = file
+                .read(&mut buffer)
+                .map_err(|e| format!("读取文件失败 {}: {}", source.display(), e))?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            zip.write_all(&buffer[..read])
+                .map_err(|e| format!("写入 ZIP 内容失败: {e}"))?;
+        }
+
+        let sha256 = format!("{:x}", hasher.finalize());
         manifest.files.insert(zip_path.to_string(), sha256);
         Ok(())
     }
@@ -260,15 +262,17 @@ impl BackupEngine {
         for entry in fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {e}"))? {
             let entry = entry.map_err(|e| format!("读取目录条目失败: {e}"))?;
             let path = entry.path();
-            let name = path.file_name().unwrap().to_string_lossy();
-            let zip_path = format!("{zip_prefix}/{name}");
+            // 无文件名（盘符根等）时跳过而非 panic
+            let Some(name) = path.file_name() else {
+                app_log!(warn, "engine::backup", "跳过无文件名的路径: {:?}", path);
+                continue;
+            };
+            let zip_path = format!("{zip_prefix}/{}", name.to_string_lossy());
 
             if path.is_dir() {
                 Self::add_dir_to_zip(zip, &path, &zip_path, manifest)?;
             } else {
-                let content = fs::read(&path)
-                    .map_err(|e| format!("读取文件失败 {}: {}", path.display(), e))?;
-                Self::add_file_to_zip(zip, &zip_path, &content, manifest)?;
+                Self::add_file_to_zip(zip, &zip_path, &path, manifest)?;
             }
         }
         Ok(())
@@ -278,6 +282,84 @@ impl BackupEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 流式写入必须跨分块边界算出与全量读取一致的 SHA256。
+    ///
+    /// 缓冲区是 64KB，这里构造远超一块的内容（含 5 个跨块点），
+    /// 一旦分块拼接或 hasher 更新有错，哈希立刻对不上。
+    #[test]
+    fn test_streamed_sha256_matches_full_read() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let project_root = tmp_dir.path();
+
+        // 约 300KB，跨越 5 个 64KB 分块
+        let content: Vec<u8> = (0..300 * 1024).map(|i| (i % 251) as u8).collect();
+        let big_file = project_root.join("big.bin");
+        fs::write(&big_file, &content).expect("写入大文件失败");
+
+        let services_dir = project_root.join("services");
+        fs::create_dir_all(&services_dir).expect("创建 services 失败");
+        fs::write(services_dir.join("big.bin"), &content).expect("写入失败");
+
+        let backup_path = project_root.join("backup.zip");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(BackupEngine::create_backup(
+            backup_path.to_str().unwrap(),
+            BackupOptions {
+                include_projects: true,
+                project_patterns: vec!["big.bin".to_string()],
+                include_logs: false,
+            },
+            project_root,
+            None,
+        ))
+        .expect("备份失败");
+
+        let file = fs::File::open(&backup_path).expect("打开备份文件失败");
+        let mut archive = zip::ZipArchive::new(file).expect("解析 ZIP 失败");
+
+        // manifest 里的哈希必须等于全量读取算出的哈希
+        use std::io::Read;
+        let manifest: BackupManifest = {
+            let mut manifest_file = archive.by_name("manifest.json").unwrap();
+            let mut manifest_json = String::new();
+            manifest_file.read_to_string(&mut manifest_json).unwrap();
+            serde_json::from_str(&manifest_json).expect("解析 manifest 失败")
+        };
+
+        let expected = BackupEngine::compute_sha256(&content);
+        assert_eq!(
+            manifest.files.get("projects/big.bin"),
+            Some(&expected),
+            "流式写入的哈希与全量读取不一致"
+        );
+        assert_eq!(
+            manifest.files.get("services/big.bin"),
+            Some(&expected),
+            "目录递归同样应走流式写入"
+        );
+
+        // 内容本身也必须完整（哈希对但内容丢字节的情况要排除）
+        let mut zipped = Vec::new();
+        {
+            let mut entry = archive.by_name("projects/big.bin").unwrap();
+            entry.read_to_end(&mut zipped).unwrap();
+        }
+        assert_eq!(zipped.len(), content.len(), "ZIP 内文件大小不符");
+    }
+
+    #[test]
+    fn test_add_file_to_zip_missing_file_reports_error() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let backup_path = tmp_dir.path().join("out.zip");
+        let file = fs::File::create(&backup_path).expect("创建备份文件失败");
+        let mut zip = zip::ZipWriter::new(file);
+        let mut manifest = BackupManifest::new();
+
+        let missing = tmp_dir.path().join("nope.txt");
+        let result = BackupEngine::add_file_to_zip(&mut zip, "nope.txt", &missing, &mut manifest);
+        assert!(result.is_err(), "缺失文件应返回错误而不是 panic");
+    }
 
     #[test]
     fn test_compute_sha256() {

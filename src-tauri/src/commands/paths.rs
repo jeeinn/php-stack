@@ -109,16 +109,21 @@ pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
 
     // 目录不见了：不自动 create_dir_all。临时用默认目录保证读写不崩，
     // 同时标记 path_missing，让前端弹出「重建 / 选新路径 / 临时回退」。
-    let reason = format!(
-        "配置的工作区 {} 不存在，等待用户确认重建或更换",
+    //
+    // reason 传的是 i18n key（带 {path} 占位），由前端 t() 翻译后展示——
+    // 这里拼自然语言的话，英文界面会看到中文原因。日志侧补上真实路径，
+    // 避免出现一条只剩 key、看不出是哪个目录的日志。
+    let reason_key = "workspace.reason.configuredMissing";
+    eprintln!(
+        "configured workspace {} does not exist ({reason_key}), \
+         temporarily falling back to default dir",
         config.workspace_path
     );
-    eprintln!("{reason}, temporarily falling back to default dir");
     Ok(WorkspaceResolution {
         path: legacy_app_dir()?,
         fell_back: true,
         path_missing: true,
-        reason: Some(reason),
+        reason: Some(reason_key.to_string()),
     })
 }
 

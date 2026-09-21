@@ -320,7 +320,9 @@ async function loadWorkspaceFallbackBanner() {
     if (info?.using_fallback) {
       workspaceFallbackMsg.value = t('workspace.status.fallback', {
         effective: info.effective_path,
-        reason: info.fallback_reason || '',
+        reason: info.fallback_reason
+          ? t(info.fallback_reason, { path: info.workspace_path })
+          : '',
       });
     } else {
       workspaceFallbackMsg.value = '';

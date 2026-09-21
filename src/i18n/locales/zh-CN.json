@@ -651,6 +651,9 @@
       "resolved": "工作区已就绪",
       "tempToast": "本会话将写入回退目录；横幅会保持提醒"
     },
+    "reason": {
+      "configuredMissing": "配置的工作区 {path} 不存在，等待用户确认重建或更换"
+    },
     "status": {
       "loading": "加载中...",
       "notConfigured": "未配置",

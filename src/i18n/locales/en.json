@@ -651,6 +651,9 @@
       "resolved": "Workspace is ready",
       "tempToast": "This session writes to the fallback directory; the banner stays as a reminder"
     },
+    "reason": {
+      "configuredMissing": "Configured workspace {path} does not exist, waiting for you to recreate or choose a new path."
+    },
     "status": {
       "loading": "Loading...",
       "notConfigured": "Not configured",

@@ -34,7 +34,9 @@ pub async fn create_backup(
         })
     });
 
-    handle.await.map_err(|e| format!("备份任务执行失败: {e}"))?
+    handle
+        .await
+        .map_err(|e| format!("backup task failed: {e}"))?
 }
 
 // ==================== 恢复命令 ====================
@@ -139,15 +141,15 @@ pub fn convert_to_relative_path(
 
     // 使用 pathdiff 计算相对路径，它会自动处理跨平台差异（如 Windows 盘符）
     match pathdiff::diff_paths(&abs_path, &project_root) {
-        Some(relative) if relative.as_os_str().is_empty() || relative.as_os_str() == "." => {
-            Err("不能选择项目根目录本身，请选择其子文件或子文件夹".to_string())
-        }
+        Some(relative) if relative.as_os_str().is_empty() || relative.as_os_str() == "." => Err(
+            "cannot select the project root itself; select a file or folder inside it".to_string(),
+        ),
         Some(relative) => {
             // 检查是否包含 ".." (即不在项目目录下)
             let rel_str = relative.to_string_lossy();
             if rel_str.starts_with("..") || rel_str.contains("/..") || rel_str.contains("\\..") {
                 return Err(format!(
-                    "所选路径不在项目根目录下。\n为了确保证跨平台恢复成功，建议您将配置文件移动到项目目录（如 www/ 或 configs/）下再进行备份。\n\n当前项目根目录: {}",
+                    "selected path is outside the project root.\nTo ensure cross-platform restore works, move the config file into the project directory (e.g. www/ or configs/) before backing up.\n\nCurrent project root: {}",
                     project_root.display()
                 ));
             }
@@ -160,7 +162,10 @@ pub fn convert_to_relative_path(
                 Ok(normalized)
             }
         }
-        None => Err("无法计算相对路径，请确保文件位于项目目录内".to_string()),
+        None => Err(
+            "failed to compute relative path; make sure the file is inside the project directory"
+                .to_string(),
+        ),
     }
 }
 

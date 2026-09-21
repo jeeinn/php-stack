@@ -26,7 +26,8 @@ impl BackupEngine {
         project_root: &Path,
         app_handle: Option<&tauri::AppHandle>,
     ) -> Result<(), String> {
-        let file = fs::File::create(save_path).map_err(|e| format!("创建备份文件失败: {e}"))?;
+        let file = fs::File::create(save_path)
+            .map_err(|e| format!("failed to create backup file: {e}"))?;
         let mut zip = zip::ZipWriter::new(file);
         let mut manifest = BackupManifest::new();
         manifest.options = options.clone();
@@ -129,7 +130,7 @@ impl BackupEngine {
                                         &mut manifest,
                                     ) {
                                         manifest.errors.push(format!(
-                                            "打包项目文件失败 {}: {}",
+                                            "failed to pack project file {}: {}",
                                             path.display(),
                                             e
                                         ));
@@ -178,13 +179,13 @@ impl BackupEngine {
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("manifest.json", zip_options)
-            .map_err(|e| format!("创建 manifest 条目失败: {e}"))?;
+            .map_err(|e| format!("failed to create manifest entry: {e}"))?;
         zip.write_all(manifest_json.as_bytes())
-            .map_err(|e| format!("写入 manifest 失败: {e}"))?;
+            .map_err(|e| format!("failed to write manifest: {e}"))?;
 
         // Finish ZIP
         zip.finish()
-            .map_err(|e| format!("完成 ZIP 文件失败: {e}"))?;
+            .map_err(|e| format!("failed to finalize ZIP file: {e}"))?;
 
         Self::emit_progress(app_handle, "backup.progress.steps.done", 100);
         Ok(())
@@ -228,23 +229,23 @@ impl BackupEngine {
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(zip_path, zip_options)
-            .map_err(|e| format!("创建 ZIP 条目失败: {e}"))?;
+            .map_err(|e| format!("failed to create ZIP entry: {e}"))?;
 
         let mut file = fs::File::open(source)
-            .map_err(|e| format!("打开文件失败 {}: {}", source.display(), e))?;
+            .map_err(|e| format!("failed to open file {}: {}", source.display(), e))?;
 
         let mut hasher = Sha256::new();
         let mut buffer = [0u8; 64 * 1024];
         loop {
             let read = file
                 .read(&mut buffer)
-                .map_err(|e| format!("读取文件失败 {}: {}", source.display(), e))?;
+                .map_err(|e| format!("failed to read file {}: {}", source.display(), e))?;
             if read == 0 {
                 break;
             }
             hasher.update(&buffer[..read]);
             zip.write_all(&buffer[..read])
-                .map_err(|e| format!("写入 ZIP 内容失败: {e}"))?;
+                .map_err(|e| format!("failed to write ZIP content: {e}"))?;
         }
 
         let sha256 = format!("{:x}", hasher.finalize());
@@ -262,8 +263,8 @@ impl BackupEngine {
         if !src_dir.exists() {
             return Ok(());
         }
-        for entry in fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {e}"))? {
-            let entry = entry.map_err(|e| format!("读取目录条目失败: {e}"))?;
+        for entry in fs::read_dir(src_dir).map_err(|e| format!("failed to read directory: {e}"))? {
+            let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
             let path = entry.path();
             // 无文件名（盘符根等）时跳过而非 panic
             let Some(name) = path.file_name() else {

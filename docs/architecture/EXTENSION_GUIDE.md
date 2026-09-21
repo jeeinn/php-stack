@@ -70,13 +70,29 @@ cp src-tauri/services/php85/php.ini src-tauri/services/php90/
 cp src-tauri/services/php85/php-fpm.conf src-tauri/services/php90/
 ```
 
-### 步骤 3: 重新编译
+### 步骤 3: 使清单生效
+
+**方式 A（推荐，无需重新发版）**：将更新后的 `version_manifest.json` 放到应用数据目录：
+
+| 平台 | 路径 |
+|------|------|
+| Windows | `%APPDATA%\com.php-stack.dev\services\version_manifest.json` |
+| macOS | `~/Library/Application Support/com.php-stack.dev/services/version_manifest.json` |
+| Linux | `~/.local/share/com.php-stack.dev/services/version_manifest.json` |
+
+启动时优先加载该覆盖文件；解析失败则回退内置清单并写警告日志。
+
+**方式 B**：改仓库内 `src-tauri/services/version_manifest.json` 后重新编译（`include_str!` 嵌入二进制）。
 
 ```bash
 cd src-tauri && cargo build
 ```
 
-**无需修改任何 Rust 代码！** manifest 通过 `include_str!` 嵌入到二进制中，编译时自动加载。
+---
+
+## 1.1 不重新发版也能用上新版本
+
+覆盖路径见上文「方式 A」。可用仓库内 `scripts/sync-version-manifest.mjs` 生成最新清单后拷贝到该路径。
 
 ---
 

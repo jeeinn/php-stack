@@ -42,9 +42,10 @@ impl UserMirrorConfig {
         }
 
         let content = std::fs::read_to_string(&config_path)
-            .map_err(|e| format!("读取用户镜像配置文件失败: {e}"))?;
+            .map_err(|e| format!("failed to read user mirror config file: {e}"))?;
 
-        serde_json::from_str(&content).map_err(|e| format!("解析用户镜像配置文件失败: {e}"))
+        serde_json::from_str(&content)
+            .map_err(|e| format!("failed to parse user mirror config file: {e}"))
     }
 
     /// 保存用户配置到文件
@@ -52,9 +53,10 @@ impl UserMirrorConfig {
         let config_path = project_root.join(".user_mirror_config.json");
 
         let content = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("序列化用户镜像配置失败: {e}"))?;
+            .map_err(|e| format!("failed to serialize user mirror config: {e}"))?;
 
-        std::fs::write(&config_path, content).map_err(|e| format!("写入用户镜像配置文件失败: {e}"))
+        std::fs::write(&config_path, content)
+            .map_err(|e| format!("failed to write user mirror config file: {e}"))
     }
 
     /// 检查某个类别是否有用户自定义配置
@@ -111,7 +113,8 @@ impl MirrorConfigManager {
     /// 从嵌入的 JSON 数据加载默认镜像配置
     pub fn load_default_config() -> Result<serde_json::Value, String> {
         let json_data = include_str!("../../services/mirror_config.json");
-        serde_json::from_str(json_data).map_err(|e| format!("解析 mirror_config.json 失败: {e}"))
+        serde_json::from_str(json_data)
+            .map_err(|e| format!("failed to parse mirror_config.json: {e}"))
     }
 
     /// 获取所有类别 ID 列表
@@ -138,9 +141,9 @@ impl MirrorConfigManager {
         for category_id in category_ids {
             // 从默认配置中获取该类别的选项列表
             let options_value = &default_config[&category_id];
-            let options_array = options_value
-                .as_array()
-                .ok_or(format!("mirror_config.json 中缺少类别: {category_id}"))?;
+            let options_array = options_value.as_array().ok_or(format!(
+                "mirror_config.json is missing category: {category_id}"
+            ))?;
 
             // 解析选项列表
             let options: Vec<MirrorSourceOption> = options_array
@@ -215,14 +218,16 @@ impl MirrorConfigManager {
         let options_value = &default_config[category_id];
         let options_array = options_value
             .as_array()
-            .ok_or(format!("类别 {category_id} 不存在"))?;
+            .ok_or(format!("category {category_id} does not exist"))?;
 
         // 查找对应的选项值
         let selected_value = options_array
             .iter()
             .find(|opt| opt.get("id").and_then(|v| v.as_str()) == Some(option_id))
             .and_then(|opt| opt.get("value").and_then(|v| v.as_str()))
-            .ok_or(format!("选项 {option_id} 不存在于类别 {category_id} 中"))?;
+            .ok_or(format!(
+                "option {option_id} does not exist in category {category_id}"
+            ))?;
 
         // 保存为用户自定义配置
         Self::save_user_category(project_root, category_id, selected_value, None)

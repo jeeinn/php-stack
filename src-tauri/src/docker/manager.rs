@@ -117,7 +117,7 @@ impl DockerManager {
     pub async fn check_docker_availability(&self) -> Result<(), String> {
         match self.docker.ping().await {
             Ok(_) => Ok(()),
-            Err(e) => Err(format!("Docker 服务不可用或未启动: {e}")),
+            Err(e) => Err(format!("Docker service unavailable or not running: {e}")),
         }
     }
 
@@ -176,7 +176,7 @@ impl DockerManager {
         let containers = self
             .list_ps_containers()
             .await
-            .map_err(|e| format!("获取容器列表失败: {e}"))?;
+            .map_err(|e| format!("failed to list containers: {e}"))?;
 
         if containers.is_empty() {
             return Ok(false);

@@ -25,7 +25,7 @@ where
 {
     tokio::task::spawn_blocking(f)
         .await
-        .map_err(|e| format!("阻塞任务执行失败: {e}"))?
+        .map_err(|e| format!("blocking task failed: {e}"))?
 }
 
 /// 获取 Docker Compose 容器的最新日志
@@ -57,11 +57,11 @@ async fn get_compose_logs(
 
         let output = logs_cmd
             .output()
-            .map_err(|e| format!("执行 docker compose logs 失败: {e}"))?;
+            .map_err(|e| format!("failed to run docker compose logs: {e}"))?;
 
         if !output.status.success() {
             return Err(format!(
-                "docker compose logs 退出码: {:?}",
+                "docker compose logs exit code: {:?}",
                 output.status.code()
             ));
         }
@@ -268,9 +268,9 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
 
     // 读取 .env 文件
     let env_content =
-        std::fs::read_to_string(&env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?;
+        std::fs::read_to_string(&env_path).map_err(|e| format!("failed to read .env file: {e}"))?;
     let env_file = crate::engine::env_parser::EnvFile::parse(&env_content)
-        .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+        .map_err(|e| format!("failed to parse .env file: {e}"))?;
     let env_map = env_file.to_map();
 
     // 创建 VersionManifest 用于 env prefix 反查

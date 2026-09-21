@@ -239,6 +239,11 @@ async function retryLoadVersionMappings() {
 }
 
 // 错误信息格式化
+// 后端错误串已统一为英文，这里按词边界匹配分类：
+// 子串匹配会让 already 命中 read、HOST_PORT 命中 port，产生误分类。
+const hasWord = (text: string, word: string) =>
+  new RegExp(`\\b${word}\\b`, 'i').test(text);
+
 function formatErrorMessage(error: unknown): string {
   const errorMsg = normalizeError(error);
   
@@ -251,18 +256,18 @@ function formatErrorMessage(error: unknown): string {
     }
   }
   
-  if (errorMsg.includes('端口') || errorMsg.includes('port')) {
+  if (hasWord(errorMsg, 'port')) {
     return t('envConfig.error.portConflict', { error: errorMsg });
   }
   
-  if (errorMsg.includes('读取') || errorMsg.includes('read')) {
+  if (hasWord(errorMsg, 'read')) {
     return t('envConfig.error.readFailed');
   }
-  if (errorMsg.includes('写入') || errorMsg.includes('write')) {
+  if (hasWord(errorMsg, 'write')) {
     return t('envConfig.error.writeFailed');
   }
   
-  if (errorMsg.includes('解析') || errorMsg.includes('parse')) {
+  if (hasWord(errorMsg, 'parse')) {
     return t('envConfig.error.parseFailed');
   }
   

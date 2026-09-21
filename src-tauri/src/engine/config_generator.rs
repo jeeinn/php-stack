@@ -713,11 +713,11 @@ impl ConfigGenerator {
     pub fn generate_service_dirs(config: &EnvConfig, root: &Path) -> Result<(), String> {
         // Create top-level directories
         std::fs::create_dir_all(root.join("services"))
-            .map_err(|e| format!("创建 services/ 目录失败: {e}"))?;
+            .map_err(|e| format!("failed to create services/ dir: {e}"))?;
         std::fs::create_dir_all(root.join("data"))
-            .map_err(|e| format!("创建 data/ 目录失败: {e}"))?;
+            .map_err(|e| format!("failed to create data/ dir: {e}"))?;
         std::fs::create_dir_all(root.join("logs"))
-            .map_err(|e| format!("创建 logs/ 目录失败: {e}"))?;
+            .map_err(|e| format!("failed to create logs/ dir: {e}"))?;
 
         // Create manifest once for service_dir lookups
         let manifest = VersionManifest::new();
@@ -780,8 +780,9 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
 
                     // Copy Dockerfile from template (项目自研，不从镜像提取)
                     Self::copy_template_file(
@@ -809,12 +810,15 @@ impl ConfigGenerator {
 
                     // Create log directory
                     std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
-                        .map_err(|e| format!("创建 logs/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create logs/{service_dir_name}/ dir: {e}")
+                        })?;
                 }
                 ServiceType::MySQL => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
 
                     // Copy mysql.cnf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
                     Self::ensure_config_with_extract_fallback(
@@ -830,14 +834,19 @@ impl ConfigGenerator {
 
                     // Create data and log directories
                     std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
-                        .map_err(|e| format!("创建 data/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create data/{service_dir_name}/ dir: {e}")
+                        })?;
                     std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
-                        .map_err(|e| format!("创建 logs/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create logs/{service_dir_name}/ dir: {e}")
+                        })?;
                 }
                 ServiceType::Redis => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
 
                     // Copy redis.conf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
                     Self::ensure_config_with_extract_fallback(
@@ -853,17 +862,20 @@ impl ConfigGenerator {
 
                     // Create data directory
                     std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
-                        .map_err(|e| format!("创建 data/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create data/{service_dir_name}/ dir: {e}")
+                        })?;
                 }
                 ServiceType::Nginx => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
                     std::fs::create_dir_all(
                         root.join(format!("services/{service_dir_name}/conf.d")),
                     )
                     .map_err(|e| {
-                        format!("创建 services/{service_dir_name}/conf.d/ 目录失败: {e}")
+                        format!("failed to create services/{service_dir_name}/conf.d/ dir: {e}")
                     })?;
 
                     // Copy Dockerfile from template (项目自研，不从镜像提取)
@@ -892,7 +904,7 @@ impl ConfigGenerator {
 
                     // Create log directory
                     std::fs::create_dir_all(root.join("logs/nginx"))
-                        .map_err(|e| format!("创建 logs/nginx/ 目录失败: {e}"))?;
+                        .map_err(|e| format!("failed to create logs/nginx/ dir: {e}"))?;
                 }
             }
         }
@@ -926,7 +938,9 @@ impl ConfigGenerator {
         let backup_zip_path = project_root.join(&backup_zip_name);
 
         if backup_zip_path.exists() {
-            return Err(format!("备份文件已存在，请删除后重试: {backup_zip_name}"));
+            return Err(format!(
+                "backup file already exists, delete it and retry: {backup_zip_name}"
+            ));
         }
 
         Ok(BackupState::Ready {
@@ -1168,12 +1182,12 @@ impl ConfigGenerator {
         let env_path = project_root.join(".env");
         let env_file = Self::generate_env(config, None, project_root);
         std::fs::write(&env_path, env_file.format())
-            .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+            .map_err(|e| format!("failed to write .env file: {e}"))?;
 
         // Generate and write docker-compose.yml
         let compose = Self::generate_compose(config);
         std::fs::write(project_root.join("docker-compose.yml"), compose)
-            .map_err(|e| format!("写入 docker-compose.yml 失败: {e}"))?;
+            .map_err(|e| format!("failed to write docker-compose.yml: {e}"))?;
 
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
@@ -1194,7 +1208,7 @@ impl ConfigGenerator {
             let npmrc_content = format!("registry={npm_mirror}\n");
             let npmrc_path = workspace_path.join(".npmrc");
             std::fs::write(&npmrc_path, npmrc_content)
-                .map_err(|e| format!("写入 .npmrc 文件失败: {e}"))?;
+                .map_err(|e| format!("failed to write .npmrc file: {e}"))?;
         }
 
         Ok(backed_up_files)

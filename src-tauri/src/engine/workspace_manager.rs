@@ -30,10 +30,10 @@ impl WorkspaceManager {
         }
 
         let content = fs::read_to_string(&config_path)
-            .map_err(|e| format!("读取 workspace.json 失败: {e}"))?;
+            .map_err(|e| format!("failed to read workspace.json: {e}"))?;
 
-        let config: WorkspaceConfig =
-            serde_json::from_str(&content).map_err(|e| format!("解析 workspace.json 失败: {e}"))?;
+        let config: WorkspaceConfig = serde_json::from_str(&content)
+            .map_err(|e| format!("failed to parse workspace.json: {e}"))?;
 
         Ok(Some(config))
     }
@@ -46,10 +46,11 @@ impl WorkspaceManager {
             last_updated: Some(chrono::Local::now().to_rfc3339()),
         };
 
-        let json =
-            serde_json::to_string_pretty(&config).map_err(|e| format!("序列化配置失败: {e}"))?;
+        let json = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("failed to serialize config: {e}"))?;
 
-        fs::write(&config_path, json).map_err(|e| format!("写入 workspace.json 失败: {e}"))?;
+        fs::write(&config_path, json)
+            .map_err(|e| format!("failed to write workspace.json: {e}"))?;
 
         Ok(())
     }

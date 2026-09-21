@@ -51,7 +51,7 @@ pub fn get_mirror_status() -> Result<serde_json::Value, String> {
     let project_root = get_project_root()?;
     let env_path = project_root.join(".env");
     let status = UnifiedMirrorManager::get_current_status(&env_path)?;
-    serde_json::to_value(&status).map_err(|e| format!("序列化镜像源状态失败: {e}"))
+    serde_json::to_value(&status).map_err(|e| format!("failed to serialize mirror state: {e}"))
 }
 
 /// 获取当前匹配的预设名称
@@ -114,7 +114,7 @@ pub fn remove_user_mirror_category(category_id: String) -> Result<(), String> {
         "composer" => "https://packagist.org",
         "npm" => "https://registry.npmjs.org",
         "github_proxy" => "",
-        _ => return Err(format!("未知的镜像源类别: {category_id}")),
+        _ => return Err(format!("unknown mirror category: {category_id}")),
     };
 
     UnifiedMirrorManager::update_single(&category_id, default_value, &env_path)

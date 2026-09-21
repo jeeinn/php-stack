@@ -142,7 +142,7 @@ impl VersionManifest {
     /// 从 JSON 字符串解析清单（供单测与外部覆盖共用）
     pub fn from_json(json_data: &str) -> Result<Self, String> {
         let file: ManifestFile = serde_json::from_str(json_data)
-            .map_err(|e| format!("解析 version_manifest 失败: {e}"))?;
+            .map_err(|e| format!("failed to parse version_manifest: {e}"))?;
 
         let mut versions = HashMap::new();
         versions.insert(ServiceType::Php, file.php);

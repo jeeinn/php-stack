@@ -30,7 +30,7 @@ async fn test_list_all_running_containers() {
         .await
         .expect("列出运行中容器失败");
 
-    eprintln!("运行中容器数: {}", containers.len());
+    eprintln!("running container count: {}", containers.len());
     for c in &containers {
         eprintln!(
             "  - {} | image={} | state={} | ports={:?}",
@@ -50,7 +50,7 @@ async fn test_list_ps_containers() {
         .await
         .expect("列出 ps- 前缀容器失败");
 
-    eprintln!("ps- 前缀容器数: {}", containers.len());
+    eprintln!("ps- prefixed container count: {}", containers.len());
     for c in &containers {
         eprintln!("  - {} | image={} | state={}", c.name, c.image, c.state);
         assert!(

@@ -119,7 +119,7 @@ impl MirrorConfig {
         }
 
         let env_content =
-            fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?;
+            fs::read_to_string(env_path).map_err(|e| format!("failed to read .env file: {e}"))?;
 
         let env_map = Self::parse_env_file(&env_content);
 
@@ -185,7 +185,7 @@ impl MirrorConfig {
     pub fn save_to_env(&self) -> Result<(), String> {
         let env_path = Path::new(".env");
         let mut env_content = if env_path.exists() {
-            fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            fs::read_to_string(env_path).map_err(|e| format!("failed to read .env file: {e}"))?
         } else {
             String::new()
         };
@@ -208,7 +208,7 @@ impl MirrorConfig {
             env_content = Self::update_env_value(&env_content, "HTTPS_PROXY", proxy);
         }
 
-        fs::write(env_path, env_content).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+        fs::write(env_path, env_content).map_err(|e| format!("failed to write .env file: {e}"))?;
         app_log!(
             info,
             "engine::mirror_config",

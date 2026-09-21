@@ -34,7 +34,7 @@ pub fn init_app_data_dir(dir: PathBuf) {
 ///
 /// 仅用于 `init_app_data_dir` 尚未执行的场景（单元测试、setup 之前的日志）。
 fn legacy_app_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("获取程序路径失败: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("failed to get executable path: {e}"))?;
 
     if cfg!(debug_assertions) {
         // 开发模式：src-tauri 的父目录 = 项目根
@@ -43,11 +43,11 @@ fn legacy_app_dir() -> Result<PathBuf, String> {
             .and_then(|p| p.parent()) // src-tauri/
             .and_then(|p| p.parent()) // 项目根
             .map(|p| p.to_path_buf())
-            .ok_or_else(|| "无法获取项目根目录".to_string())
+            .ok_or_else(|| "failed to get project root".to_string())
     } else {
         exe.parent()
             .map(|p| p.to_path_buf())
-            .ok_or_else(|| "无法获取程序所在目录".to_string())
+            .ok_or_else(|| "failed to get executable directory".to_string())
     }
 }
 
@@ -126,7 +126,8 @@ pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
 ///
 /// 仅在用户明确点「重建」时调用；成功后后续 `resolve_workspace` 会命中该路径。
 pub fn recreate_configured_workspace() -> Result<PathBuf, String> {
-    let config = WorkspaceManager::load_workspace()?.ok_or_else(|| "尚未配置工作区".to_string())?;
+    let config = WorkspaceManager::load_workspace()?
+        .ok_or_else(|| "workspace is not configured yet".to_string())?;
     let path = PathBuf::from(&config.workspace_path);
     create_workspace_dir(&path)?;
     Ok(path)
@@ -137,7 +138,8 @@ pub fn create_workspace_dir(path: &std::path::Path) -> Result<(), String> {
     if path.exists() {
         return Ok(());
     }
-    std::fs::create_dir_all(path).map_err(|e| format!("无法创建工作区目录 {}: {e}", path.display()))
+    std::fs::create_dir_all(path)
+        .map_err(|e| format!("failed to create workspace dir {}: {e}", path.display()))
 }
 
 /// 工作区根目录（.env / docker-compose.yml / services/ 所在）。
@@ -291,7 +293,7 @@ mod tests {
 
         let err = create_workspace_dir(&bad).expect_err("不可能的路径应失败");
         assert!(
-            err.contains("无法创建工作区目录"),
+            err.contains("failed to create workspace dir"),
             "错误信息应说明创建失败: {err}"
         );
         assert!(!bad.exists());

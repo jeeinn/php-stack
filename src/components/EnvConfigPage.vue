@@ -29,7 +29,7 @@ const commonExtensions = [
   'imagick', 'exif', 'pcntl', 'sockets'
 ];
 
-const customExtInput = ref('');
+const customExtInput = ref<Record<number, string>>({}); // 为每个 PHP 服务维护独立的自定义扩展输入
 // 为每个 PHP 服务维护独立的扩展面板展开状态
 const phpExtensionsPanelState = ref<Record<number, boolean>>({});
 
@@ -409,8 +409,9 @@ function addPhpVersion() {
     host_port: 9000 + phpServices.value.length,
     extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'curl'],
   });
-  // 初始化新添加的 PHP 服务的扩展面板状态为关闭
+  // 初始化新添加的 PHP 服务的扩展面板状态与自定义扩展输入
   phpExtensionsPanelState.value[newIndex] = false;
+  customExtInput.value[newIndex] = '';
 }
 
 function removePhpVersion(index: number) {
@@ -418,6 +419,7 @@ function removePhpVersion(index: number) {
   phpServices.value.splice(index, 1);
   // 清理已删除服务的状态
   delete phpExtensionsPanelState.value[index];
+  delete customExtInput.value[index];
   // 重新索引后续服务的状态
   const newState: Record<number, boolean> = {};
   Object.keys(phpExtensionsPanelState.value).forEach(key => {
@@ -429,6 +431,16 @@ function removePhpVersion(index: number) {
     }
   });
   phpExtensionsPanelState.value = newState;
+  const newInputs: Record<number, string> = {};
+  Object.keys(customExtInput.value).forEach(key => {
+    const numKey = Number(key);
+    if (numKey > index) {
+      newInputs[numKey - 1] = customExtInput.value[numKey];
+    } else {
+      newInputs[numKey] = customExtInput.value[numKey];
+    }
+  });
+  customExtInput.value = newInputs;
 }
 
 // Add MySQL version
@@ -494,16 +506,16 @@ function toggleExtension(phpIndex: number, ext: string) {
 function syncCustomExtensions(phpIndex: number) {
   const service = phpServices.value[phpIndex];
   if (!service.extensions) service.extensions = [];
-  
+
   // 获取当前已选的预设扩展
   const presetExts = service.extensions.filter(e => commonExtensions.includes(e));
-  
-  // 解析用户输入的自定义扩展
-  const customExts = customExtInput.value
+
+  // 解析该服务自己的自定义扩展输入
+  const customExts = (customExtInput.value[phpIndex] || '')
     .split(/[,\s]+/)
     .map(s => s.trim())
     .filter(s => s.length > 0 && !commonExtensions.includes(s));
-  
+
   // 合并并去重
   service.extensions = [...new Set([...presetExts, ...customExts])];
 }
@@ -858,8 +870,8 @@ const goToMirrorSettings = () => {
                 <!-- 自定义扩展输入区 -->
                 <div class="pt-3 border-t border-slate-200 dark:border-slate-700/50">
                   <label class="block text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">{{ $t('envConfig.php.customExtensions') }}</label>
-                  <input 
-                    v-model="customExtInput" 
+                  <input
+                    v-model="customExtInput[idx]"
                     @blur="syncCustomExtensions(idx)"
                     :placeholder="$t('envConfig.php.customExtPlaceholder')"  
                     class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono outline-none focus:ring-2 focus:ring-emerald-500/50"

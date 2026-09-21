@@ -538,6 +538,9 @@
       "fileCount": "文件数量",
       "fileCountValue": "{count} 个文件",
       "serviceList": "服务列表",
+      "portConflicts": "端口冲突",
+      "portConflictsHint": "以下宿主机端口已被占用。恢复仍会写入原配置；启动环境前请改 .env 端口，或停止占用进程。建议端口仅供参考：",
+      "portConflictItem": "{service}：{port} → 建议 {suggested}",
       "warnings": "备份时的警告",
       "done": "✓ 预览完成",
       "next": "下一步：校验 →"

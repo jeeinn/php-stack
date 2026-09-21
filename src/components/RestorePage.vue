@@ -326,6 +326,22 @@ function formatTimestamp(ts: string): string {
                 </div>
               </div>
 
+              <div
+                v-if="preview.port_conflicts && preview.port_conflicts.length > 0"
+                data-testid="port-conflicts"
+                class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+              >
+                <div class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{{ $t('restore.preview.portConflicts') }}</div>
+                <p class="text-xs text-amber-600/90 dark:text-amber-300/90 mb-2">{{ $t('restore.preview.portConflictsHint') }}</p>
+                <div
+                  v-for="c in preview.port_conflicts"
+                  :key="`${c.service}-${c.port}`"
+                  class="text-xs font-mono text-amber-700 dark:text-amber-200"
+                >
+                  {{ $t('restore.preview.portConflictItem', { service: c.service, port: c.port, suggested: c.suggested_port }) }}
+                </div>
+              </div>
+
               <div v-if="preview.manifest.errors.length > 0" class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <div class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{{ $t('restore.preview.warnings') }}</div>
                 <div v-for="err in preview.manifest.errors" :key="err" class="text-xs text-amber-600 dark:text-amber-300">{{ err }}</div>

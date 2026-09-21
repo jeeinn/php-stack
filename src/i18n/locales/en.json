@@ -538,6 +538,9 @@
       "fileCount": "File Count",
       "fileCountValue": "{count} files",
       "serviceList": "Services",
+      "portConflicts": "Port Conflicts",
+      "portConflictsHint": "These host ports are already in use. Restore still writes the original config; change ports in .env or stop the occupying process before starting. Suggested ports are for reference only:",
+      "portConflictItem": "{service}: {port} → suggest {suggested}",
       "warnings": "Backup Warnings",
       "done": "✓ Preview Complete",
       "next": "Next: Verify →"

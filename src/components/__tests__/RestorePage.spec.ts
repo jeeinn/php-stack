@@ -19,6 +19,8 @@ vi.mock('@tauri-apps/api/core', () => ({
           files: { '.env': {}, 'docker-compose.yml': {} },
           errors: [],
         },
+        file_count: 2,
+        port_conflicts: [],
       }
     }
     if (command === 'verify_backup') {
@@ -108,6 +110,8 @@ const PREVIEW_PAYLOAD = {
     files: { '.env': {}, 'docker-compose.yml': {} },
     errors: [],
   },
+  file_count: 2,
+  port_conflicts: [],
 }
 
 /** 走完 select → preview → verify，停在第 4 步，可执行恢复 */

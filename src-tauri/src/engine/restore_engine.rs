@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::Read;
+use std::net::TcpListener;
 use std::path::Path;
 
 use super::backup_engine::BackupEngine;
@@ -10,6 +12,16 @@ use super::backup_manifest::{check_manifest_version, BackupManifest};
 pub struct RestorePreview {
     pub manifest: BackupManifest,
     pub file_count: usize,
+    /// 备份包中声明的宿主机端口与本机当前占用的冲突列表（提示改端口，不阻断恢复）
+    pub port_conflicts: Vec<PortConflict>,
+}
+
+/// 端口冲突：备份包要求的宿主机端口已被占用
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PortConflict {
+    pub service: String,
+    pub port: u16,
+    pub suggested_port: u16,
 }
 
 /// 恢复进度事件
@@ -75,6 +87,66 @@ fn validate_archive_entry_names<R: Read + std::io::Seek>(
     Ok(())
 }
 
+/// 检测宿主机端口是否可绑定（被 Docker / 其它进程占用则视为冲突）
+fn is_host_port_free(port: u16) -> bool {
+    TcpListener::bind(("0.0.0.0", port)).is_ok()
+}
+
+/// 从 start+1 起找一个未被 reserved 且可绑定的端口
+fn find_suggested_port<F>(start: u16, reserved: &HashSet<u16>, is_free: &F) -> u16
+where
+    F: Fn(u16) -> bool,
+{
+    let mut candidate = start.saturating_add(1).max(1);
+    for _ in 0..200 {
+        if !reserved.contains(&candidate) && is_free(candidate) {
+            return candidate;
+        }
+        candidate = candidate.wrapping_add(1).max(1);
+    }
+    start.saturating_add(1).max(1)
+}
+
+/// 读取 manifest.services 的宿主机端口，与本机占用比对；冲突时给出建议端口。
+///
+/// 仅作预览提示——恢复仍写入原配置；用户可在启动前手动改端口。
+fn detect_port_conflicts(manifest: &BackupManifest) -> Vec<PortConflict> {
+    detect_port_conflicts_with(manifest, is_host_port_free)
+}
+
+fn detect_port_conflicts_with<F>(manifest: &BackupManifest, is_free: F) -> Vec<PortConflict>
+where
+    F: Fn(u16) -> bool,
+{
+    let mut claimed: HashSet<u16> = HashSet::new();
+    let mut host_ports: Vec<(String, u16)> = Vec::new();
+
+    for svc in &manifest.services {
+        for &host_port in svc.ports.keys() {
+            host_ports.push((svc.name.clone(), host_port));
+            claimed.insert(host_port);
+        }
+    }
+
+    let mut conflicts = Vec::new();
+    let mut reserved = claimed;
+
+    for (service, port) in host_ports {
+        if is_free(port) {
+            continue;
+        }
+        let suggested = find_suggested_port(port, &reserved, &is_free);
+        reserved.insert(suggested);
+        conflicts.push(PortConflict {
+            service,
+            port,
+            suggested_port: suggested,
+        });
+    }
+
+    conflicts
+}
+
 impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
@@ -101,8 +173,9 @@ impl RestoreEngine {
             .count();
 
         Ok(RestorePreview {
-            manifest,
+            manifest: manifest.clone(),
             file_count,
+            port_conflicts: detect_port_conflicts(&manifest),
         })
     }
 
@@ -679,6 +752,63 @@ mod tests {
             "Should have 5 files (excluding manifest.json), got {}",
             preview.file_count
         );
+    }
+
+    /// Feature: restore-port-conflict, Property: 占用端口应检出并给出互不冲突的建议端口
+    #[test]
+    fn test_detect_port_conflicts_suggests_free_ports() {
+        let mut ports_mysql = HashMap::new();
+        ports_mysql.insert(3306, 3306);
+        let mut ports_redis = HashMap::new();
+        ports_redis.insert(6379, 6379);
+
+        let manifest = BackupManifest {
+            version: "1.0.0".to_string(),
+            timestamp: "t".to_string(),
+            app_version: "0.3.1".to_string(),
+            os_info: "test".to_string(),
+            services: vec![
+                ManifestService {
+                    name: "mysql".to_string(),
+                    image: "mysql:8".to_string(),
+                    version: "8".to_string(),
+                    ports: ports_mysql,
+                },
+                ManifestService {
+                    name: "redis".to_string(),
+                    image: "redis:7".to_string(),
+                    version: "7".to_string(),
+                    ports: ports_redis,
+                },
+            ],
+            options: BackupOptions {
+                include_projects: false,
+                project_patterns: Vec::new(),
+                include_logs: false,
+            },
+            files: HashMap::new(),
+            errors: Vec::new(),
+        };
+
+        // 3306/6379/3307 视为占用；建议应跳过这些并互不重复
+        let occupied: HashSet<u16> = [3306u16, 3307, 6379].into_iter().collect();
+        let conflicts = detect_port_conflicts_with(&manifest, |p| !occupied.contains(&p));
+
+        assert_eq!(conflicts.len(), 2, "两个占用端口都应检出: {conflicts:?}");
+        let mysql = conflicts.iter().find(|c| c.service == "mysql").unwrap();
+        let redis = conflicts.iter().find(|c| c.service == "redis").unwrap();
+        assert_eq!(mysql.port, 3306);
+        assert_eq!(mysql.suggested_port, 3308, "应跳过已占用的 3307");
+        assert_eq!(redis.port, 6379);
+        assert_eq!(redis.suggested_port, 6380);
+        assert_ne!(
+            mysql.suggested_port, redis.suggested_port,
+            "两条建议端口不能撞车"
+        );
+
+        // 全部空闲时无冲突
+        let none = detect_port_conflicts_with(&manifest, |_| true);
+        assert!(none.is_empty());
     }
 
     #[test]

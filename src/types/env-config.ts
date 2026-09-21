@@ -99,6 +99,8 @@ export interface PortConflict {
 export interface RestorePreview {
   manifest: BackupManifest;
   file_count: number;
+  /** 预览时检测到的宿主机端口冲突（提示改端口，不阻断恢复） */
+  port_conflicts: PortConflict[];
 }
 
 export interface BackupProgress {

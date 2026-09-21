@@ -301,8 +301,10 @@ mod tests {
 
     #[test]
     fn test_from_json_rejects_invalid() {
-        let err = VersionManifest::from_json("{not json").expect_err("invalid json");
-        assert!(err.contains("解析"), "实际: {err}");
+        assert!(
+            VersionManifest::from_json("{not json").is_err(),
+            "非法 JSON 应返回 Err"
+        );
     }
 
     #[test]

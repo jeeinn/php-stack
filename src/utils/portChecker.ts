@@ -58,7 +58,7 @@ export async function checkContainerPortConflicts(
       conflicts,
     };
   } catch (error) {
-    console.error('检查容器端口冲突失败:', error);
+    console.error('failed to check container port conflict:', error);
     throw error;
   }
 }

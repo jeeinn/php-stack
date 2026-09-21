@@ -108,7 +108,7 @@ impl MirrorConfig {
         let env_path = Path::new(".env");
 
         if !env_path.exists() {
-            log::warn!("⚠️ .env 文件不存在，使用默认配置");
+            log::warn!("⚠️ .env file not found, using default config");
             return Ok(Self::default());
         }
 
@@ -203,7 +203,7 @@ impl MirrorConfig {
         }
 
         fs::write(env_path, env_content).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
-        log::info!("✅ 容器内镜像源配置已保存到 .env");
+        log::info!("✅ in-container mirror config saved to .env");
         Ok(())
     }
 

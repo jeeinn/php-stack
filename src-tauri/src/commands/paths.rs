@@ -113,7 +113,7 @@ pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
         "配置的工作区 {} 不存在，等待用户确认重建或更换",
         config.workspace_path
     );
-    eprintln!("{reason}，已临时回退到默认目录");
+    eprintln!("{reason}, temporarily falling back to default dir");
     Ok(WorkspaceResolution {
         path: legacy_app_dir()?,
         fell_back: true,
@@ -160,7 +160,7 @@ fn migrate_files(from_dir: &std::path::Path, to_dir: &std::path::Path) -> Vec<St
     }
 
     if let Err(e) = std::fs::create_dir_all(to_dir) {
-        eprintln!("无法创建应用数据目录 {}: {e}", to_dir.display());
+        eprintln!("failed to create app data dir {}: {e}", to_dir.display());
         return Vec::new();
     }
 
@@ -175,7 +175,7 @@ fn migrate_files(from_dir: &std::path::Path, to_dir: &std::path::Path) -> Vec<St
 
         match std::fs::copy(&from, &to) {
             Ok(_) => migrated.push(name.to_string()),
-            Err(e) => eprintln!("迁移 {} 失败: {e}", from.display()),
+            Err(e) => eprintln!("failed to migrate {}: {e}", from.display()),
         }
     }
 

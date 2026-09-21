@@ -194,7 +194,7 @@ async function checkEnvFileExists() {
     const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
   } catch (e) {
-    console.error('[EnvConfig] 检查配置文件失败:', e);
+    console.error('[EnvConfig] failed to check config file:', e);
     hasEnvFile.value = false;
   }
 }
@@ -221,7 +221,7 @@ async function loadVersionMappings() {
     // 加载成功：清除上一次可能残留的错误态（用户修正清单后重试成功时）
     versionLoadError.value = false;
   } catch (e) {
-    console.error('[EnvConfig] 加载版本映射失败:', e);
+    console.error('[EnvConfig] failed to load version mapping:', e);
     // 不再回退到内置的硬编码列表：那份列表会与 services/version_manifest.json 脱节，
     // 导致用户自行添加的版本"看起来没生效"。改为展示可操作的错误态，
     // 引导用户检查清单文件后重试。
@@ -352,7 +352,7 @@ async function loadExistingConfig() {
       }];
     }
   } catch (e) {
-    console.error('[EnvConfig] 加载配置失败:', e);
+    console.error('[EnvConfig] failed to load config:', e);
     // Use defaults
     phpServices.value = [{
       service_type: 'PHP',
@@ -620,7 +620,7 @@ async function handleApply() {
       }
     }
   } catch (e) {
-    console.error('检查配置文件失败:', e);
+    console.error('failed to check config file:', e);
     // 如果检查失败，继续执行（不阻断用户操作）
   }
 
@@ -642,7 +642,7 @@ async function handleApply() {
       // （弹窗关闭回调里再处理下一步）
     }
   } catch (e) {
-    console.error('[EnvConfig] 检查镜像存在性失败:', e);
+    console.error('[EnvConfig] failed to check image existence:', e);
     showError(formatErrorMessage(e));
     applying.value = false;
   }
@@ -793,7 +793,7 @@ async function openNginxConfigDir(serviceDir?: string) {
     await openServiceConfig(targetDir);
     showToast(t('envConfig.toast.nginxConfigOpened', { dir: targetDir }), 'success');
   } catch (e) {
-    console.error('打开目录失败:', e);
+    console.error('failed to open directory:', e);
     const targetDir = serviceDir || (nginxServicesList.value.length > 0 ? nginxServicesList.value[0].name : 'nginx127');
     showToast(t('envConfig.toast.nginxConfigFailed', { dir: targetDir }), 'error');
   }

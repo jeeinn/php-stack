@@ -271,9 +271,9 @@ async function main() {
   const apply = args.includes('--apply');
   const offline = args.includes('--offline');
 
-  console.log(`# php-stack 版本同步报告\n`);
-  console.log(`生成时间: ${TODAY}`);
-  console.log(`数据源: docker-library/official-images + endoflife.date\n`);
+  console.log(`# php-stack version sync report\n`);
+  console.log(`Generated at: ${TODAY}`);
+  console.log(`Data sources: docker-library/official-images + endoflife.date\n`);
 
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const existingIdMap = buildExistingIdMap(manifest);
@@ -295,7 +295,7 @@ async function main() {
         throw new Error(`离线模式但 .workbuddy/sync-cache/ 下无 ${svc} 缓存`);
       }
     } catch (e) {
-      console.error(`⚠️  拉取 ${svc} 数据失败: ${e.message}`);
+      console.error(`⚠️  failed to fetch ${svc} data: ${e.message}`);
       // 离线但缓存为空时，reason 不能归到"网络失败"——用户需要的是"先联网跑一次"
       const offlineNoCache = offline && e.message.includes('离线模式');
       skipped.push({
@@ -378,11 +378,11 @@ async function main() {
   }
 
   // ─── Markdown 报告 ───
-  console.log(`## 1. 上游新增版本（manifest 缺失）\n`);
+  console.log(`## 1. New upstream versions (missing in manifest)\n`);
   if (newUpstream.length === 0) {
-    console.log(`无新增。\n`);
+    console.log(`None.\n`);
   } else {
-    console.log(`| 服务 | cycle | latest_tag | EOL | 建议 ID |`);
+    console.log(`| service | cycle | latest_tag | EOL | suggested ID |`);
     console.log(`|---|---|---|---|---|`);
     for (const r of newUpstream) {
       const id = cycleToId(r.svc, r.cycle);
@@ -392,11 +392,11 @@ async function main() {
     console.log('');
   }
 
-  console.log(`## 2. 现有条目 image_tag 落后\n`);
+  console.log(`## 2. Existing entries with outdated image_tag\n`);
   if (drift.length === 0) {
-    console.log(`无偏差。\n`);
+    console.log(`No drift.\n`);
   } else {
-    console.log(`| 服务 | cycle | 当前 ID | 当前 tag | 上游期望 |`);
+    console.log(`| service | cycle | current ID | current tag | upstream expected |`);
     console.log(`|---|---|---|---|---|`);
     for (const r of drift) {
       console.log(`| ${r.svc} | ${r.cycle} | \`${r.current_id}\` | \`${r.current_tag}\` | \`${r.expected_tag}\` |`);
@@ -404,11 +404,11 @@ async function main() {
     console.log('');
   }
 
-  console.log(`## 3. EOL 状态变化\n`);
+  console.log(`## 3. EOL status changes\n`);
   if (eolChanges.length === 0) {
-    console.log(`无变化。\n`);
+    console.log(`No changes.\n`);
   } else {
-    console.log(`| 服务 | ID | cycle | manifest.eol | upstream.eol |`);
+    console.log(`| service | ID | cycle | manifest.eol | upstream.eol |`);
     console.log(`|---|---|---|---|---|`);
     for (const r of eolChanges) {
       console.log(`| ${r.svc} | \`${r.id}\` | ${r.cycle} | ${r.manifest_eol} | ${r.upstream_eol} |`);
@@ -417,7 +417,7 @@ async function main() {
   }
 
   if (skipped.length > 0) {
-    console.log(`## ⚠️  跳过项\n`);
+    console.log(`## ⚠️  Skipped items\n`);
     for (const s of skipped) {
       console.log(`- ${s.svc}${s.cycle !== '-' ? ` ${s.cycle}` : ''}: ${s.reason}`);
     }
@@ -432,18 +432,18 @@ async function main() {
     (s) => s.reason.startsWith('网络/解析失败') || s.reason.startsWith('离线无缓存'),
   );
   if (apply && fetchFailures.length > 0) {
-    console.error(`\n💥 --apply 模式下 fetch 失败 ${fetchFailures.length} 项，禁止写入。`);
-    console.error(`   失败列表: ${fetchFailures.map((s) => s.svc).join(', ')}`);
-    console.error(`   请检查网络后重试，或使用 --offline 模式（需先有缓存）。`);
+    console.error(`\n💥 --apply mode: ${fetchFailures.length} fetch failure(s), write aborted.`);
+    console.error(`   Failed services: ${fetchFailures.map((s) => s.svc).join(', ')}`);
+    console.error(`   Check your network and retry, or use --offline mode (requires an existing cache).`);
   }
   if (checkOnly && fetchFailures.length > 0) {
-    console.error(`\n💥 --check 模式下 fetch 失败 ${fetchFailures.length} 项，无法判定同步状态。`);
-    console.error(`   失败列表: ${fetchFailures.map((s) => s.svc).join(', ')}`);
-    console.error(`   注意：拉取失败会让差异数为 0，若不阻断就会误判为"已同步"。`);
+    console.error(`\n💥 --check mode: ${fetchFailures.length} fetch failure(s), sync status cannot be determined.`);
+    console.error(`   Failed services: ${fetchFailures.map((s) => s.svc).join(', ')}`);
+    console.error(`   Note: fetch failures make the diff count 0; without blocking it would be misjudged as "in sync".`);
   }
 
   if (apply && newUpstream.length > 0) {
-    console.log(`## 📝 已写入 version_manifest.json\n`);
+    console.log(`## 📝 Written to version_manifest.json\n`);
     for (const r of newUpstream) {
       const id = cycleToId(r.svc, r.cycle);
       // service_dir：复用 cycle 内已有的；都没有则用 cycleToId 的结果
@@ -463,14 +463,14 @@ async function main() {
         ...(r.svc === 'nginx' && { default_port: 80, show_port: true }),
         eol: r.eol === true,
       };
-      console.log(`- 新增 \`${r.svc}.${id}\` (${r.latest_tag})`);
+      console.log(`- added \`${r.svc}.${id}\` (${r.latest_tag})`);
     }
     // 复用 manifest 已有的 _provenance.updated_at 字段，避免引入新字段造成 diff 噪音
     manifest._provenance.updated_at = TODAY;
     writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
     console.log('');
   } else if (hasDiff && !apply) {
-    console.log(`> 💡 应用差异：\`node scripts/sync-version-manifest.mjs --apply\`\n`);
+    console.log(`> 💡 Apply the diff: \`node scripts/sync-version-manifest.mjs --apply\`\n`);
   }
 
   const exitCode = exitCodeFor({ checkOnly, apply, hasDiff, fetchFailures });
@@ -487,7 +487,7 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   main().catch((e) => {
-    console.error('💥 脚本异常:', e.message);
+    console.error('💥 script error:', e.message);
     process.exit(2);
   });
 }

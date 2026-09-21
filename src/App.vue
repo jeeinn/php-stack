@@ -308,7 +308,7 @@ const checkEnvFileExists = async () => {
     const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
   } catch (e) {
-    console.error('[App] 检查配置文件失败:', e);
+    console.error('[App] failed to check config file:', e);
     hasEnvFile.value = false;
   }
 };

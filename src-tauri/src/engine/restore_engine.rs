@@ -58,6 +58,23 @@ fn is_safe_entry_name(name: &str) -> bool {
     true
 }
 
+/// 扫描 ZIP 全部条目名；任一非法则整体拒绝（写盘前 / 预览前均可调用）。
+fn validate_archive_entry_names<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+) -> Result<(), String> {
+    for i in 0..archive.len() {
+        let name = archive
+            .by_index(i)
+            .map_err(|e| format!("读取 ZIP 条目失败: {e}"))?
+            .name()
+            .to_string();
+        if !is_safe_entry_name(&name) {
+            return Err(format!("备份包包含非法路径条目，已拒绝恢复: {name}"));
+        }
+    }
+    Ok(())
+}
+
 impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
@@ -65,6 +82,9 @@ impl RestoreEngine {
         let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
         let mut archive =
             zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+
+        // 预览阶段即做 zip-slip 扫描，恶意包不必等到执行恢复才暴露
+        validate_archive_entry_names(&mut archive)?;
 
         // Read manifest.json
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
@@ -92,6 +112,8 @@ impl RestoreEngine {
         let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
         let mut archive =
             zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+
+        validate_archive_entry_names(&mut archive)?;
 
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
 
@@ -129,16 +151,7 @@ impl RestoreEngine {
             zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
 
         // Step 0: 安全校验——拒绝包含路径遍历条目的备份包，在任何写盘操作之前拦截
-        for i in 0..archive.len() {
-            let name = archive
-                .by_index(i)
-                .map_err(|e| format!("读取 ZIP 条目失败: {e}"))?
-                .name()
-                .to_string();
-            if !is_safe_entry_name(&name) {
-                return Err(format!("备份包包含非法路径条目，已拒绝恢复: {name}"));
-            }
-        }
+        validate_archive_entry_names(&mut archive)?;
 
         // Step 1: Read manifest
         Self::emit_progress(app_handle, "解析备份包...", 5);
@@ -430,6 +443,50 @@ mod tests {
         // 逃逸目标（restore_dir 的上级）不应出现被写入的文件
         let escaped = tmp_dir.path().join("escaped.txt");
         assert!(!escaped.exists(), "逃逸文件不应被写入磁盘");
+    }
+
+    /// Feature: restore-security, Property: 预览阶段也必须拒绝 zip-slip（不必等到执行恢复）
+    #[test]
+    fn test_preview_rejects_zip_slip() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let malicious_zip = tmp_dir.path().join("malicious-preview.zip");
+        let file = fs::File::create(&malicious_zip).expect("创建恶意 ZIP 失败");
+        let mut zip = zip::ZipWriter::new(file);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("manifest.json", zip_options).unwrap();
+        zip.write_all(br#"{"version":"1.0.0","timestamp":"t","services":[]}"#).unwrap();
+        zip.start_file("../../escaped.txt", zip_options).unwrap();
+        zip.write_all(b"pwned").unwrap();
+        zip.finish().unwrap();
+
+        let err = RestoreEngine::preview(malicious_zip.to_str().unwrap())
+            .expect_err("预览必须拒绝含路径遍历条目的包");
+        assert!(
+            err.contains("../../escaped.txt"),
+            "预览错误应指出非法条目，实际: {err}"
+        );
+    }
+
+    /// Feature: restore-security, Property: 校验阶段也必须拒绝 zip-slip
+    #[test]
+    fn test_verify_rejects_zip_slip() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let malicious_zip = tmp_dir.path().join("malicious-verify.zip");
+        let file = fs::File::create(&malicious_zip).expect("创建恶意 ZIP 失败");
+        let mut zip = zip::ZipWriter::new(file);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("../../escaped.txt", zip_options).unwrap();
+        zip.write_all(b"pwned").unwrap();
+        zip.finish().unwrap();
+
+        let err = RestoreEngine::verify_integrity(malicious_zip.to_str().unwrap())
+            .expect_err("校验必须拒绝含路径遍历条目的包");
+        assert!(
+            err.contains("../../escaped.txt"),
+            "校验错误应指出非法条目，实际: {err}"
+        );
     }
 
     /// Helper: create a test backup ZIP with manifest and some files.

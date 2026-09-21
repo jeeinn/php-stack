@@ -126,7 +126,7 @@
 
 `mirror_manager.rs`（379 行，预设+测试）、`mirror_config.rs`（342 行，标注"向后兼容"）、`mirror_config_manager.rs`（325 行，用户配置）三者共存，"向后兼容"模块中仍有活跃逻辑。建议做一次收束：明确一个对外门面（`mirror_config_manager`），把 `mirror_config.rs` 的兼容层真正冻结或删除。非紧急，但拖越久越难拆。
 
-### A5.【P2】应用数据文件清单没有单一事实来源 `[未开始]`
+### A5.【P2】应用数据文件清单没有单一事实来源 `[已完成]`
 
 当前磁盘写入物散布：项目根（.env、docker-compose.yml、services/、data/、logs/、.user_mirror_config.json、.user_version_overrides.json）、exe 目录（workspace.json、php-stack.log）。建议在 `doc/architecture/ARCHITECTURE.md` 增加一张"应用写入了什么、在哪、谁负责"的表，并作为 A1 重构的验收依据。
 
@@ -169,7 +169,7 @@
 
 **修复**：复制按钮复制 UI 日志原文；面板加"清空"与"导出文件"两个动作（导出走后端文件日志）；文件日志本身配合 R6 做轮转。
 
-### U5.【P2】i18n 收尾 `[部分完成]`
+### U5.【P2】i18n 收尾 `[已完成]`
 
 - 残留硬编码中文运行时文案：`useConfirmDialog.ts:25-27`（默认"确认操作/确认/取消"，英文界面下弹中文按钮）、`App.vue:465`（侧边栏折叠按钮 title）、`App.vue:639`（复制日志 title）；
 - 后端用户可见日志（ui_log!）全部是中文 + emoji（如 env_config.rs 全文），英文界面下日志面板是中文。AGENTS.md 宣称"后端日志英文化"并未达成。
@@ -177,15 +177,15 @@
 
 **实现偏差（2026-09-21）**：只完成了 `App.vue` 复制日志按钮的硬编码 title（U4 提交中顺带改掉，新增 `dashboard.log.copyTip`）。`useConfirmDialog.ts` 的默认按钮文案与侧边栏折叠 title 未动，后端日志 i18n 按报告建议**明确不做**（违背"简单"原则）——这一策略尚未写进 AGENTS.md，建议后续补。
 
-### U6.【P2】WorkspaceInitDialog 不适配亮色主题 `[未开始]`
+### U6.【P2】WorkspaceInitDialog 不适配亮色主题 `[已完成]`
 
 对话框写死暗色（`bg-slate-900 border-slate-700`，无 `dark:` 前缀），亮色模式下是全应用唯一的突兀深色弹窗；确认后 `window.location.reload()` 整页刷新（WorkspaceInitDialog.vue:44），丢失所有未保存状态。建议：补 `dark:` 适配；reload 改为事件通知各页面重新加载工作区信息。
 
-### U7.【P2】EnvConfigPage 内置的前端版本 fallback 列表会烂掉 `[未开始]`
+### U7.【P2】EnvConfigPage 内置的前端版本 fallback 列表会烂掉 `[已完成]`
 
 `EnvConfigPage.vue:179-203` 在后端加载失败时使用一份硬编码版本清单，与 `services/version_manifest.json` 双源维护。建议失败时显示明确错误 + 重试按钮，而不是降级到一份必然过期的静态数据（备份一段"应急可用"的体验，代价是永久的双维护）。
 
-### U8.【P2】清理调试输出与提高键盘可达性 `[未开始]`
+### U8.【P2】清理调试输出与提高键盘可达性 `[已完成]`
 
 - 22 处 `console.log`（主要集中在 EnvConfigPage 的加载流程）清理或降级为统一 debug 开关；
 - 侧边栏导航与日志按钮是 `div @click`（App.vue:417-453），无 Tab 焦点、无 Enter 触发。桌面应用要求不高，但改成 `<button>` 零成本，建议顺手做。
@@ -196,13 +196,13 @@
 
 > 原则：只做"到时候能扩展"的准备，不做"提前建好的抽象"。
 
-### E1.【P1】版本清单嵌入二进制，新增版本必须重新发版 `[未开始]`
+### E1.【P1】版本清单嵌入二进制，新增版本必须重新发版 `[已完成]`
 
 `version_manifest.rs:44` 用 `include_str!` 把 `services/version_manifest.json` 编译进二进制。PHP 8.5 / MySQL 9.x 发布时，用户必须升级整个应用才能选新版本。而项目已有的 `.user_version_overrides.json` 机制只覆盖"改镜像 tag"，覆盖不了"新增条目"。
 
 **建议**：启动时按 `app_data_dir/services/version_manifest.json`（若存在）→ 内置 fallback 的顺序加载，用户可下载新清单文件覆盖。**不**要做远程自动拉取（保持简单，避免新增网络依赖面）。约 30 行 + 文档。
 
-### E2.【P2】新增服务类型（如 PostgreSQL）的改动点清单 `[未开始]`
+### E2.【P2】新增服务类型（如 PostgreSQL）的改动点清单 `[部分完成]`
 
 当前需要同步修改：Rust 侧 `config_generator::ServiceType`、`version_manifest` 的 key 匹配、`load_existing_config` 解析分支、compose 模板；前端 `ServiceType` 联合类型、EnvConfigPage 四组几乎相同的服务数组与增删函数。建议：① 把 EnvConfigPage 中 PHP/MySQL/Redis/Nginx 四组 `ref` + `add/remove` 函数收敛为一份配置驱动的通用实现（当前就是复制粘贴的，约省 200 行）；② 在 `docs/architecture/EXTENSION_GUIDE.md` 补一份"新增服务类型 checklist"。
 
@@ -210,11 +210,11 @@
 
 AGENTS.md 已列为低优先级，建议维持，但给出实现边界以防过度设计：mysqldump 通过 bollard exec 在容器内执行、dump 到挂载目录（复用现有 volume 映射），**不要**在宿主机找 mysql client；恢复阶段只把 SQL 放入 `database/` 并提示用户确认后执行导入（与现有"恢复预览→确认"两段式一致）。进度事件复用 `backup-progress` 通道。
 
-### E4.【P2】备份包版本兼容性检查缺失 `[未开始]`
+### E4.【P2】备份包版本兼容性检查缺失 `[已完成]`
 
 manifest 有 `version: "1.0.0"` 字段（backup_manifest.rs），但 `RestoreEngine` 不校验它。未来格式升级后，旧版 app 打开新备份包会静默丢字段。**建议**：restore 预览时检查 `manifest.version` 是否在支持区间，不在则明确报"备份包版本过新/过旧，请升级应用"。约 10 行，现在做成本最低。
 
-### E5.【P1】自动更新是面向用户的最大缺口 `[未开始]`
+### E5.【P1】自动更新是面向用户的最大缺口 `[部分完成]`
 
 `tauri.conf.json` 无 updater 配置，release.yml 永远 `prerelease: true`，用户发现新版本的唯一方式是手动查看仓库。对一个分发给开发者的桌面工具，建议引入 `tauri-plugin-updater` + 签名密钥（GitHub Releases 作为源）。这是本报告唯一建议新增的重型功能，因为它直接决定用户能否留在新版本上。若暂不做，至少把 release 的 prerelease 改为正式版 + 在应用"关于"里放检查更新链接（shell open 即可，一天内完成）。
 
@@ -248,7 +248,7 @@ README 底部链接 `[MIT](LICENSE)`，但文件不存在。要么补 MIT 全文
 
 无 eslint/prettier。建议加 `eslint` + `eslint-plugin-vue`（flat config）+ prettier，规则从宽（不做风格洁癖），仅拦截未用变量、明显的 hook 误用。Rust 侧 clippy 已清理过（f2c3 提交），纳入 CI 即可维持。
 
-### Q6.【P2】CSP 为 null `[未开始]`
+### Q6.【P2】CSP 为 null `[已完成]`
 
 `tauri.conf.json:26`。桌面应用风险低于 Web，但前端只加载本地资源，配一条最小 CSP（`default-src 'self'` + style 允许 inline）成本半小时，堵住供应链类注入的口子。
 
@@ -294,12 +294,12 @@ README 底部链接 `[MIT](LICENSE)`，但文件不存在。要么补 MIT 全文
 
 | # | 事项 | 对应条目 | 状态 |
 |---|---|---|---|
-| 1 | 自动更新（tauri-plugin-updater 或最低配"检查更新"） | E5 | ⬜ 未开始 |
-| 2 | 版本清单外部覆盖 | E1 | ⬜ 未开始 |
-| 3 | manifest 版本兼容检查 | E4 | ⬜ 未开始 |
+| 1 | 自动更新（tauri-plugin-updater 或最低配"检查更新"） | E5 | ✅ 最低配已完成；完整 updater 待决策 |
+| 2 | 版本清单外部覆盖 | E1 | ✅ 已完成 |
+| 3 | manifest 版本兼容检查 | E4 | ✅ 已完成 |
 | 4 | .env 解析去魔数切片 | A2 | ✅ 已完成 |
-| 5 | 前端 api 层 + EnvConfigPage 服务面板配置化 | A3、E2 | ✅ A3 已完成；E2 未开始 |
-| 6 | i18n 收尾 + 主题适配收尾 + lint 基建 + CSP | U5、U6、Q5、Q6 | ⬜ 未开始（U5 部分完成） |
+| 5 | 前端 api 层 + EnvConfigPage 服务面板配置化 | A3、E2 | ✅ A3 已完成；E2 checklist 已补，面板收敛未做 |
+| 6 | i18n 收尾 + 主题适配收尾 + lint 基建 + CSP | U5、U6、Q5、Q6 | ✅ U5/U6/CSP 完成；Q5 lint 待决策 |
 | 7 | mysqldump / SQL 导入（维持低优先级） | E3 | ⬜ 未开始 |
 
 ### 验收标准（每批公共）

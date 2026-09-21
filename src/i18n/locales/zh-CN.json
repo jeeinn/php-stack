@@ -329,6 +329,11 @@
       "auto": "自动",
       "light": "明亮",
       "dark": "暗黑"
+    },
+    "about": {
+      "title": "关于 PHP-Stack",
+      "hint": "自动更新尚未接入；可打开 GitHub Releases 查看是否有新版本。",
+      "checkUpdate": "检查更新"
     }
   },
   "mirror": {

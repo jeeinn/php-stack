@@ -329,6 +329,11 @@
       "auto": "Auto",
       "light": "Light",
       "dark": "Dark"
+    },
+    "about": {
+      "title": "About PHP-Stack",
+      "hint": "In-app auto-update is not wired yet. Open GitHub Releases to see if a newer build is available.",
+      "checkUpdate": "Check for updates"
     }
   },
   "mirror": {

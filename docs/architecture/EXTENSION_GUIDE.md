@@ -192,4 +192,30 @@ const result = await invoke('my_new_command', { param: 'test' });
 
 ---
 
+## 4. 新增服务类型（如 PostgreSQL）Checklist
+
+当前服务类型写死为 PHP / MySQL / Redis / Nginx。新增一种类型需要同步改下列位置（按顺序勾选）：
+
+### 后端
+- [ ] `engine/config_generator.rs` — `ServiceType` 枚举 + compose / `.env` 生成分支
+- [ ] `engine/version_manifest.rs` — `ServiceType` + `ManifestFile` 字段 + `from_json` 插入
+- [ ] `services/version_manifest.json` — 新服务块与至少 1 个版本条目
+- [ ] `services/<newtype>/` — Dockerfile / 配置模板（如有）
+- [ ] `commands/env_config.rs` — `parse_env_to_services` 已由 manifest 驱动，一般只需补 `collect_services_from_manifest` 调用
+- [ ] 集成测试：配置生成、备份 manifest 中的服务端口
+
+### 前端
+- [ ] `src/types/env-config.ts` — `ServiceType` / `ServiceTypeLower` / `VersionMappings`
+- [ ] `EnvConfigPage.vue` — 服务列表 `ref`、增删、模板面板、版本下拉（目前四组结构相近，长期目标是配置驱动收敛，见 IMPROVEMENT_REPORT E2）
+- [ ] `SoftwareSettings.vue` — `serviceLabels` 与 tab
+- [ ] i18n：`envConfig.<service>.*`、`software.*` 中英 key
+
+### 文档
+- [ ] 更新本文件与 `ARCHITECTURE.md` 服务列表
+- [ ] `AGENTS.md` 待完善项（如有）
+
+> **不做**：远程自动拉取服务定义、通用插件系统（违背「简单」原则）。
+
+---
+
 ↩ [返回主架构文档](./ARCHITECTURE.md)

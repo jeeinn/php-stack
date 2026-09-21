@@ -64,21 +64,69 @@ pub fn log_file() -> Result<PathBuf, String> {
     Ok(app_data_dir()?.join("php-stack.log"))
 }
 
-/// 工作区根目录（.env / docker-compose.yml / services/ 所在）。
+/// 工作区解析结果。
 ///
-/// 优先读 workspace.json 中已配置的路径；未配置或路径失效时回退到
-/// 可执行文件附近的目录。
-pub fn project_root() -> Result<PathBuf, String> {
-    // 1. 尝试从 workspace.json 读取配置
-    if let Some(workspace) = WorkspaceManager::load_workspace()? {
-        let path = PathBuf::from(&workspace.workspace_path);
-        if path.exists() {
-            return Ok(path);
-        }
+/// `path` 是**实际生效**的落点；`fell_back` 为真表示配置的工作区用不了、
+/// 数据正写到默认位置——这必须让上层和用户知道，不能静默发生。
+#[derive(Debug, Clone)]
+pub struct WorkspaceResolution {
+    pub path: PathBuf,
+    /// 配置的工作区不可用、已回退到默认目录
+    pub fell_back: bool,
+    /// 回退原因（`fell_back` 为真时必有值）
+    pub reason: Option<String>,
+}
+
+/// 解析工作区根目录（.env / docker-compose.yml / services/ 所在）。
+///
+/// 优先级：
+/// 1. workspace.json 已配置的路径：存在则直接用；**不存在则先尝试创建**——
+///    用户明确设定过工作区，写回默认位置会让他的配置看起来"没生效"；
+/// 2. 创建失败才回退到默认目录，并把原因记进 `reason`；
+/// 3. 从未配置过：用默认位置，这不算回退。
+pub fn resolve_workspace() -> Result<WorkspaceResolution, String> {
+    let Some(config) = WorkspaceManager::load_workspace()? else {
+        return Ok(WorkspaceResolution {
+            path: legacy_app_dir()?,
+            fell_back: false,
+            reason: None,
+        });
+    };
+
+    let path = PathBuf::from(&config.workspace_path);
+
+    if path.exists() {
+        return Ok(WorkspaceResolution {
+            path,
+            fell_back: false,
+            reason: None,
+        });
     }
 
-    // 2. 未配置或路径无效：开发模式用项目根，生产模式用 exe 同级
-    legacy_app_dir()
+    // 目录不见了（盘符卸载 / 目录被删 / 路径写错）：先试着建回来
+    match std::fs::create_dir_all(&path) {
+        Ok(()) => Ok(WorkspaceResolution {
+            path,
+            fell_back: false,
+            reason: None,
+        }),
+        Err(e) => {
+            let reason = format!("配置的工作区 {} 不可用（{}）", config.workspace_path, e);
+            eprintln!("{reason}，已回退到默认目录");
+            Ok(WorkspaceResolution {
+                path: legacy_app_dir()?,
+                fell_back: true,
+                reason: Some(reason),
+            })
+        }
+    }
+}
+
+/// 工作区根目录（.env / docker-compose.yml / services/ 所在）。
+///
+/// 只取路径；需要知道是否发生回退时用 [`resolve_workspace`]。
+pub fn project_root() -> Result<PathBuf, String> {
+    Ok(resolve_workspace()?.path)
 }
 
 /// 需要随 app_data_dir 迁移的用户级配置文件名。
@@ -196,5 +244,12 @@ mod tests {
         let target = fresh_dir("target3");
         assert!(migrate_files(&legacy, &target).is_empty());
         assert!(!Path::new(&target.join("workspace.json")).exists());
+    }
+
+    #[test]
+    fn test_project_root_never_falls_back_silently_when_unconfigured() {
+        // 未配置工作区时用默认目录，属于预期行为，不算回退
+        let root = project_root().expect("project_root 不应失败");
+        assert!(root.is_absolute(), "默认目录应为绝对路径: {root:?}");
     }
 }

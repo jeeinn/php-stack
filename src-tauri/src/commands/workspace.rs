@@ -2,7 +2,7 @@ use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverr
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::engine::workspace_manager::WorkspaceManager;
 
-use super::{get_log_file, get_project_root};
+use super::{get_log_file, get_project_root, paths};
 
 /// 打开指定服务的配置文件目录
 #[tauri::command]
@@ -44,11 +44,41 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 工作区信息。
+///
+/// `workspace_path` 是用户配置的值，`effective_path` 是**数据真正落到的地方**。
+/// 两者不一致（`using_fallback`）时必须让用户看到，否则配置看起来"没生效"。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WorkspaceInfo {
+    /// 用户配置的工作区路径
+    pub workspace_path: String,
+    /// 实际生效的数据落点
+    pub effective_path: String,
+    /// 配置路径不可用时为 true，数据正写到 effective_path
+    pub using_fallback: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_updated: Option<String>,
+}
+
 /// 获取当前工作目录信息
+///
+/// 未配置过工作区时返回 `None`，前端据此弹出初始化对话框。
 #[tauri::command]
-pub fn get_workspace_info(
-) -> Result<Option<crate::engine::workspace_manager::WorkspaceConfig>, String> {
-    WorkspaceManager::load_workspace()
+pub fn get_workspace_info() -> Result<Option<WorkspaceInfo>, String> {
+    let Some(config) = WorkspaceManager::load_workspace()? else {
+        return Ok(None);
+    };
+
+    let resolved = paths::resolve_workspace()?;
+    Ok(Some(WorkspaceInfo {
+        workspace_path: config.workspace_path,
+        effective_path: resolved.path.to_string_lossy().to_string(),
+        using_fallback: resolved.fell_back,
+        fallback_reason: resolved.reason,
+        last_updated: config.last_updated,
+    }))
 }
 
 /// 设置工作目录路径

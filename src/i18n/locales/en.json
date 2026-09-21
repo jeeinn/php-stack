@@ -594,10 +594,11 @@
     "error": {
       "invalidPath": "Please select a valid directory as workspace"
     },
-    "status": {
-      "loading": "Loading...",
-      "notConfigured": "Not configured",
-      "loadFailed": "Load failed"
-    }
+  "status": {
+    "loading": "Loading...",
+    "notConfigured": "Not configured",
+    "loadFailed": "Load failed",
+    "fallback": "Configured workspace is unavailable; data is written to {effective}. {reason}"
+  }
   }
 }

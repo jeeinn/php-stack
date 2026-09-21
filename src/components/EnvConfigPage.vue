@@ -153,16 +153,29 @@ onMounted(async () => {
   await loadExistingConfig();
 });
 
+/// 工作区回退提示：配置的工作区不可用，数据正写到别处。
+/// 不为空时在 UI 上红字告警——此前是静默回退，用户以为配置生效了。
+const workspaceFallback = ref('');
+
 async function loadWorkspaceInfo() {
   try {
     const info = await invoke<any>('get_workspace_info');
     if (info) {
       workspacePath.value = info.workspace_path;
+      // 后端报告：配置路径用不了，实际写入的是 effective_path
+      workspaceFallback.value = info.using_fallback
+        ? t('workspace.status.fallback', {
+            effective: info.effective_path,
+            reason: info.fallback_reason || '',
+          })
+        : '';
     } else {
       workspacePath.value = t('workspace.status.notConfigured');
+      workspaceFallback.value = '';
     }
   } catch (e) {
     workspacePath.value = t('workspace.status.loadFailed');
+    workspaceFallback.value = '';
   }
 }
 
@@ -1129,6 +1142,12 @@ const goToMirrorSettings = () => {
               readonly
               class="w-full bg-slate-100 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 cursor-not-allowed"
             />
+            <p
+              v-if="workspaceFallback"
+              class="mt-1.5 text-xs text-amber-600 dark:text-amber-400 leading-relaxed"
+            >
+              ⚠️ {{ workspaceFallback }}
+            </p>
           </div>
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.sourceDir') }}</label>

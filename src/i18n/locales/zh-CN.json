@@ -594,10 +594,11 @@
     "error": {
       "invalidPath": "请选择一个有效的目录作为工作区"
     },
-    "status": {
-      "loading": "加载中...",
-      "notConfigured": "未配置",
-      "loadFailed": "获取失败"
-    }
+  "status": {
+    "loading": "加载中...",
+    "notConfigured": "未配置",
+    "loadFailed": "获取失败",
+    "fallback": "配置的工作区不可用，数据实际写入 {effective}。{reason}"
+  }
   }
 }

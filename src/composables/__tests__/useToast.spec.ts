@@ -32,4 +32,15 @@ describe('useToast', () => {
     clearLogs()
     expect(getLogs().value.length).toBe(0)
   })
+
+  it('caps UI logs at UI_LOG_LIMIT and drops the oldest', async () => {
+    const { UI_LOG_LIMIT, clearLogs: clear, addLog: push, getLogs: logs } = await import('../useToast')
+    clear()
+    for (let i = 0; i < UI_LOG_LIMIT + 5; i++) {
+      push(`line-${i}`)
+    }
+    expect(logs().value.length).toBe(UI_LOG_LIMIT)
+    expect(logs().value[0]).toContain('line-5')
+    expect(logs().value[logs().value.length - 1]).toContain(`line-${UI_LOG_LIMIT + 4}`)
+  })
 })

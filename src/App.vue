@@ -13,8 +13,9 @@ import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import WorkspaceMissingDialog from './components/WorkspaceMissingDialog.vue';
-import { getLogs, addLog, clearLogs, showToast } from './composables/useToast';
+import { getLogs, addLog, clearLogs, showToast, UI_LOG_LIMIT } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
+import { WORKSPACE_CHANGED_EVENT } from './utils/workspaceEvents';
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
 import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
@@ -419,11 +420,20 @@ onMounted(async () => {
     const msg = event.payload as string;
     addLog(msg);
   });
+
+  // 工作区初始化/切换后刷新，不再整页 reload
+  window.addEventListener(WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
 });
+
+async function onWorkspaceChanged() {
+  await loadWorkspaceFallbackBanner();
+  await checkEnvFileExists();
+}
 
 onUnmounted(() => {
   stopPolling();
   if (scrollTimeout) clearTimeout(scrollTimeout);
+  window.removeEventListener(WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
 });
 
 // 监听日志变化，自动滚动到底部（用户未手动滚动时）
@@ -469,7 +479,7 @@ const scrollToBottom = async () => {
 };
 
 // 复制面板里当前可见的日志（此前复制的是后端文件日志全文，
-// 与界面看到的内容对不上——面板只保留最近 50 条）
+// 与界面看到的内容对不上——面板只保留最近 UI_LOG_LIMIT 条）
 async function copyLogs() {
   if (logs.value.length === 0) {
     showToast(t('dashboard.log.empty'), 'warning');
@@ -568,7 +578,7 @@ async function exportLogs() {
         <button 
           @click="sidebarCollapsed = !sidebarCollapsed"
           class="w-full py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          :title="sidebarCollapsed ? '展开侧边栏' : '收缩侧边栏'"
+          :title="sidebarCollapsed ? $t('sidebar.expand') : $t('sidebar.collapse')"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
@@ -811,6 +821,9 @@ async function exportLogs() {
             <div v-if="logs.length === 0" class="text-slate-500 dark:text-slate-600 italic">{{ $t('dashboard.log.empty') }}</div>
           </div>
         </transition>
+        <p v-if="showLogs" class="mt-1.5 text-[10px] sm:text-xs text-slate-500 dark:text-slate-500">
+          {{ $t('dashboard.log.panelHint', { limit: UI_LOG_LIMIT }) }}
+        </p>
       </div>
     </div>
 

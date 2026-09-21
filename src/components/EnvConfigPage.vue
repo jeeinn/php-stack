@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
@@ -9,6 +9,7 @@ import { showConfirm } from '../composables/useConfirmDialog';
 import CustomSelect from './CustomSelect.vue';
 import VersionHelpModal from './VersionHelpModal.vue';
 import ImagePullConfirmModal from './ImagePullConfirmModal.vue';
+import { WORKSPACE_CHANGED_EVENT } from '../utils/workspaceEvents';
 
 const { t } = useI18n();
 
@@ -153,6 +154,11 @@ onMounted(async () => {
   await loadVersionMappings();
   await checkEnvFileExists();
   await loadExistingConfig();
+  window.addEventListener(WORKSPACE_CHANGED_EVENT, loadWorkspaceInfo);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(WORKSPACE_CHANGED_EVENT, loadWorkspaceInfo);
 });
 
 /// 工作区路径展示（回退告警已提升为 App 全局横幅，此处只显示配置值）

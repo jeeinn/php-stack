@@ -26,7 +26,9 @@
     "dashboard": "环境管理",
     "envConfig": "环境配置",
     "settings": "其他设置",
-    "migration": "环境迁移"
+    "migration": "环境迁移",
+    "expand": "展开侧边栏",
+    "collapse": "收缩侧边栏"
   },
   "dashboard": {
     "title": "运行状态",
@@ -75,15 +77,16 @@
     "log": {
   "title": "实时日志",
   "copy": "复制",
-  "copyTip": "复制面板中显示的日志（保留最近 50 条）",
+  "copyTip": "复制面板中显示的日志（保留最近 200 条）",
   "clear": "清空",
   "clearTip": "清空面板中的日志显示",
   "export": "导出",
-  "exportTip": "导出完整文件日志到指定位置",
+  "exportTip": "导出完整文件日志（含轮转历史，不限面板条数）",
   "cleared": "日志面板已清空",
   "exported": "日志已导出到 {path}",
   "exportFailed": "导出失败: {error}",
   "bottom": "⬇️ 底部",
+  "panelHint": "面板仅显示最近 {limit} 条；完整排查请点「导出」",
       "show": "显示",
       "hide": "隐藏",
       "empty": "等待操作中...",

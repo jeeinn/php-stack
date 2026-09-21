@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import i18n from '../i18n';
 
 export interface ConfirmOptions {
   title?: string;
@@ -19,10 +20,10 @@ interface ConfirmState {
 const state = ref<ConfirmState>({
   show: false,
   options: {
-    title: '确认操作',
+    title: '',
     message: '',
-    confirmText: '确认',
-    cancelText: '取消',
+    confirmText: '',
+    cancelText: '',
     type: 'warning'
   },
   checkboxValue: false
@@ -30,14 +31,18 @@ const state = ref<ConfirmState>({
 
 let resolveFn: ((value: boolean | { confirmed: boolean; checkboxValue: boolean }) => void) | null = null;
 
+function t(key: string): string {
+  return String(i18n.global.t(key));
+}
+
 // 显示确认对话框并返回 Promise<boolean | { confirmed: boolean; checkboxValue: boolean }>
 export function showConfirm(options: ConfirmOptions): Promise<boolean | { confirmed: boolean; checkboxValue: boolean }> {
   return new Promise((resolve) => {
     state.value.options = {
-      title: options.title || '确认操作',
+      title: options.title || t('common.confirmAction'),
       message: options.message,
-      confirmText: options.confirmText || '确认',
-      cancelText: options.cancelText || '取消',
+      confirmText: options.confirmText || t('common.confirm'),
+      cancelText: options.cancelText || t('common.cancel'),
       type: options.type || 'warning',
       checkboxLabel: options.checkboxLabel,
       checkboxDefault: options.checkboxDefault

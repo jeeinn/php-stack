@@ -26,7 +26,9 @@
     "dashboard": "Dashboard",
     "envConfig": "Environment",
     "settings": "Settings",
-    "migration": "Migration"
+    "migration": "Migration",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
   },
   "dashboard": {
     "title": "Status",
@@ -75,15 +77,16 @@
     "log": {
   "title": "Live Logs",
   "copy": "Copy",
-  "copyTip": "Copy the logs shown in this panel (keeps the latest 50 entries)",
+  "copyTip": "Copy the logs shown in this panel (keeps the latest 200 entries)",
   "clear": "Clear",
   "clearTip": "Clear the log panel",
   "export": "Export",
-  "exportTip": "Export the full file log to a location of your choice",
+  "exportTip": "Export the full file log (including rotations; not limited to the panel)",
   "cleared": "Log panel cleared",
   "exported": "Log exported to {path}",
   "exportFailed": "Export failed: {error}",
   "bottom": "⬇️ Bottom",
+  "panelHint": "Panel shows the latest {limit} lines; use Export for full logs",
       "show": "Show",
       "hide": "Hide",
       "empty": "Waiting for operations...",

@@ -501,7 +501,17 @@
       "patternsHint": "💡 提示：为确保跨平台恢复成功，请仅备份项目目录内的文件。"
     },
     "progress": {
-      "title": "📊 备份进度"
+      "title": "📊 备份进度",
+      "steps": {
+        "envConfig": "打包环境配置...",
+        "dockerConfig": "打包 Docker 配置...",
+        "serviceConfig": "打包服务配置...",
+        "userConfig": "打包用户自定义配置...",
+        "projectFiles": "打包项目文件...",
+        "logs": "打包日志...",
+        "manifest": "生成备份清单...",
+        "done": "✅ 备份完成"
+      }
     },
     "action": {
       "create": "创建备份包 (.zip)",
@@ -585,7 +595,18 @@
       "rollbackAction": "用此包重新恢复"
     },
     "progress": {
-      "title": "📊 恢复进度"
+      "title": "📊 恢复进度",
+      "steps": {
+        "parsing": "解析备份包...",
+        "envConfig": "恢复环境配置...",
+        "dockerConfig": "恢复 Docker 配置...",
+        "serviceConfig": "恢复服务配置...",
+        "userConfig": "恢复用户自定义配置...",
+        "vhost": "恢复虚拟主机配置...",
+        "projectFiles": "恢复项目文件...",
+        "database": "恢复数据库文件...",
+        "done": "✅ 恢复完成"
+      }
     },
     "confirm": {
       "title": "环境恢复确认",

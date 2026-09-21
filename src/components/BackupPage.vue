@@ -101,7 +101,7 @@ async function handleBackup() {
   if (!savePath) return;
 
   backing.value = true;
-  progress.value = { step: t('common.loading'), percentage: 0 };
+  progress.value = { step: 'common.loading', percentage: 0 };
 
   try {
     const backupOptions: BackupOptions = {
@@ -113,7 +113,7 @@ async function handleBackup() {
 
     await createBackup(savePath, backupOptions);
     showToast(t('backup.toast.success', { path: savePath }), 'success');
-    progress.value = { step: '✅', percentage: 100 };
+    progress.value = { step: 'backup.progress.steps.done', percentage: 100 };
   } catch (e) {
     showToast(normalizeError(e), 'error');
   } finally {
@@ -188,7 +188,7 @@ async function handleBackup() {
       <!-- Progress -->
       <section v-if="progress" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
         <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('backup.progress.title') }}</h2>
-        <div class="mb-2 text-sm text-slate-700 dark:text-slate-300">{{ progress.step }}</div>
+        <div class="mb-2 text-sm text-slate-700 dark:text-slate-300">{{ $t(progress.step) }}</div>
         <div class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
           <div
             class="h-full bg-blue-600 rounded-full transition-all duration-300"

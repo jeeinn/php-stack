@@ -501,7 +501,17 @@
       "patternsHint": "💡 Tip: Only backup files within the project directory for cross-platform restore compatibility."
     },
     "progress": {
-      "title": "📊 Backup Progress"
+      "title": "📊 Backup Progress",
+      "steps": {
+        "envConfig": "Packing environment config...",
+        "dockerConfig": "Packing Docker config...",
+        "serviceConfig": "Packing service config...",
+        "userConfig": "Packing user custom config...",
+        "projectFiles": "Packing project files...",
+        "logs": "Packing logs...",
+        "manifest": "Generating backup manifest...",
+        "done": "✅ Backup complete"
+      }
     },
     "action": {
       "create": "Create Backup (.zip)",
@@ -585,7 +595,18 @@
       "rollbackAction": "Restore from this bundle"
     },
     "progress": {
-      "title": "📊 Restore Progress"
+      "title": "📊 Restore Progress",
+      "steps": {
+        "parsing": "Parsing backup package...",
+        "envConfig": "Restoring environment config...",
+        "dockerConfig": "Restoring Docker config...",
+        "serviceConfig": "Restoring service config...",
+        "userConfig": "Restoring user custom config...",
+        "vhost": "Restoring virtual host config...",
+        "projectFiles": "Restoring project files...",
+        "database": "Restoring database files...",
+        "done": "✅ Restore complete"
+      }
     },
     "confirm": {
       "title": "Restore Confirmation",

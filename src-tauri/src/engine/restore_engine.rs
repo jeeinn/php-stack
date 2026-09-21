@@ -229,19 +229,19 @@ impl RestoreEngine {
         validate_archive_entry_names(&mut archive)?;
 
         // Step 1: Read manifest
-        Self::emit_progress(app_handle, "解析备份包...", 5);
+        Self::emit_progress(app_handle, "restore.progress.steps.parsing", 5);
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
         check_manifest_version(&manifest.version)?;
 
         // Step 2: Extract .env
-        Self::emit_progress(app_handle, "恢复环境配置...", 15);
+        Self::emit_progress(app_handle, "restore.progress.steps.envConfig", 15);
         match Self::restore_env_file(&mut archive, project_root) {
             Ok(()) => restored_files.push(".env".to_string()),
             Err(e) => errors.push(format!("恢复 .env 失败: {e}")),
         }
 
         // Step 3: Extract docker-compose.yml
-        Self::emit_progress(app_handle, "恢复 Docker 配置...", 25);
+        Self::emit_progress(app_handle, "restore.progress.steps.dockerConfig", 25);
         match Self::extract_file_to_path(
             &mut archive,
             "docker-compose.yml",
@@ -252,14 +252,14 @@ impl RestoreEngine {
         }
 
         // Step 4: Extract services/ directory contents
-        Self::emit_progress(app_handle, "恢复服务配置...", 40);
+        Self::emit_progress(app_handle, "restore.progress.steps.serviceConfig", 40);
         match Self::extract_prefix(&mut archive, "services/", &project_root.join("services")) {
             Ok(files) => restored_files.extend(files),
             Err(e) => errors.push(format!("恢复 services/ 失败: {e}")),
         }
 
         // Step 4.5: Restore user custom configuration files
-        Self::emit_progress(app_handle, "恢复用户自定义配置...", 45);
+        Self::emit_progress(app_handle, "restore.progress.steps.userConfig", 45);
 
         // .user_mirror_config.json - User mirror source configuration
         match Self::extract_file_to_path(
@@ -286,7 +286,7 @@ impl RestoreEngine {
         }
 
         // Step 5: Extract vhosts/ to services/nginx/conf.d/
-        Self::emit_progress(app_handle, "恢复虚拟主机配置...", 55);
+        Self::emit_progress(app_handle, "restore.progress.steps.vhost", 55);
         match Self::extract_prefix(
             &mut archive,
             "vhosts/",
@@ -297,7 +297,7 @@ impl RestoreEngine {
         }
 
         // Step 6: Extract projects/ to project_root (paths are already relative to project_root)
-        Self::emit_progress(app_handle, "恢复项目文件...", 70);
+        Self::emit_progress(app_handle, "restore.progress.steps.projectFiles", 70);
         if !manifest.options.project_patterns.is_empty() {
             // 备份时已经将文件路径存储为相对于 project_root 的路径
             // 例如："www/test/index.php" → ZIP 中为 "projects/www/test/index.php"
@@ -309,14 +309,14 @@ impl RestoreEngine {
         }
 
         // Step 7: Extract database/ SQL files
-        Self::emit_progress(app_handle, "恢复数据库文件...", 85);
+        Self::emit_progress(app_handle, "restore.progress.steps.database", 85);
         match Self::extract_prefix(&mut archive, "database/", &project_root.join("database")) {
             Ok(files) => restored_files.extend(files),
             Err(e) => errors.push(format!("恢复数据库文件失败: {e}")),
         }
 
         // Step 8: Done
-        Self::emit_progress(app_handle, "恢复完成", 100);
+        Self::emit_progress(app_handle, "restore.progress.steps.done", 100);
 
         let _ = manifest; // manifest was used for reading
 
@@ -440,6 +440,9 @@ impl RestoreEngine {
     }
 
     /// Helper: emit progress event via Tauri.
+    ///
+    /// `step` 传的是 i18n key（如 `restore.progress.steps.parsing`），
+    /// 由前端 `t()` 翻译后再展示，不要在这里拼自然语言。
     fn emit_progress(app_handle: Option<&tauri::AppHandle>, step: &str, percentage: u8) {
         if let Some(handle) = app_handle {
             use tauri::Emitter;

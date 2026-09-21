@@ -32,28 +32,28 @@ impl BackupEngine {
         manifest.options = options.clone();
 
         // Step 1: Pack .env (10%)
-        Self::emit_progress(app_handle, "打包环境配置...", 10);
+        Self::emit_progress(app_handle, "backup.progress.steps.envConfig", 10);
         let env_path = project_root.join(".env");
         if env_path.exists() {
             Self::add_file_to_zip(&mut zip, ".env", &env_path, &mut manifest)?;
         }
 
         // Step 2: Pack docker-compose.yml (20%)
-        Self::emit_progress(app_handle, "打包 Docker 配置...", 20);
+        Self::emit_progress(app_handle, "backup.progress.steps.dockerConfig", 20);
         let compose_path = project_root.join("docker-compose.yml");
         if compose_path.exists() {
             Self::add_file_to_zip(&mut zip, "docker-compose.yml", &compose_path, &mut manifest)?;
         }
 
         // Step 3: Pack services/ configs (30%)
-        Self::emit_progress(app_handle, "打包服务配置...", 30);
+        Self::emit_progress(app_handle, "backup.progress.steps.serviceConfig", 30);
         let services_dir = project_root.join("services");
         if services_dir.exists() {
             Self::add_dir_to_zip(&mut zip, &services_dir, "services", &mut manifest)?;
         }
 
         // Step 3.5: Pack user custom configuration files (35%)
-        Self::emit_progress(app_handle, "打包用户自定义配置...", 35);
+        Self::emit_progress(app_handle, "backup.progress.steps.userConfig", 35);
 
         // .user_mirror_config.json - User mirror source configuration
         let user_mirror_config_path = project_root.join(".user_mirror_config.json");
@@ -79,7 +79,7 @@ impl BackupEngine {
 
         // Step 4: Optional — Project files (50%)
         if options.include_projects && !options.project_patterns.is_empty() {
-            Self::emit_progress(app_handle, "打包项目文件...", 60);
+            Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 60);
             for pattern in &options.project_patterns {
                 // 将相对路径模式转换为绝对路径模式
                 let mut normalized_pattern = pattern.clone();
@@ -164,7 +164,7 @@ impl BackupEngine {
 
         // Step 5: Optional — Recent logs (70%)
         if options.include_logs {
-            Self::emit_progress(app_handle, "Packing logs...", 85);
+            Self::emit_progress(app_handle, "backup.progress.steps.logs", 85);
             let logs_dir = project_root.join("logs");
             if logs_dir.exists() {
                 // MVP: pack all logs (7-day filter can be added later)
@@ -173,7 +173,7 @@ impl BackupEngine {
         }
 
         // Step 8: Write manifest.json (95%)
-        Self::emit_progress(app_handle, "生成备份清单...", 95);
+        Self::emit_progress(app_handle, "backup.progress.steps.manifest", 95);
         let manifest_json = manifest.serialize()?;
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
@@ -186,7 +186,7 @@ impl BackupEngine {
         zip.finish()
             .map_err(|e| format!("完成 ZIP 文件失败: {e}"))?;
 
-        Self::emit_progress(app_handle, "备份完成", 100);
+        Self::emit_progress(app_handle, "backup.progress.steps.done", 100);
         Ok(())
     }
 
@@ -198,6 +198,9 @@ impl BackupEngine {
     }
 
     /// Helper: emit progress event via Tauri.
+    ///
+    /// `step` 传的是 i18n key（如 `backup.progress.steps.envConfig`），
+    /// 由前端 `t()` 翻译后再展示，不要在这里拼自然语言。
     fn emit_progress(app_handle: Option<&tauri::AppHandle>, step: &str, percentage: u8) {
         if let Some(handle) = app_handle {
             use tauri::Emitter;

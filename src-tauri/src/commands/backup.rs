@@ -201,6 +201,6 @@ mod tests {
         // 回滚包必须是合法 ZIP——否则用户真要回滚时才发现打不开
         let file = fs::File::open(&path).expect("回滚包应可读");
         let archive = zip::ZipArchive::new(file).expect("回滚包应是合法 ZIP");
-        assert!(archive.len() > 0, "回滚包不应为空");
+        assert!(!archive.is_empty(), "回滚包不应为空");
     }
 }

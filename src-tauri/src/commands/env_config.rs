@@ -13,49 +13,72 @@ pub struct PullImageResult {
     pub error: Option<String>,
 }
 
-/// 获取 Docker Compose 容器的最新日志（非阻塞）
+/// 把同步子进程调用挪到阻塞线程池执行（R3）
+///
+/// Tauri 命令跑在 async 执行线程上，同步的 `Command::output()` / `Child::wait()`
+/// 会把整条线程占住，同线程上的其它命令（容器列表轮询、镜像探测等）
+/// 会被一起拖慢。这里收敛成统一助手，与 `commands/backup.rs` 的既有做法对齐。
+async fn run_blocking_command<F, T>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("阻塞任务执行失败: {e}"))?
+}
+
+/// 获取 Docker Compose 容器的最新日志
 ///
 /// 使用 `docker compose logs --tail 100` 获取最近日志，
 /// 通过 skip_lines 跳过已处理的行，只返回新增内容。
-fn get_compose_logs(
+///
+/// 内部是同步子进程调用，已包进 `run_blocking_command`——本函数在启动流程中
+/// 最长 5 分钟内每 2 秒被调用一次，直接在 async 线程上跑会持续占用该线程。
+async fn get_compose_logs(
     project_root: &std::path::Path,
     skip_lines: usize,
 ) -> Result<(Vec<String>, usize), String> {
-    use std::process::Command;
+    let project_root = project_root.to_path_buf();
 
-    let mut logs_cmd = Command::new("docker");
-    logs_cmd
-        .args(["compose", "logs", "--tail", "100"])
-        .current_dir(project_root);
+    run_blocking_command(move || {
+        use std::process::Command;
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        logs_cmd.creation_flags(0x08000200);
-    }
+        let mut logs_cmd = Command::new("docker");
+        logs_cmd
+            .args(["compose", "logs", "--tail", "100"])
+            .current_dir(&project_root);
 
-    let output = logs_cmd
-        .output()
-        .map_err(|e| format!("执行 docker compose logs 失败: {e}"))?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            logs_cmd.creation_flags(0x08000200);
+        }
 
-    if !output.status.success() {
-        return Err(format!(
-            "docker compose logs 退出码: {:?}",
-            output.status.code()
-        ));
-    }
+        let output = logs_cmd
+            .output()
+            .map_err(|e| format!("执行 docker compose logs 失败: {e}"))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let all_lines: Vec<&str> = stdout.lines().collect();
-    let total_count = all_lines.len();
+        if !output.status.success() {
+            return Err(format!(
+                "docker compose logs 退出码: {:?}",
+                output.status.code()
+            ));
+        }
 
-    let new_lines: Vec<String> = all_lines
-        .iter()
-        .skip(skip_lines)
-        .map(|s| s.to_string())
-        .collect();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let all_lines: Vec<&str> = stdout.lines().collect();
+        let total_count = all_lines.len();
 
-    Ok((new_lines, total_count))
+        let new_lines: Vec<String> = all_lines
+            .iter()
+            .skip(skip_lines)
+            .map(|s| s.to_string())
+            .collect();
+
+        Ok((new_lines, total_count))
+    })
+    .await
 }
 
 /// 解析 Docker Compose 输出，提取关键进度信息
@@ -677,16 +700,16 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         down_cmd.creation_flags(0x08000200);
     }
 
-    let down_output = down_cmd.output().map_err(|e| {
-        let err_msg = format!("清理旧容器失败: {e}");
-        ui_log!(
-            app_handle,
-            info,
-            "commands::start_environment",
-            "⚠️ {}",
-            err_msg
-        );
-        err_msg
+    // R3: docker compose down 是同步阻塞调用，挪到阻塞线程池
+    let down_output = run_blocking_command(move || {
+        down_cmd
+            .output()
+            .map_err(|e| format!("清理旧容器失败: {e}"))
+    })
+    .await
+    .map_err(|e| {
+        ui_log!(app_handle, info, "commands::start_environment", "⚠️ {}", e);
+        e
     })?;
 
     if !down_output.status.success() {
@@ -1017,16 +1040,16 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     });
 
     // 等待 up -d 进程完成
-    let status = child.wait().map_err(|e| {
-        let err_msg = format!("等待 docker compose 完成失败: {e}");
-        ui_log!(
-            app_handle,
-            info,
-            "commands::start_environment",
-            "❌ {}",
-            err_msg
-        );
-        err_msg
+    // R3: child.wait() 会阻塞 async 线程直到 up -d 结束，同样挪走
+    let status = run_blocking_command(move || {
+        child
+            .wait()
+            .map_err(|e| format!("等待 docker compose 完成失败: {e}"))
+    })
+    .await
+    .map_err(|e| {
+        ui_log!(app_handle, info, "commands::start_environment", "❌ {}", e);
+        e
     })?;
 
     if let Some(t) = stdout_thread {
@@ -1242,7 +1265,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         }
 
         // 1. 获取最新的容器日志
-        match get_compose_logs(&project_root, last_line_count) {
+        match get_compose_logs(&project_root, last_line_count).await {
             Ok((new_lines, total_count)) => {
                 if !new_lines.is_empty() {
                     for line in &new_lines {
@@ -1294,7 +1317,8 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     "commands::start_environment",
                     "✅ 所有容器已就绪"
                 );
-                if let Ok((final_lines, _)) = get_compose_logs(&project_root, last_line_count) {
+                if let Ok((final_lines, _)) = get_compose_logs(&project_root, last_line_count).await
+                {
                     for line in &final_lines {
                         let progress_msg = parse_docker_progress(line);
                         if let Some(msg) = progress_msg {
@@ -1582,10 +1606,30 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
 #[cfg(test)]
 mod tests {
     use super::parse_env_to_services;
+    use super::run_blocking_command;
     use super::PullImageResult;
     use crate::engine::config_generator::ServiceType;
     use crate::engine::env_parser::EnvFile;
     use crate::engine::version_manifest::VersionManifest;
+
+    /// R3: 同步阻塞调用统一走 `run_blocking_command`。
+    /// 「在阻塞线程池执行」由 tokio 保证，这里锁住的是对外契约：
+    /// 闭包的成功/失败结果必须原样透传给调用方，不能被包装或吞掉。
+    #[test]
+    fn test_run_blocking_command_passes_through_result() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("创建多线程 runtime");
+
+        let ok: Result<i32, String> = rt.block_on(run_blocking_command(|| Ok(42)));
+        assert_eq!(ok.expect("成功分支应返回值"), 42);
+
+        let err: Result<i32, String> =
+            rt.block_on(run_blocking_command(|| Err("boom".to_string())));
+        assert_eq!(err.expect_err("失败分支应返回错误"), "boom");
+    }
+
     fn parse_env(content: &str) -> std::collections::HashMap<String, String> {
         EnvFile::parse(content)
             .expect("解析 .env 内容失败")

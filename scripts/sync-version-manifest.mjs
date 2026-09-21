@@ -24,7 +24,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const USER_AGENT = 'php-stack-version-sync/1.0';
 const FETCH_TIMEOUT_MS = 60_000;
 
-const SERVICES = ['php', 'mysql', 'redis', 'nginx'];
+export const SERVICES = ['php', 'mysql', 'redis', 'nginx'];
 
 // docker-library/official-images 的 library/ 文件：用 Tag 段匹配 cycle。
 // endoflife.date API：返回 [{cycle, eol, latest, ...}]，cycle 即 "major.minor"。
@@ -96,7 +96,7 @@ async function loadSource(svc, offline) {
  *   Directory: ...
  *   ...
  */
-function parseLibrary(text) {
+export function parseLibrary(text) {
   return text
     .split(/\n\n+/)
     .map((block) => {
@@ -111,14 +111,16 @@ function parseLibrary(text) {
     .filter(Boolean);
 }
 
-// 从 tag 字符串里提取 major.minor。无则返回 null。
-function majorMinor(tag) {
+export function majorMinor(tag) {
   const m = tag.match(/^(\d+)\.(\d+)/);
   return m ? `${m[1]}.${m[2]}` : null;
 }
 
 // 标记"非稳定"tag：含 beta/alpha/rc/preview 字样
-const PRERELEASE_RE = /(?:^|[.-])(?:beta|alpha|rc|preview|pre|nightly|edge|innovation)(?:[.-]|$)/i;
+// 说明：关键字前后都允许紧跟数字。PHP 官方镜像的预发布 tag 形如 8.5.0RC1 /
+// 8.6.0beta1，关键字前既不是 . 也不是 -，早期版本因此漏判，把 RC 当成了稳定版。
+export const PRERELEASE_RE =
+  /(?:^|[.-]|\d)(?:beta|alpha|rc|preview|pre|nightly|edge|innovation)(?:[.-]|\d|$)/i;
 
 // ────────────────────────────────────────────────────────────
 // 服务特定解析：每个 cycle 找最匹配的"标准"tag
@@ -128,7 +130,7 @@ const PRERELEASE_RE = /(?:^|[.-])(?:beta|alpha|rc|preview|pre|nightly|edge|innov
  * PHP：取 -fpm 变种。优先级短优先（8.5-fpm 优先于 8.5.10-fpm），
  * 因为 manifest 习惯用 `php:8.5-fpm` 这种 major.minor-fpm 短形式。
  */
-function phpStandardTag(segments, cycle) {
+export function phpStandardTag(segments, cycle) {
   for (const seg of segments) {
     // 候选：tag 等于 `${cycle}-fpm`，或以 `${cycle}.` 开头且以 `-fpm` 结尾。
     // 注意运算符优先级：|| 必须用括号显式分组，否则 && 会先结合。
@@ -147,7 +149,15 @@ function phpStandardTag(segments, cycle) {
  * MySQL：取无变种后缀的形式（"9.7.2" 或 "8.4.11"），
  * 排除 oraclelinux/oracle/innodb 等专用变种。
  */
-function mysqlStandardTag(segments, cycle) {
+export function mysqlStandardTag(segments, cycle) {
+  // 短形式优先：manifest 习惯写 `mysql:8.4`（浮动 tag，自动跟随最新 patch）。
+  // 早期实现是「完整版本号优先」，导致每次同步都把整份 manifest 判成 drift。
+  const allTags = segments.flatMap((s) => s.tags).filter((t) => !PRERELEASE_RE.test(t));
+  const usable = allTags.filter((t) => !/-(?:oraclelinux\d*|oracle|innodb|cluster)/i.test(t));
+
+  const short = usable.find((t) => t === cycle);
+  if (short) return short;
+
   for (const seg of segments) {
     // 跳过 innovation 段（Directory 标记）
     if (seg.directory === 'innovation') continue;
@@ -158,7 +168,7 @@ function mysqlStandardTag(segments, cycle) {
       return t === cycle || t.startsWith(`${cycle}.`);
     });
     if (candidates.length === 0) continue;
-    // 优先完整版本号，再短形式
+    // 无短形式时取最长的（即最新 patch 的）完整版本号
     return candidates.sort((a, b) => b.length - a.length)[0];
   }
   return null;
@@ -167,17 +177,19 @@ function mysqlStandardTag(segments, cycle) {
 /**
  * Redis：取 -alpine 变种（项目偏好 alpine 小镜像）。
  */
-function redisStandardTag(segments, cycle) {
-  // 找含 `${cycle}-alpine` 的 tag
+export function redisStandardTag(segments, cycle) {
+  // 短形式优先：manifest 习惯写 `redis:8.2-alpine`（浮动 tag）。
   const allTags = segments.flatMap((s) => s.tags).filter((t) => !PRERELEASE_RE.test(t));
-  // 优先：完整版本 -alpine
+  // 优先：短形式 -alpine
+  const shortAlpine = allTags.find((t) => t === `${cycle}-alpine`);
+  if (shortAlpine) return shortAlpine;
+  // 次选：完整版本 -alpine
   const full = allTags.find((t) => t.startsWith(`${cycle}.`) && t.endsWith('-alpine'));
   if (full) return full;
-  // 次选：短形式 -alpine
-  const short = allTags.find((t) => t === `${cycle}-alpine`);
+  // 兜底：无 alpine 变体时用短形式版本号，再退到完整版本号
+  const short = allTags.find((t) => t === cycle);
   if (short) return short;
-  // 兜底：完整版本号无后缀
-  return allTags.find((t) => t === cycle || t.startsWith(`${cycle}.`)) || null;
+  return allTags.find((t) => t.startsWith(`${cycle}.`)) || null;
 }
 
 /**
@@ -186,15 +198,19 @@ function redisStandardTag(segments, cycle) {
  * 简化策略：mainline = eol 中最大的 cycle；stable = 次大且非 mainline 的。
  * 这样不依赖 alias 字符串（虽然 alias 也能识别）。
  */
-function nginxStandardTag(segments, cycle) {
+export function nginxStandardTag(segments, cycle) {
   // mainline 在 segment 里以 alias 'mainline' 标识
   // stable 以 alias 'stable' 标识
+  // 短形式优先：manifest 习惯写 `nginx:1.28-alpine`（项目偏好 alpine 小镜像）。
   const allTags = segments.flatMap((s) => s.tags).filter((t) => !PRERELEASE_RE.test(t));
-  const full = allTags.find((t) => t.startsWith(`${cycle}.`));
-  return full || allTags.find((t) => t === cycle) || null;
+  const shortAlpine = allTags.find((t) => t === `${cycle}-alpine`);
+  if (shortAlpine) return shortAlpine;
+  const short = allTags.find((t) => t === cycle);
+  if (short) return short;
+  return allTags.find((t) => t.startsWith(`${cycle}.`)) || null;
 }
 
-const RESOLVERS = {
+export const RESOLVERS = {
   php: phpStandardTag,
   mysql: mysqlStandardTag,
   redis: redisStandardTag,
@@ -206,7 +222,7 @@ const RESOLVERS = {
 // ────────────────────────────────────────────────────────────
 
 /** 把 "1.2" 这种 cycle 转成 manifest 里习惯的 id（"php12"）。 */
-function cycleToId(svc, cycle) {
+export function cycleToId(svc, cycle) {
   const major = cycle.split('.')[0];
   const minor = cycle.split('.')[1];
   // nginx 用 3 位（如 1.27 → 127）；其他用 2 位
@@ -217,7 +233,7 @@ function cycleToId(svc, cycle) {
 }
 
 /** manifest 现有条目 id → cycle 反查。 */
-function buildExistingIdMap(manifest) {
+export function buildExistingIdMap(manifest) {
   const map = {};
   for (const svc of SERVICES) {
     if (!manifest[svc]) continue;
@@ -229,6 +245,21 @@ function buildExistingIdMap(manifest) {
     }
   }
   return map;
+}
+
+/**
+ * 决定进程退出码。
+ *
+ * 关键：网络失败/离线无缓存必须阻断 --check。否则四个服务全部拉取失败时，
+ * upstreamRows 为空 → newUpstream/drift/eolChanges 全空 → hasDiff=false，
+ * CI 会把"什么都不知道"误判成"完全同步"然后绿灯放行。
+ *
+ * 默认（报告）模式恒返回 0：那里 fetch 失败只是降级，不该阻断。
+ */
+export function exitCodeFor({ checkOnly, apply, hasDiff, fetchFailures }) {
+  if (fetchFailures.length > 0 && (apply || checkOnly)) return 1;
+  if (checkOnly && hasDiff) return 1;
+  return 0;
 }
 
 async function main() {
@@ -255,9 +286,20 @@ async function main() {
     let data;
     try {
       data = await loadSource(svc, offline);
+      // --offline 且缓存为空时不会抛错，而是返回空数据 —— 若不拦截，
+      // 后续会因"零上游数据"得出"零差异"，CI 的 --check 会静默放行。
+      if (offline && !data.library && (data.eol || []).length === 0) {
+        throw new Error(`离线模式但 .workbuddy/sync-cache/ 下无 ${svc} 缓存`);
+      }
     } catch (e) {
       console.error(`⚠️  拉取 ${svc} 数据失败: ${e.message}`);
-      skipped.push({ svc, cycle: '-', reason: `网络/解析失败: ${e.message}` });
+      // 离线但缓存为空时，reason 不能归到"网络失败"——用户需要的是"先联网跑一次"
+      const offlineNoCache = offline && e.message.includes('离线模式');
+      skipped.push({
+        svc,
+        cycle: '-',
+        reason: offlineNoCache ? `离线无缓存: ${e.message}` : `网络/解析失败: ${e.message}`,
+      });
       continue;
     }
 
@@ -383,12 +425,18 @@ async function main() {
   const hasDiff = newUpstream.length + drift.length + eolChanges.length > 0;
 
   // --apply 必须保证所有 fetch 都通了；网络不稳时不能写半截。
-  const fetchFailures = skipped.filter((s) => s.reason.startsWith('网络/解析失败'));
+  const fetchFailures = skipped.filter(
+    (s) => s.reason.startsWith('网络/解析失败') || s.reason.startsWith('离线无缓存'),
+  );
   if (apply && fetchFailures.length > 0) {
     console.error(`\n💥 --apply 模式下 fetch 失败 ${fetchFailures.length} 项，禁止写入。`);
     console.error(`   失败列表: ${fetchFailures.map((s) => s.svc).join(', ')}`);
     console.error(`   请检查网络后重试，或使用 --offline 模式（需先有缓存）。`);
-    process.exit(1);
+  }
+  if (checkOnly && fetchFailures.length > 0) {
+    console.error(`\n💥 --check 模式下 fetch 失败 ${fetchFailures.length} 项，无法判定同步状态。`);
+    console.error(`   失败列表: ${fetchFailures.map((s) => s.svc).join(', ')}`);
+    console.error(`   注意：拉取失败会让差异数为 0，若不阻断就会误判为"已同步"。`);
   }
 
   if (apply && newUpstream.length > 0) {
@@ -422,12 +470,21 @@ async function main() {
     console.log(`> 💡 应用差异：\`node scripts/sync-version-manifest.mjs --apply\`\n`);
   }
 
-  if (checkOnly && hasDiff) {
-    process.exit(1);
+  const exitCode = exitCodeFor({ checkOnly, apply, hasDiff, fetchFailures });
+  if (exitCode !== 0) {
+    process.exit(exitCode);
   }
 }
 
-main().catch((e) => {
-  console.error('💥 脚本异常:', e.message);
-  process.exit(2);
-});
+// 仅当被直接执行时才跑 main()；被 import（如单元测试）时不产生任何副作用。
+// Windows 下 process.argv[1] 是反斜杠路径，统一转 file:// URL 再比较最稳。
+const invokedDirectly =
+  process.argv[1] !== undefined &&
+  pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (invokedDirectly) {
+  main().catch((e) => {
+    console.error('💥 脚本异常:', e.message);
+    process.exit(2);
+  });
+}

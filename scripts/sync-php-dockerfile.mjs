@@ -16,14 +16,14 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SERVICES_DIR = join(__dirname, '..', 'src-tauri', 'services');
 
 /** service_dir → PHP 版本号（用于 image_tag 与 env 前缀注释） */
-const MAP = {
+export const MAP = {
   php56: '5.6',
   php74: '7.4',
   php80: '8.0',
@@ -35,16 +35,14 @@ const MAP = {
 };
 
 /** 模板源：改 Dockerfile 请改这一份 */
-const TEMPLATE_DIR = 'php85';
-const TEMPLATE_VERSION = MAP[TEMPLATE_DIR];
-
-const checkOnly = process.argv.includes('--check');
+export const TEMPLATE_DIR = 'php85';
+export const TEMPLATE_VERSION = MAP[TEMPLATE_DIR];
 
 /**
  * 把模板内容里的版本相关片段替换为指定版本。
  * 只动两处：注释中的 PHP85_VERSION，以及 ARG 的默认值 php:8.5-fpm。
  */
-function renderFor(template, dir, version) {
+export function renderFor(template, dir, version) {
   const prefix = dir.toUpperCase();
   return template
     .replace(
@@ -62,11 +60,12 @@ function renderFor(template, dir, version) {
     );
 }
 
-function escapeVer(v) {
+export function escapeVer(v) {
   return v.replace(/\./g, '\\.');
 }
 
 function main() {
+  const checkOnly = process.argv.includes('--check');
   const templatePath = join(SERVICES_DIR, TEMPLATE_DIR, 'Dockerfile');
   if (!existsSync(templatePath)) {
     console.error(`模板不存在: ${templatePath}`);
@@ -123,4 +122,10 @@ function main() {
   }
 }
 
-main();
+// 仅当被直接执行时才跑 main()；被 import（如单元测试）时不产生任何副作用。
+// Windows 下 process.argv[1] 是反斜杠路径，统一转 file:// URL 再比较最稳。
+const invokedDirectly =
+  process.argv[1] !== undefined &&
+  pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (invokedDirectly) main();

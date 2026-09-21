@@ -17,6 +17,7 @@
 - 恢复引擎拒绝含路径遍历条目的备份包，堵住 zip-slip 漏洞
 - 修复 Nginx 多版本配置回读时非默认端口被错误重置为 80 的问题
 - 修复环境配置页多 PHP 服务时自定义扩展输入互相串扰的问题
+- 修复 `scripts/` 下两个同步脚本的单元测试因 shebang 被 vitest 报 SyntaxError、整个 suite 无法加载的问题
 
 ### 🔧 改进
 - 环境配置页 .env 解析主体抽为纯函数并以真断言测试覆盖
@@ -24,6 +25,9 @@
 - 清理死代码：未注册使用的占位命令、无效占位测试、未使用的 proptest 依赖
 - 新增 CI 测试流水线（fmt / clippy / cargo test / 前端测试 / 构建）
 - 补充 MIT LICENSE 文件，声明 Cargo `license` 字段
+- 恢复前自动生成回滚包（`.restore_rollback_<时间戳>.zip`），恢复出错可据此回退
+- 恢复结果由「成功/失败一句话」改为返回完整明细，前端展示已恢复文件列表、逐条错误与回滚包路径
+- 环境启动流程的 Docker 同步调用（`compose down`、`up` 等待、日志轮询）统一走 `spawn_blocking`，不再阻塞 async 执行线程
 
 ### 📁 文档
 - 合并 `doc/` 与 `docs/` 为统一的 `docs/` 目录，更新 README、AGENTS、文档索引中的路径引用

@@ -5,7 +5,7 @@ import {
   getVersionMappings,
   saveUserOverride,
   removeUserOverride,
-  resetAllOverrides,
+  resetAllOverrides as resetAllOverridesApi,
   normalizeError,
 } from '../api';
 import type { VersionMappings, VersionInfo, ServiceTypeLower } from '../types/env-config';
@@ -139,7 +139,7 @@ async function resetAllOverrides() {
   loading.value = true;
   
   try {
-    await resetAllOverrides();
+    await resetAllOverridesApi();
     
     showToast(t('software.toast.resetDone'), 'success');
     

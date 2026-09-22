@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { invoke } from '@tauri-apps/api/core'
 import EnvConfigPage from '../EnvConfigPage.vue'
 import type { VersionInfo } from '../../types/env-config'
 
@@ -50,6 +51,10 @@ vi.mock('@tauri-apps/api/core', () => ({
         return { workspace_path: '/test/workspace' }
       case 'check_config_files_exist':
         return []
+      case 'generate_env_config':
+        return 'APP_ENV=local'
+      case 'preview_compose':
+        return 'services:\n  php:\n    image: php:8.2-fpm'
       default:
         return null
     }
@@ -189,5 +194,29 @@ describe('EnvConfigPage', () => {
     await customInputs[1].trigger('blur')
     expect((customInputs[0].element as HTMLInputElement).value).toBe('xdebug')
     expect((customInputs[1].element as HTMLInputElement).value).toBe('swoole')
+  })
+
+  // Feature: env-config-page, Property: 「预览配置」必须真实调用后端 preview_compose。
+  // 回归背景：存放预览结果的 ref 与同名导入的 API 函数互相遮蔽，函数名被 ref 覆盖，
+  // previewCompose(config) 变成对 Ref 的调用并抛 TypeError，预览弹窗永不打开。
+  it('点预览真实调用后端 preview_compose 并展示生成结果', async () => {
+    const wrapper = mount(EnvConfigPage)
+    await flushPromises()
+
+    const previewButton = wrapper.findAll('button').find(b => b.text().includes('预览配置'))
+    expect(previewButton).toBeDefined()
+
+    await previewButton!.trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('preview_compose', {
+      config: expect.anything(),
+    })
+
+    // 弹窗确实打开，且两个预览区各自渲染了后端返回值
+    const text = wrapper.text()
+    expect(text).toContain('docker-compose.yml')
+    expect(text).toContain('php:8.2-fpm')
+    expect(text).toContain('APP_ENV=local')
   })
 })

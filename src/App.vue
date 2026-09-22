@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  checkDocker,
+  checkDocker as checkDockerApi,
   listContainers,
   startContainer,
   stopContainer,
@@ -64,7 +64,7 @@ const hasEnvFile = ref(false); // .env 文件是否存在
 const workspaceFallbackMsg = ref('');
 /// 配置路径不存在时弹出三选一对话框
 const showWorkspaceMissing = ref(false);
-const workspaceMissingInfo = ref<{ workspace_path: string; effective_path: string } | null>(null);
+const workspaceMissingInfo = ref<Pick<WorkspaceInfo, 'workspace_path' | 'effective_path'> | null>(null);
 /// 本会话已选「临时回退」则不再反复弹窗（横幅仍保留）
 const workspaceMissingDismissed = ref(false);
 
@@ -91,7 +91,7 @@ const canStop = computed(() => {
 
 const checkDocker = async () => {
   try {
-    await checkDocker();
+    await checkDockerApi();
     // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
     if (dockerError.value !== null) {
       addLogKey('dashboard.toast.dockerRestored');

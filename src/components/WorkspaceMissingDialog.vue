@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open as openDirectoryDialog } from '@tauri-apps/plugin-dialog';
 import { recreateWorkspaceDir, setWorkspacePath, normalizeError } from '../api';
 
 export interface WorkspaceMissingInfo {
@@ -20,7 +19,6 @@ const emit = defineEmits<{
   dismissTemp: [];
 }>();
 
-const { t } = useI18n();
 const busy = ref(false);
 const errorMessage = ref('');
 
@@ -48,7 +46,7 @@ async function chooseNew() {
   busy.value = true;
   errorMessage.value = '';
   try {
-    const selected = await open({ directory: true, multiple: false });
+    const selected = await openDirectoryDialog({ directory: true, multiple: false });
     if (!selected) {
       busy.value = false;
       return;

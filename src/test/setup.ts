@@ -21,6 +21,22 @@ config.global.plugins.push(i18n as any)
 // node 环境（无 window）。不加守卫会在那里抛 ReferenceError，导致整个套件
 // 连文件都加载不了（表现为 "0 test / Failed Suites"）。
 if (typeof window !== 'undefined') {
+  // jsdom 未实现 matchMedia，而 useTheme 在模块导入期就会调用它。
+  // 缺少该 stub 时，任何间接引入 useTheme 的组件（如 App.vue → SettingsPage.vue）
+  // 连测试文件都无法加载。
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+  }
+
   ;(window as any).invoke = async (command: string, args?: any) => {
     console.log(`Mock invoke called: ${command}`, args)
     switch (command) {

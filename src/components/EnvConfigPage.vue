@@ -7,7 +7,7 @@ import {
   getVersionMappings,
   loadExistingConfig as apiLoadExistingConfig,
   generateEnvConfig,
-  previewCompose,
+  previewCompose as previewComposeApi,
   applyEnvConfig,
   checkServiceImagesPresence,
   pullServiceImages,
@@ -577,7 +577,7 @@ async function handlePreview() {
     const config = buildConfig();
     const [envContent, composeContent] = await Promise.all([
       generateEnvConfig(config),
-      previewCompose(config),
+      previewComposeApi(config),
     ]);
     previewEnv.value = envContent;
     previewCompose.value = composeContent;

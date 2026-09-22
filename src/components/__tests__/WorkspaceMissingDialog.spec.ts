@@ -62,4 +62,21 @@ describe('WorkspaceMissingDialog', () => {
     expect(invoke).toHaveBeenCalledWith('set_workspace_path', { path: 'E:\\new-ws' })
     expect(wrapper.emitted('resolved')).toHaveLength(1)
   })
+
+  // Feature: workspace-missing-dialog, Property: 可见性只由 open prop 决定。
+  // 回归背景：plugin-dialog 的 open 函数曾与 open prop 同名导入，模板 v-if="open && info"
+  // 解析到「恒为真」的函数而非 prop，导致 open=false 时对话框照样渲染。
+  it('open 为 false 时不渲染', () => {
+    const wrapper = mount(WorkspaceMissingDialog, {
+      props: { open: false, info: INFO },
+    })
+    expect(wrapper.find('[data-testid="workspace-missing-dialog"]').exists()).toBe(false)
+  })
+
+  it('open 为 true 但 info 为空时不渲染', () => {
+    const wrapper = mount(WorkspaceMissingDialog, {
+      props: { open: true, info: null },
+    })
+    expect(wrapper.find('[data-testid="workspace-missing-dialog"]').exists()).toBe(false)
+  })
 })

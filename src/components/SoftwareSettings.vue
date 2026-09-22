@@ -274,7 +274,7 @@ onMounted(() => {
       <div class="mt-4 p-4 bg-white dark:bg-slate-800/50 rounded-lg text-sm text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
         <p>{{ $t('software.hints.title') }}</p>
         <ul class="list-disc list-inside mt-2 space-y-1">
-          <li>{{ $t('software.hints.editCustom') }}</li>
+          <li>{{ $t('software.hints.editCustom', { action: $t('common.edit') }) }}</li>
           <li>{{ $t('software.hints.reapply') }}</li>
           <li>{{ $t('software.hints.eolWarning') }}</li>
         </ul>

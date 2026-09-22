@@ -123,7 +123,7 @@ const summary = computed(() => {
 
         <!-- 提示文字 -->
         <div class="text-xs text-slate-500 dark:text-slate-500 mt-4 px-1 leading-relaxed">
-          💡 {{ $t('envConfig.pullConfirm.tip') }}
+          💡 {{ $t('envConfig.pullConfirm.tip', { action: $t('envConfig.startEnv') }) }}
         </div>
       </div>
 

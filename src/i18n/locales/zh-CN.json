@@ -52,7 +52,7 @@
     },
     "empty": {
       "title": "未发现 ps- 前缀的容器",
-      "description": "请先在「环境配置」中配置 PHP、Nginx 等环境"
+      "description": "请先在「{page}」中配置 PHP、Nginx 等环境"
     },
     "startConfirm": {
       "title": "⚠️ 启动环境提示",
@@ -79,7 +79,7 @@
   "exported": "日志已导出到 {path}",
   "exportFailed": "导出失败: {error}",
   "bottom": "⬇️ 底部",
-  "panelHint": "面板仅显示最近 {limit} 条；完整排查请点「导出」",
+  "panelHint": "面板仅显示最近 {limit} 条；完整排查请点「{action}」",
       "show": "显示",
       "hide": "隐藏",
       "empty": "等待操作中...",
@@ -302,7 +302,7 @@
       "summary": "共 {total} 个镜像，{missing} 个需拉取，{present} 个已存在",
       "allPresent": "所有镜像本地已存在，无需拉取。可直接应用配置。",
       "toPull": "待拉取",
-      "tip": "镜像一旦拉取到本地，\"一键启动\"会直接复用本地缓存，不会重复下载。后续启动更快速。",
+      "tip": "镜像一旦拉取到本地，“{action}”会直接复用本地缓存，不会重复下载。后续启动更快速。",
       "confirmPull": "确认拉取 {count} 个",
       "pulling": "拉取中…",
       "pullingItem": "正在拉取 {tag}（{current}/{total}）"
@@ -400,9 +400,9 @@
     },
     "hints": {
       "title": "💡 提示：",
-      "autoApply": "点击\"选择\"按钮后会自动应用配置到 .env 文件",
+      "autoApply": "点击“{action}”按钮后会自动应用配置到 .env 文件",
       "customSaved": "自定义镜像源会被保存到 .user_mirror_config.json",
-      "testConnection": "点击\"测试连接\"验证镜像源是否可用"
+      "testConnection": "点击“{action}”验证镜像源是否可用"
     },
     "confirm": {
       "deleteTitle": "删除确认",
@@ -454,7 +454,7 @@
     },
     "hints": {
       "title": "💡 提示：",
-      "editCustom": "点击\"编辑\"可以自定义 Docker 镜像标签",
+      "editCustom": "点击“{action}”可以自定义 Docker 镜像标签",
       "reapply": "修改后需要重新应用环境配置才能生效",
       "eolWarning": "EOL 版本表示已停止维护，建议使用活跃版本"
     },
@@ -609,7 +609,7 @@
     },
     "confirm": {
       "title": "环境恢复确认",
-      "message": "⚠️ 注意: 现有配置文件将被覆盖，建议先备份当前环境\n\n💡 恢复完成后，点击\"一键启动\"即可运行环境",
+      "message": "⚠️ 注意: 现有配置文件将被覆盖，建议先备份当前环境\n\n💡 恢复完成后，点击“{action}”即可运行环境",
       "start": "开始恢复"
     },
     "rollbackConfirm": {

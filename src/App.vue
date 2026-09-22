@@ -778,7 +778,7 @@ async function exportLogs() {
           <!-- Empty State -->
           <div v-if="containers.length === 0 && !loading" class="col-span-full py-20 text-center bg-slate-100/50 dark:bg-slate-900/50 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-2xl">
             <div class="text-slate-500 dark:text-slate-500 mb-2">{{ t('dashboard.empty.title') }}</div>
-            <div class="text-slate-600 dark:text-slate-600 text-sm">{{ t('dashboard.empty.description') }}</div>
+            <div class="text-slate-600 dark:text-slate-600 text-sm">{{ t('dashboard.empty.description', { page: t('sidebar.envConfig') }) }}</div>
           </div>
         </div>
       </div>
@@ -873,7 +873,7 @@ async function exportLogs() {
           </div>
         </transition>
         <p v-if="showLogs" class="mt-1.5 text-[10px] sm:text-xs text-slate-500 dark:text-slate-500">
-          {{ $t('dashboard.log.panelHint', { limit: UI_LOG_LIMIT }) }}
+          {{ $t('dashboard.log.panelHint', { limit: UI_LOG_LIMIT, action: $t('dashboard.log.export') }) }}
         </p>
       </div>
     </div>

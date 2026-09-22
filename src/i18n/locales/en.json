@@ -52,7 +52,7 @@
     },
     "empty": {
       "title": "No ps- prefixed containers found",
-      "description": "Please configure PHP, Nginx and other services in \"Environment\" first"
+      "description": "Please configure PHP, Nginx and other services in “{page}” first"
     },
     "startConfirm": {
       "title": "⚠️ Start Environment",
@@ -79,7 +79,7 @@
   "exported": "Log exported to {path}",
   "exportFailed": "Export failed: {error}",
   "bottom": "⬇️ Bottom",
-  "panelHint": "Panel shows the latest {limit} lines; use Export for full logs",
+  "panelHint": "Panel shows the latest {limit} lines; use “{action}” for full logs",
       "show": "Show",
       "hide": "Hide",
       "empty": "Waiting for operations...",
@@ -302,7 +302,7 @@
       "summary": "{total} total images, {missing} to pull, {present} already local",
       "allPresent": "All images are local. No pull needed — you can apply config directly.",
       "toPull": "To pull",
-      "tip": "Once pulled, \"One-click start\" reuses the local cache — it won't re-download on subsequent runs.",
+      "tip": "Once pulled, “{action}” reuses the local cache — it won't re-download on subsequent runs.",
       "confirmPull": "Pull {count}",
       "pulling": "Pulling…",
       "pullingItem": "Pulling {tag} ({current}/{total})"
@@ -400,9 +400,9 @@
     },
     "hints": {
       "title": "💡 Tips:",
-      "autoApply": "Clicking \"Select\" will automatically apply the config to .env file",
+      "autoApply": "Clicking “{action}” will automatically apply the config to .env file",
       "customSaved": "Custom mirrors are saved to .user_mirror_config.json",
-      "testConnection": "Click \"Test\" to verify mirror availability"
+      "testConnection": "Click “{action}” to verify mirror availability"
     },
     "confirm": {
       "deleteTitle": "Delete Confirmation",
@@ -454,7 +454,7 @@
     },
     "hints": {
       "title": "💡 Tips:",
-      "editCustom": "Click \"Edit\" to customize Docker image tags",
+      "editCustom": "Click “{action}” to customize Docker image tags",
       "reapply": "Changes take effect after re-applying environment config",
       "eolWarning": "EOL versions are no longer maintained, consider using active versions"
     },
@@ -609,7 +609,7 @@
     },
     "confirm": {
       "title": "Restore Confirmation",
-      "message": "⚠️ Warning: Existing config files will be overwritten. Consider backing up first.\n\n💡 After restore, click \"Start All\" to run the environment.",
+      "message": "⚠️ Warning: Existing config files will be overwritten. Consider backing up first.\n\n💡 After restore, click “{action}” to run the environment.",
       "start": "Start Restore"
     },
     "rollbackConfirm": {

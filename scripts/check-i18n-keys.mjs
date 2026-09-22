@@ -12,7 +12,7 @@
  * 这类问题在 code review 时肉眼极难发现（两段都合法 JSON、缩进一致），
  * 因此固化为脚本检查。
  *
- * 检查六类问题（前三类与第六类 exit 1，第四、五类只提示）：
+ * 检查七类问题（第一、二、三、六类 exit 1，第四、五、七类只提示）：
  *   1. 同一父节点下的重复 key —— 静默丢文案，最致命
  *   2. zh-CN / en 的 key 集合不一致 —— 一侧必然回退到另一种语言或裸 key
  *   3. 源码里引用的 key 在语言包里不存在 —— 界面显示裸 key
@@ -21,6 +21,8 @@
  *      极少数文案本就该是中文（如语言切换器的母语自称），用 `<!-- i18n-exempt: 原因 -->`
  *      就近豁免；豁免项也会打印出来，避免标记写错后静默失效。见 collectI18nExemptions。
  *   6. 语言包文案里的不可见字符损坏 —— 孤立变体选择符、零宽字符。见 findBrokenGlyphs。
+ *   7. 语言包文案里内嵌了其它 key 的文案（提示里写死按钮名）—— 应与按钮 key 解耦，
+ *      改用 {action} 占位符由模板传入。见 findEmbeddedKeyValues。
  *
  * 「是否被引用」的判定曾有四类误报根因，均已修正（详见下面对应函数）：
  *   a. 扫描范围只有 src/，漏掉 src-tauri/src —— 而 Rust 引擎会把 i18n key
@@ -470,6 +472,66 @@ export function findBrokenGlyphs(obj, path = '', out = []) {
 }
 
 /**
+ * 第 7 类检查：语言包文案里内嵌了其它 key 的文案。
+ *
+ * 典型形态：`点`击"选择"按钮`、`Click "Test" to verify` —— 引号里写死的是界面上
+ * 另一个按钮的文案，而那个按钮本身就有自己的 key（mirror.actions.select /
+ * mirror.actions.test）。问题在于它与按钮之间没有任何约束：按钮改名后提示文案
+ * 不会跟着变，中英两侧还容易各写各的（zh 写"测试连接"、en 写"Test"，
+ * 实际按钮是"测试"/"Test"）。正确做法同 envConfig.redis.empty ——
+ * 用 `{action}` 占位符，由模板把真实文案传进来：
+ *   $t('mirror.hints.testConnection', { action: $t('mirror.actions.test') })
+ *
+ * 判据：文案里的引号片段，恰好等于同一语言包中另一个 key 的完整值。
+ * 只提示不阻断 —— 引号里也可能是第三方 UI 的原文（Docker Desktop 的
+ * "Apply & restart" 等），那不是我们的 key，不会命中。
+ *
+ * 占位符名字按被内嵌对象的语义自选：按钮用 {action}（如 mirror.actions.test），
+ * 页面/导航名用 {page}（如 sidebar.envConfig）。引号形态中西文都算 ——
+ * 中文侧常见 「」 与 “”，英文侧常见 "" 与 “”，否则会出现「中文命中、英文漏报」。
+ *
+ * @param {object} obj 解析后的单个语言包对象
+ * @returns {Array<{ key: string, segment: string, referenced: string[], value: string }>}
+ */
+export function findEmbeddedKeyValues(obj) {
+  const leaves = [];
+  const walkLeaves = (o, path = '') => {
+    for (const [k, v] of Object.entries(o)) {
+      const p = path ? `${path}.${k}` : k;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        walkLeaves(v, p);
+      } else if (typeof v === 'string') {
+        leaves.push({ key: p, value: v });
+      }
+    }
+  };
+  walkLeaves(obj);
+
+  // 只把「短、纯文案、无占位符」的值当作可被内嵌的动作名，避免长句互相命中
+  const byValue = new Map();
+  for (const { key, value } of leaves) {
+    if (!value || value.includes('{') || value.length > 24) continue;
+    if (!byValue.has(value)) byValue.set(value, []);
+    byValue.get(value).push(key);
+  }
+
+  const out = [];
+  // 中英两侧都要覆盖：中文侧常用 「」 “”，英文侧常用 "" “”
+  const QUOTE_CHARS = '“”「」『』"\'';
+  const QUOTED_RE = new RegExp(`[${QUOTE_CHARS}]([^${QUOTE_CHARS}\\n]{1,24})[${QUOTE_CHARS}]`, 'g');
+  for (const { key, value } of leaves) {
+    let m;
+    QUOTED_RE.lastIndex = 0;
+    while ((m = QUOTED_RE.exec(value))) {
+      const segment = m[1];
+      const referenced = (byValue.get(segment) || []).filter((k) => k !== key);
+      if (referenced.length > 0) out.push({ key, segment, referenced, value });
+    }
+  }
+  return out;
+}
+
+/**
  * 两个 key 集合的双向差集。
  * @param {Set<string>} a
  * @param {Set<string>} b
@@ -543,6 +605,12 @@ export function runCheck() {
   }
   if (brokenGlyphs.length > 0) {
     errors.push(`语言包文案里有 ${brokenGlyphs.length} 处不可见字符损坏`);
+  }
+
+  // 第 7 类：语言包内嵌了别的 key 的文案（应改用 {action} 占位符），见 findEmbeddedKeyValues
+  const embeddedKeyValues = [];
+  for (const [locale, obj] of Object.entries(parsed)) {
+    for (const e of findEmbeddedKeyValues(obj)) embeddedKeyValues.push({ locale, ...e });
   }
 
   const namespaces = new Set(Object.keys(parsed['zh-CN']));
@@ -625,6 +693,7 @@ export function runCheck() {
     hardcodedCount,
     exemptions,
     brokenGlyphs,
+    embeddedKeyValues,
     messages,
   };
 }
@@ -661,6 +730,14 @@ function main() {
   if (r.exemptions.length) {
     lines.push(`\nℹ️  已豁免的硬编码中文（i18n-exempt 标记，共 ${r.exemptions.length} 处）`);
     for (const e of r.exemptions) lines.push(`   - ${e.file}:${e.line}  ${e.reason}`);
+  }
+  if (r.embeddedKeyValues.length) {
+    lines.push(
+      `\nℹ️  语言包文案内嵌了其它 key 的文案（应改用 {action} 占位符，共 ${r.embeddedKeyValues.length} 处）`,
+    );
+    for (const e of r.embeddedKeyValues) {
+      lines.push(`   - [${e.locale}] ${e.key}  内嵌 "${e.segment}"（= ${e.referenced.join(', ')}）`);
+    }
   }
 
   lines.push(r.ok ? '\n✅ i18n 检查通过' : `\n❌ i18n 检查失败：${r.errors.length} 类问题`);

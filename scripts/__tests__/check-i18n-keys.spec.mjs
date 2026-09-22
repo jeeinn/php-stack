@@ -52,6 +52,7 @@ import {
   findHardcodedCjk,
   collectI18nExemptions,
   findBrokenGlyphs,
+  findEmbeddedKeyValues,
   isLikelyFileName,
   isLikelyNamespaceRef,
   diffKeys,
@@ -346,6 +347,60 @@ describe('findBrokenGlyphs（不可见字符损坏）', () => {
   });
 });
 
+describe('findEmbeddedKeyValues（提示文案里写死按钮名）', () => {
+  it('抓出内嵌了别的 key 文案的按钮名', () => {
+    const r = findEmbeddedKeyValues({
+      mirror: {
+        actions: { test: '测试' },
+        hints: { testConnection: '点击"测试"验证镜像源是否可用' },
+      },
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].key).toBe('mirror.hints.testConnection');
+    expect(r[0].segment).toBe('测试');
+    expect(r[0].referenced).toEqual(['mirror.actions.test']);
+  });
+
+  it('中文侧的 「」 引号同样要抓（否则中英两侧只有一侧报）', () => {
+    const r = findEmbeddedKeyValues({
+      dashboard: {
+        log: { export: '导出', panelHint: '完整排查请点「导出」' },
+      },
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].key).toBe('dashboard.log.panelHint');
+  });
+
+  it('已改用 {action} 占位符的文案不报', () => {
+    expect(
+      findEmbeddedKeyValues({
+        mirror: {
+          actions: { test: '测试' },
+          hints: { testConnection: '点击“{action}”验证镜像源是否可用' },
+        },
+      }),
+    ).toEqual([]);
+  });
+
+  it('引号里是第三方 UI 原文（不是本项目的 key）时不报', () => {
+    // Docker Desktop 的 "Apply & restart" 不在语言包里，属于合法硬编码
+    expect(
+      findEmbeddedKeyValues({
+        steps: { restart: '点击 "Apply & restart" 重启 Docker' },
+      }),
+    ).toEqual([]);
+  });
+
+  it('含占位符的长句不会互相命中', () => {
+    expect(
+      findEmbeddedKeyValues({
+        a: '共 {total} 个镜像，{missing} 个需拉取',
+        b: '待拉取',
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe('diffKeys', () => {
   it('给出双向差集', () => {
     const r = diffKeys(new Set(['a', 'b']), new Set(['b', 'c']));
@@ -418,6 +473,15 @@ describe('真实语言包契约', () => {
       const bad = findBrokenGlyphs(JSON.parse(readFileSync(file, 'utf8')));
       expect(bad, `${name} 存在不可见字符损坏`).toEqual([]);
     }
+  });
+
+  it('真实语言包里没有内嵌其它 key 文案的提示（一律改用占位符）', () => {
+    // 病根同硬编码中文：提示里写死按钮名后，按钮改名提示不跟着变，
+    // 中英两侧还容易各写各的（zh 写"测试连接"、en 写"Test"，实际按钮是"测试"/"Test"）。
+    // 统一约定：按钮名用 {action}、页面名用 {page}，由模板把真实文案传进来。
+    const r = runCheck();
+    const where = r.embeddedKeyValues.map((e) => `[${e.locale}] ${e.key} 内嵌 "${e.segment}"`);
+    expect(where).toEqual([]);
   });
 
   it('扫描范围覆盖 src-tauri/src（Rust 引擎会直接发 i18n key）', () => {

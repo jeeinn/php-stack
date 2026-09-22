@@ -143,7 +143,7 @@ async function handleRestore() {
   
   const confirmed = await showConfirm({
     title: t('restore.confirm.title'),
-    message: t('restore.confirm.message'),
+    message: t('restore.confirm.message', { action: t('dashboard.startEnv') }),
     confirmText: t('restore.confirm.start'),
     cancelText: t('common.cancel'),
     type: 'warning'

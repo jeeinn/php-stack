@@ -600,9 +600,9 @@ onMounted(() => {
       <div class="mt-4 p-4 bg-white dark:bg-slate-800/50 rounded-lg text-sm text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
         <p>{{ $t('mirror.hints.title') }}</p>
         <ul class="list-disc list-inside mt-2 space-y-1">
-          <li>{{ $t('mirror.hints.autoApply') }}</li>
+          <li>{{ $t('mirror.hints.autoApply', { action: $t('mirror.actions.select') }) }}</li>
           <li>{{ $t('mirror.hints.customSaved') }}</li>
-          <li>{{ $t('mirror.hints.testConnection') }}</li>
+          <li>{{ $t('mirror.hints.testConnection', { action: $t('mirror.actions.test') }) }}</li>
         </ul>
       </div>
     </div>

@@ -5,6 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>php-stack</title>
+    <!--
+      启动期错误兜底，必须早于业务 bundle：
+      - 普通脚本（非 module），否则晚于 module 且业务加载失败时自身也不可用
+      - 外部文件（非内联）：CSP 未声明 script-src，回退 default-src 'self'，
+        内联脚本会被拦；public/ 下的文件原样拷进 dist，同源加载不受影响
+    -->
+    <script src="/boot-guard.js"></script>
   </head>
   <body>
     <div id="app"></div>

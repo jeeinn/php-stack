@@ -187,6 +187,7 @@
       "sourceDir": "Source Directory",
       "timezone": "Timezone",
       "timezonePlaceholder": "Select timezone",
+      "customTimezonePlaceholder": "e.g. Europe/Moscow",
       "customTimezone": "Custom timezone...",
       "customTimezoneLabel": "Custom: {tz}",
       "customTimezoneHint": "💡 Tip: Enter a valid IANA timezone identifier, e.g. \"Europe/Moscow\", \"Pacific/Auckland\""
@@ -348,8 +349,14 @@
       "edit": "Edit",
       "delete": "Delete"
     },
+    "tooltips": {
+      "select": "Select this mirror",
+      "test": "Test connection",
+      "edit": "Edit",
+      "deleteCustom": "Delete custom"
+    },
     "dockerRegistry": {
-      "warning": "️ Docker Registry mirrors must be configured in Docker Desktop global settings",
+      "warning": "⚠️ Docker Registry mirrors must be configured in Docker Desktop global settings",
       "hint": "Due to Docker architecture limitations, this cannot be auto-configured. Please follow the guide below.",
       "platforms": {
         "windows": "Windows (Docker Desktop)",

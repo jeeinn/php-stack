@@ -1,12 +1,18 @@
 # 自动检测文本文件并规范化换行符
 * text=auto
 
+# 本文件自身固定为 LF：否则在 core.autocrlf=true 的环境下检出为 CRLF，
+# 一旦编辑就会整文件行尾抖动，diff 失真
+.gitattributes text eol=lf
+
 # 明确标记特定文件类型
 *.rs text eol=lf
 *.ts text eol=lf
 *.tsx text eol=lf
 *.js text eol=lf
 *.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
 *.vue text eol=lf
 *.css text eol=lf
 *.scss text eol=lf

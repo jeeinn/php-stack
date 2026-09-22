@@ -12,12 +12,15 @@
  * 这类问题在 code review 时肉眼极难发现（两段都合法 JSON、缩进一致），
  * 因此固化为脚本检查。
  *
- * 检查五类问题（前三类 exit 1，第 4、5 类只提示）：
+ * 检查六类问题（前三类与第六类 exit 1，第四、五类只提示）：
  *   1. 同一父节点下的重复 key —— 静默丢文案，最致命
  *   2. zh-CN / en 的 key 集合不一致 —— 一侧必然回退到另一种语言或裸 key
  *   3. 源码里引用的 key 在语言包里不存在 —— 界面显示裸 key
  *   4. 语言包里存在但源码从未引用的 key —— 死文案（仅提示，不阻断）
- *   5. <template> 里硬编码的中文 —— i18n 漏网（仅提示，不阻断）
+ *   5. <template> 里硬编码的中文 —— i18n 漏网（仅提示，不阻断）。
+ *      极少数文案本就该是中文（如语言切换器的母语自称），用 `<!-- i18n-exempt: 原因 -->`
+ *      就近豁免；豁免项也会打印出来，避免标记写错后静默失效。见 collectI18nExemptions。
+ *   6. 语言包文案里的不可见字符损坏 —— 孤立变体选择符、零宽字符。见 findBrokenGlyphs。
  *
  * 「是否被引用」的判定曾有四类误报根因，均已修正（详见下面对应函数）：
  *   a. 扫描范围只有 src/，漏掉 src-tauri/src —— 而 Rust 引擎会把 i18n key
@@ -306,18 +309,101 @@ export function isLikelyFileName(key) {
   return segs.length > 1 && FILE_EXT_SEGMENTS.has(segs[segs.length - 1].toLowerCase());
 }
 
+// 连续 2 个及以上汉字才算疑似文案：单个汉字过于常见，误报率高。
+const CJK_RE = /[\u4e00-\u9fa5]{2,}/;
+
+// 豁免标记。写法：<!-- i18n-exempt: 原因 -->
+const EXEMPT_MARKER_RE = /i18n-exempt\b/;
+// 标记独占一行时，向下最多找这么多行，命中首个含中文的行即豁免。
+const EXEMPT_LOOKAHEAD_LINES = 10;
+
+/**
+ * 剥离 HTML 注释，且**保持行数不变**（注释体替换为等量空白）。
+ *
+ * 保持行数是为了让行号在剥离前后对齐：豁免标记的行号取自原文，
+ * 而 CJK 扫描基于剥离后的文本，两者必须落在同一坐标系里。
+ *
+ * @param {string} source
+ * @returns {string}
+ */
+export function stripHtmlComments(source) {
+  return source.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ' '));
+}
+
+/**
+ * 解析 <template> 段，供下面两个函数共用，避免重复定位起始行。
+ * @param {string} source
+ * @returns {{ startLine: number, raw: string[], stripped: string[] } | null}
+ */
+function parseTemplate(source) {
+  const m = source.match(/<template>[\s\S]*?<\/template>/);
+  if (!m) return null;
+  return {
+    startLine: source.slice(0, m.index).split(/\r?\n/).length,
+    raw: m[0].split(/\r?\n/),
+    stripped: stripHtmlComments(m[0]).split(/\r?\n/),
+  };
+}
+
+/**
+ * 收集 `<!-- i18n-exempt: 原因 -->` 豁免标记，返回被豁免的行（文件绝对行号）。
+ *
+ * 为什么需要显式豁免：门槛是「连续 2 个汉字」，但仍有个别文案**本就该是中文**，
+ * 典型是语言切换器里的母语自称（「中文」在任何界面语言下都显示为「中文」，
+ * 这不是漏翻，而是通行做法）。若为此调高门槛或写死白名单，前者会漏掉真文案，
+ * 后者会随文件改动漂移。显式标记把判断留在就近的代码旁，且原因强制写清楚。
+ *
+ * 两种写法：
+ *   1. 行内 —— 标记所在行自身被豁免
+ *        中文<!-- i18n-exempt: 语言自称 -->
+ *   2. 独占一行 —— 豁免其下 EXEMPT_LOOKAHEAD_LINES 行内首个含中文的行
+ *        <!-- i18n-exempt: 语言自称，切到英文界面也应显示中文 -->
+ *        <button ...>
+ *          中文
+ *        </button>
+ *
+ * 标记必须写在进行 HTML 注释里才生效（源码里出现裸的 i18n-exempt 文本不算），
+ * 因此要求注释单行书写。
+ *
+ * @param {string} source
+ * @returns {Array<{ line: number, reason: string }>}
+ */
+export function collectI18nExemptions(source) {
+  const tpl = parseTemplate(source);
+  if (!tpl) return [];
+  const out = [];
+  tpl.raw.forEach((line, i) => {
+    const cmtAt = line.indexOf('<!--');
+    if (cmtAt < 0 || !EXEMPT_MARKER_RE.test(line.slice(cmtAt))) return;
+    const reason = (line.slice(cmtAt).match(/i18n-exempt\s*:?\s*(.*?)\s*-->/) || [, ''])[1] || '未说明原因';
+    out.push({ line: tpl.startLine + i, reason });
+    // 标记行自身没中文时（标记独占一行），再向下找首个含中文的行
+    if (CJK_RE.test(tpl.stripped[i] ?? '')) return;
+    for (let j = i + 1; j < Math.min(i + 1 + EXEMPT_LOOKAHEAD_LINES, tpl.stripped.length); j++) {
+      if (CJK_RE.test(tpl.stripped[j] ?? '')) {
+        out.push({ line: tpl.startLine + j, reason });
+        break;
+      }
+    }
+  });
+  return out;
+}
+
 /**
  * 第 5 类检查：找出 <template> 里硬编码的中文。
  *
  * 设计取舍：
- * - 只在 <template> 块内找。script 段的中文绝大多数是代码注释，不该报；
- *   <template> 注释（<!-- -->）也整行跳过。
+ * - 只在 <template> 块内找。script 段的中文绝大多数是代码注释，不该报。
  * - 只在「同一行」判定。文案被拆成多行字符串的情况会漏，但那是少数，
  *   换来实现简单、零误报。
- * - 门槛设为连续 2 个及以上汉字：单个汉字过于常见（如 i18n 里故意保留的
- *   语言自称「中文」），连续 2 个以上才基本可以断定是漏网的文案。
+ * - 门槛设为连续 2 个及以上汉字，单条文案可能本就该是中文时用 i18n-exempt 豁免。
  *
- * 为什么需要这一类：本轮清理发现 envConfig.redis.empty / envConfig.nginx.empty /
+ * 修掉的一处漏报：原先判定「本行含 `<!--` 就整行跳过」，导致
+ *   <span>请选择镜像源</span>  <!-- TODO -->
+ * 这类「文案 + 行尾注释」的行被整体放过。现在改为先剥离注释再扫描，
+ * 注释中的中文自然不计，行内文案不再被掩盖。
+ *
+ * 为什么需要这一类：上一轮清理发现 envConfig.redis.empty / envConfig.nginx.empty /
  * software.toast.copyTooltip 三条 key 之所以成为「死文案」，根因正是模板里把文案
  * 直接写成了中文、没走 i18n —— 结果中英双语 key 还在，英文界面却显示中文。
  * 死文案是症状，硬编码才是病根。
@@ -327,15 +413,59 @@ export function isLikelyFileName(key) {
  */
 export function findHardcodedCjk(source) {
   const out = [];
-  const m = source.match(/<template>[\s\S]*?<\/template>/);
-  if (!m) return out;
-  const startLine = source.slice(0, m.index).split(/\r?\n/).length;
-  m[0].split(/\r?\n/).forEach((line, i) => {
-    if (line.includes('<!--')) return;
-    if (/[\u4e00-\u9fa5]{2,}/.test(line)) {
-      out.push({ line: startLine + i, text: line.trim().slice(0, 120) });
+  const tpl = parseTemplate(source);
+  if (!tpl) return out;
+  const exempt = new Set(collectI18nExemptions(source).map((e) => e.line - tpl.startLine));
+  tpl.stripped.forEach((line, i) => {
+    if (exempt.has(i)) return;
+    if (CJK_RE.test(line)) {
+      out.push({ line: tpl.startLine + i, text: line.trim().slice(0, 120) });
     }
   });
+  return out;
+}
+
+/**
+ * 第 6 类检查：语言包文案里的不可见字符损坏。
+ *
+ * 两类目标：
+ * - 变体选择符 U+FE0E / U+FE0F 必须紧跟 emoji 基字符。孤立出现时不渲染任何字形，
+ *   表现为「这里本该有个图标却什么都没有」，且**无法靠阅读发现** ——
+ *   ⚠️（U+26A0 U+FE0F）与 ️（孤立 U+FE0F）在编辑器里都只占一个空格宽。
+ *   真实案例：en.json 的 mirror.dockerRegistry.warning 原本以孤立 U+FE0F 开头、
+ *   丢了基字符 U+26A0，英文界面该警告条目前面缺图标，需与 zh 侧逐字对照才发现。
+ * - 零宽空格 U+200B / 零宽非连接符 U+200C 在本项目（中英双语）没有合法用途，
+ *   出现即误输入。刻意不检查 U+200D（ZWJ）—— 它在 emoji 组合序列（👨‍👩‍👧）
+ *   中是合法且必需的。
+ *
+ * 判定 emoji 基字符用 `\p{Emoji}` 而非手写码点区间：后者极易漏，实测把
+ * 🛡（U+1F6E1）判成非法而产生两处误报。
+ *
+ * 为什么归为「阻断」而非仅提示：这不是风格问题，是确定的字符损坏，
+ * 且一旦进入语言包就再也无法通过阅读发现。
+ *
+ * @param {object} obj 解析后的语言包对象
+ * @param {string} [path]
+ * @param {Array<{ key: string, issue: string, value: string }>} [out]
+ * @returns {Array<{ key: string, issue: string, value: string }>}
+ */
+export function findBrokenGlyphs(obj, path = '', out = []) {
+  for (const [k, v] of Object.entries(obj)) {
+    const p = path ? `${path}.${k}` : k;
+    if (v && typeof v === 'object') {
+      findBrokenGlyphs(v, p, out);
+    } else if (typeof v === 'string') {
+      const cps = [...v];
+      cps.forEach((c, i) => {
+        const code = c.codePointAt(0);
+        if ((code === 0xfe0e || code === 0xfe0f) && !/^\p{Emoji}$/u.test(cps[i - 1] ?? '')) {
+          out.push({ key: p, issue: '孤立变体选择符（缺 emoji 基字符）', value: v });
+        } else if (code === 0x200b || code === 0x200c) {
+          out.push({ key: p, issue: '零宽字符', value: v });
+        }
+      });
+    }
+  }
   return out;
 }
 
@@ -406,11 +536,21 @@ export function runCheck() {
   if (onlyInA.length > 0) errors.push(`zh-CN 有 ${onlyInA.length} 个 key 在 en 中缺失`);
   if (onlyInB.length > 0) errors.push(`en 有 ${onlyInB.length} 个 key 在 zh-CN 中缺失`);
 
+  // 第 6 类：不可见字符损坏（孤立变体选择符 / 零宽字符），见 findBrokenGlyphs
+  const brokenGlyphs = [];
+  for (const [locale, obj] of Object.entries(parsed)) {
+    for (const b of findBrokenGlyphs(obj)) brokenGlyphs.push({ locale, ...b });
+  }
+  if (brokenGlyphs.length > 0) {
+    errors.push(`语言包文案里有 ${brokenGlyphs.length} 处不可见字符损坏`);
+  }
+
   const namespaces = new Set(Object.keys(parsed['zh-CN']));
 
   const used = new Set();
   const dynamicPrefixes = new Set();
   const hardcodedCjk = [];
+  const exemptions = [];
 
   for (const file of collectSourceFiles()) {
     let src;
@@ -427,12 +567,15 @@ export function runCheck() {
     for (const p of extractDynamicKeyPrefixes(code)) dynamicPrefixes.add(p);
 
     if (extname(file) === '.vue') {
+      const rel = relative(ROOT, file).replace(/\\/g, '/');
       const hits = findHardcodedCjk(src);
       if (hits.length > 0) {
-        hardcodedCjk.push({
-          file: relative(ROOT, file).replace(/\\/g, '/'),
-          hits,
-        });
+        hardcodedCjk.push({ file: rel, hits });
+      }
+      // 豁免也要报出来：否则标记写错（拼错、放错位置）会静默失效，
+      // 表现为「某处中文一直不在报告里」，反而更难发现。
+      for (const e of collectI18nExemptions(src)) {
+        exemptions.push({ file: rel, line: e.line, reason: e.reason });
       }
     }
   }
@@ -480,6 +623,8 @@ export function runCheck() {
     unused,
     hardcodedCjk,
     hardcodedCount,
+    exemptions,
+    brokenGlyphs,
     messages,
   };
 }
@@ -491,6 +636,13 @@ function main() {
   for (const { locale, dups } of r.dupReport) {
     lines.push(`\n❌ [${locale}] 同层级重复 key：`);
     for (const d of dups) lines.push(`   - ${[...d.path, d.key].join('.')}`);
+  }
+  if (r.brokenGlyphs.length) {
+    lines.push('\n❌ 语言包文案里的不可见字符损坏（孤立变体选择符 / 零宽字符）：');
+    for (const b of r.brokenGlyphs) {
+      lines.push(`   - [${b.locale}] ${b.key}  ${b.issue}`);
+      lines.push(`     值 = ${JSON.stringify(b.value)}`);
+    }
   }
   if (r.onlyInZh.length) lines.push(`\n❌ 仅 zh-CN 有（en 缺失）：\n${r.onlyInZh.map((k) => `   - ${k}`).join('\n')}`);
   if (r.onlyInEn.length) lines.push(`\n❌ 仅 en 有（zh-CN 缺失）：\n${r.onlyInEn.map((k) => `   - ${k}`).join('\n')}`);
@@ -505,6 +657,10 @@ function main() {
     for (const { file, hits } of r.hardcodedCjk) {
       for (const h of hits) lines.push(`   - ${file}:${h.line}  ${h.text}`);
     }
+  }
+  if (r.exemptions.length) {
+    lines.push(`\nℹ️  已豁免的硬编码中文（i18n-exempt 标记，共 ${r.exemptions.length} 处）`);
+    for (const e of r.exemptions) lines.push(`   - ${e.file}:${e.line}  ${e.reason}`);
   }
 
   lines.push(r.ok ? '\n✅ i18n 检查通过' : `\n❌ i18n 检查失败：${r.errors.length} 类问题`);

@@ -187,6 +187,7 @@
       "sourceDir": "项目源码目录",
       "timezone": "时区",
       "timezonePlaceholder": "选择时区",
+      "customTimezonePlaceholder": "例如：Europe/Moscow",
       "customTimezone": "自定义时区...",
       "customTimezoneLabel": "自定义: {tz}",
       "customTimezoneHint": "💡 提示：请输入有效的 IANA 时区标识符，如 \"Europe/Moscow\"、\"Pacific/Auckland\""
@@ -347,6 +348,12 @@
       "testing": "测试中...",
       "edit": "编辑",
       "delete": "删除"
+    },
+    "tooltips": {
+      "select": "选择此镜像源",
+      "test": "测试连接",
+      "edit": "编辑",
+      "deleteCustom": "删除自定义"
     },
     "dockerRegistry": {
       "warning": "⚠️ Docker Registry 镜像源需要在 Docker Desktop 全局设置中配置",

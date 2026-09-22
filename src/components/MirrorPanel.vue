@@ -558,7 +558,7 @@ onMounted(() => {
                           : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-white'
                       ]"
                       :disabled="!!getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id"
-                      title="选择此镜像源"
+                      :title="$t('mirror.tooltips.select')"
                     >
                       {{ $t('mirror.actions.select') }}
                     </button>
@@ -567,7 +567,7 @@ onMounted(() => {
                       @click="testConnection(option)"
                       :disabled="isTesting(option)"
                       class="px-3 py-1.5 ui-btn-primary rounded text-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                      title="测试连接"
+                      :title="$t('mirror.tooltips.test')"
                     >
                       <span v-if="isTesting(option)" class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-white"></span>
                       <span>{{ isTesting(option) ? $t('mirror.actions.testing') : $t('mirror.actions.test') }}</span>
@@ -576,7 +576,7 @@ onMounted(() => {
                       v-if="option.id === 'custom' || option.value"
                       @click="openEditDialog(option)"
                       class="px-3 py-1.5 ui-btn-secondary rounded text-xs transition"
-                      title="编辑"
+                      :title="$t('mirror.tooltips.edit')"
                     >
                       {{ $t('mirror.actions.edit') }}
                     </button>
@@ -584,7 +584,7 @@ onMounted(() => {
                       v-if="option.id === 'custom'"
                       @click="removeCustomMirror"
                       class="px-3 py-1.5 ui-btn-danger rounded text-xs transition"
-                      title="删除自定义"
+                      :title="$t('mirror.tooltips.deleteCustom')"
                     >
                       {{ $t('mirror.actions.delete') }}
                     </button>

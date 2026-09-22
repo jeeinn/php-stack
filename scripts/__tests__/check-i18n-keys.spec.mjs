@@ -18,13 +18,23 @@
  *
  * 三、硬编码中文：envConfig.{redis,nginx}.empty 与 software.toast.copyTooltip 三条 key
  * 之所以「死」，根因是模板/属性里把文案直接写成了中文。死文案是症状，硬编码才是病根。
+ * 这一类自身有两个易错点，对应下方两个 describe：
+ *   e. 豁免：极少数文案本就该是中文（语言切换器的母语自称），需要显式 i18n-exempt 标记，
+ *      且标记写错时必须能被发现 —— 故豁免项也会打印出来
+ *   f. 漏报：原先「本行含 `<!--` 就整行跳过」，导致「文案 + 行尾注释」的行被整体放过
  *
- * 四类断言：
+ * 四、不可见字符损坏：语言包文案里的孤立变体选择符 / 零宽字符。
+ * en.json 的 mirror.dockerRegistry.warning 曾以孤立 U+FE0F 开头（丢了基字符 ⚠），
+ * 英文界面该警告条目前面缺图标，而这类损坏无法靠阅读发现。
+ *
+ * 五类断言：
  *  1. 解析层：scanDuplicateKeys 能在 JSON.parse 之前抓出同层级重复 key，且给出祖先路径
  *  2. 工具层：extractUsedKeys / extractKeyLikeLiterals / extractDynamicKeyPrefixes /
- *     stripComments / findHardcodedCjk 各自的语义与边界
- *  3. 契约层：真实语言包无重复 key、zh-CN/en key 集合一致、源码引用的 key 全部存在
+ *     stripComments / findHardcodedCjk / collectI18nExemptions / findBrokenGlyphs 的语义与边界
+ *  3. 契约层：真实语言包无重复 key、zh-CN/en key 集合一致、源码引用的 key 全部存在、
+ *     文案无不可见字符损坏
  *  4. 误报回归：四类根因对应的真实 key 不得再被报成死文案
+ *  5. 硬编码终态：真实模板里没有未豁免的硬编码中文，且豁免项屈指可数
  */
 
 import { describe, it, expect } from 'vitest';
@@ -38,7 +48,10 @@ import {
   extractKeyLikeLiterals,
   extractDynamicKeyPrefixes,
   stripComments,
+  stripHtmlComments,
   findHardcodedCjk,
+  collectI18nExemptions,
+  findBrokenGlyphs,
   isLikelyFileName,
   isLikelyNamespaceRef,
   diffKeys,
@@ -212,6 +225,125 @@ describe('findHardcodedCjk（硬编码中文：死文案的病根）', () => {
     const src = '<script>\n// 这里是中文注释\n</script>\n<template><p>{{ x }}</p></template>';
     expect(findHardcodedCjk(src)).toEqual([]);
   });
+
+  // 漏报回归：原先判定「本行含 `<!--` 就整行跳过」，会把「文案 + 行尾注释」整行放过
+  it('行尾注释不再掩盖同行文案', () => {
+    const src = [
+      '<template>',
+      '  <span>请选择镜像源</span>  <!-- TODO: 后续补 i18n -->',
+      '</template>',
+    ].join('\n');
+    const hits = findHardcodedCjk(src);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].line).toBe(2);
+    expect(hits[0].text).toContain('请选择镜像源');
+    // 注释里的中文本身不该出现在命中文本里
+    expect(hits[0].text).not.toContain('后续补');
+  });
+
+  it('跨行注释里的中文不报，且不使其后的行号错位', () => {
+    const src = [
+      '<template>',
+      '  <!--',
+      '    Nginx 配置提示说明',
+      '  -->',
+      '  <p>点击添加</p>',
+      '</template>',
+    ].join('\n');
+    const hits = findHardcodedCjk(src);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].line).toBe(5);
+  });
+});
+
+describe('stripHtmlComments（保持行数，供 findHardcodedCjk 对齐坐标系）', () => {
+  it('剥离注释但行数不变', () => {
+    const src = '<template>\n<!--\n  Nginx 提示\n-->\n<p>点击</p>\n</template>';
+    const stripped = stripHtmlComments(src);
+    expect(stripped.split('\n')).toHaveLength(src.split('\n').length);
+    expect(stripped).not.toContain('Nginx');
+    expect(stripped).toContain('<p>点击</p>');
+  });
+});
+
+describe('collectI18nExemptions（极少数文案本就该是中文）', () => {
+  it('无标记时返回空数组', () => {
+    expect(collectI18nExemptions('<template>\n  <p>点击</p>\n</template>')).toEqual([]);
+  });
+
+  it('行内标记：豁免本行并给出原因', () => {
+    const src = [
+      '<template>',
+      '  <button>中文<!-- i18n-exempt: 语言自称 --></button>',
+      '</template>',
+    ].join('\n');
+    expect(collectI18nExemptions(src)).toEqual([{ line: 2, reason: '语言自称' }]);
+    expect(findHardcodedCjk(src)).toEqual([]);
+  });
+
+  it('独占一行的标记：豁免其下首个含中文的行', () => {
+    const src = [
+      '<template>',
+      '  <!-- i18n-exempt: 语言自称 -->',
+      '  <button',
+      '    class="x"',
+      '  >',
+      '    中文',
+      '  </button>',
+      '  <p>这里该报</p>',
+      '</template>',
+    ].join('\n');
+    const hits = findHardcodedCjk(src);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].text).toContain('这里该报');
+  });
+
+  it('标记与文案相距过远时不豁免（避免误吞远处文案）', () => {
+    const filler = Array.from({ length: 11 }, (_, i) => `  <p>{{ a${i} }}</p>`);
+    const src = [
+      '<template>',
+      '  <!-- i18n-exempt: 太远了 -->',
+      ...filler,
+      '  <p>仍应报出</p>',
+      '</template>',
+    ].join('\n');
+    const hits = findHardcodedCjk(src);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].text).toContain('仍应报出');
+  });
+
+  it('i18n-exempt 必须写在 HTML 注释里才生效', () => {
+    const src = ['<template>', '  <p i18n-exempt="true">这里该报</p>', '</template>'].join('\n');
+    expect(collectI18nExemptions(src)).toEqual([]);
+    expect(findHardcodedCjk(src)).toHaveLength(1);
+  });
+});
+
+describe('findBrokenGlyphs（不可见字符损坏）', () => {
+  it('抓出孤立的变体选择符（缺 emoji 基字符）并给出 key', () => {
+    const r = findBrokenGlyphs({ a: { b: '\uFE0F 缺图标' } });
+    expect(r).toHaveLength(1);
+    expect(r[0].key).toBe('a.b');
+    expect(r[0].issue).toContain('孤立变体选择符');
+  });
+
+  it('合法的 emoji + 变体选择符不报', () => {
+    // 🛡（U+1F6E1）曾在手写码点区间的检测里被误判成非法
+    expect(findBrokenGlyphs({ a: '⚠️ 警告', b: '🛡️ 校验', c: '💡 提示' })).toEqual([]);
+  });
+
+  it('抓出零宽空格与零宽非连接符', () => {
+    const r = findBrokenGlyphs({ a: '前\u200B后', b: '前\u200C后' });
+    expect(r.map((x) => x.key)).toEqual(['a', 'b']);
+  });
+
+  it('不检查 U+200D（ZWJ 在 emoji 组合序列中是必需的）', () => {
+    expect(findBrokenGlyphs({ a: '👨\u200D👩\u200D👧' })).toEqual([]);
+  });
+
+  it('数字 + 变体选择符视为合法的 keycap 序列', () => {
+    expect(findBrokenGlyphs({ a: '5\uFE0F' })).toEqual([]);
+  });
 });
 
 describe('diffKeys', () => {
@@ -256,6 +388,36 @@ describe('真实语言包契约', () => {
     const r = runCheck();
     expect(r.errors).toEqual([]);
     expect(r.ok).toBe(true);
+  });
+
+  it('真实模板里没有未豁免的硬编码中文', () => {
+    // 上一轮查出的病根：envConfig.{redis,nginx}.empty 与 software.toast.copyTooltip
+    // 三条 key 之所以成为死文案，正是因为模板里把文案直接写成了中文。此断言把
+    // 「已全部接入 i18n」钉死 —— 一旦有人新增硬编码中文，这里会失败并列出位置。
+    const r = runCheck();
+    const where = r.hardcodedCjk.flatMap((f) => f.hits.map((h) => `${f.file}:${h.line} ${h.text}`));
+    expect(where).toEqual([]);
+    expect(r.hardcodedCount).toBe(0);
+  });
+
+  it('豁免项屈指可数且必须写明原因', () => {
+    // 目前唯一豁免是 SettingsPage 语言切换器的母语自称「中文」——它本就该显示为中文。
+    // 这个数字若增长，说明有人在用豁免绕过硬编码检查，需要审视每一条的理由。
+    // 同时断言 file 而不只是数量：豁免挪到别处、或标记误伤了其它行，都应被发现。
+    const r = runCheck();
+    expect(r.exemptions).toHaveLength(1);
+    expect(r.exemptions[0].file).toBe('src/components/SettingsPage.vue');
+    for (const e of r.exemptions) expect(e.reason).not.toBe('未说明原因');
+  });
+
+  it('真实语言包文案里没有不可见字符损坏', () => {
+    // en.json 的 mirror.dockerRegistry.warning 曾以孤立 U+FE0F 开头（丢了基字符 ⚠），
+    // 英文界面该警告条目前面缺图标。这类损坏无法靠阅读发现 ——
+    // ⚠️（U+26A0 U+FE0F）与 ️（孤立 U+FE0F）在编辑器里都只占一个空格宽。
+    for (const [name, file] of Object.entries(LOCALE_FILES)) {
+      const bad = findBrokenGlyphs(JSON.parse(readFileSync(file, 'utf8')));
+      expect(bad, `${name} 存在不可见字符损坏`).toEqual([]);
+    }
   });
 
   it('扫描范围覆盖 src-tauri/src（Rust 引擎会直接发 i18n key）', () => {

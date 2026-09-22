@@ -89,7 +89,7 @@ const themeOptions = computed(() => [
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 ]"
               >
-                中文
+                中文<!-- i18n-exempt: 语言自称，任何界面语言下都显示为「中文」，不随 locale 切换 -->
               </button>
               <button
                 @click="switchLanguage('en')"

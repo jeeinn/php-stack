@@ -662,7 +662,7 @@ async function exportLogs() {
             <button 
               @click="() => refreshContainers()" 
               :disabled="loading"
-              class="w-full sm:w-auto ui-btn-dark disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
+              class="w-full sm:w-auto ui-btn-emphasis disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
             >
               {{ loading ? $t('dashboard.refreshing') : $t('dashboard.refresh') }}
             </button>
@@ -679,7 +679,7 @@ async function exportLogs() {
               <button 
                 @click="handleRestartEnvironment"
                 :disabled="!canRestart || starting"
-                class="w-full sm:w-auto ui-btn-dark disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                class="w-full sm:w-auto ui-btn-emphasis disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
                 :title="!canRestart ? $t('dashboard.restartTooltip') : ''"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
@@ -946,7 +946,7 @@ async function exportLogs() {
           </button>
           <button 
             @click="confirmRestart"
-            class="w-full ui-btn-dark px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-slate-900/20"
+            class="w-full ui-btn-emphasis px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-slate-900/20"
           >
             {{ $t('dashboard.restartConfirm.action') }}
           </button>

@@ -345,6 +345,22 @@ describe('findBrokenGlyphs（不可见字符损坏）', () => {
   it('数字 + 变体选择符视为合法的 keycap 序列', () => {
     expect(findBrokenGlyphs({ a: '5\uFE0F' })).toEqual([]);
   });
+
+  it('多码点 emoji 之后的变体选择符不报（肤色修饰符也算基字符）', () => {
+    // 实测：👐🏽️ 里 FE0F 的前一位是肤色修饰符 U+1F3FD，\p{Emoji} 为真 → 放过；
+    // 👨‍👩‍👧️ 同理（前一位是 U+1F467）。这是刻意的「宁漏报不误报」取舍：
+    // 变体选择符损坏的真实形态是**丢了基字符**（前面是空格、汉字或串首），
+    // 不会紧跟在一个合法 emoji 之后 —— 这个方向的漏报代价可以忽略。
+    expect(findBrokenGlyphs({ a: '\u{1F450}\u{1F3FD}\uFE0F' })).toEqual([]);
+    expect(findBrokenGlyphs({ a: '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\uFE0F' })).toEqual([]);
+  });
+
+  it('ZWJ 之后紧跟变体选择符仍要报（ZWJ 不是 emoji 基字符）', () => {
+    // 与上一条互补：前一位是 U+200D 时确实没有基字符，必须报出来
+    const r = findBrokenGlyphs({ a: '\u{1F468}\u200D\uFE0F' });
+    expect(r).toHaveLength(1);
+    expect(r[0].issue).toContain('孤立变体选择符');
+  });
 });
 
 describe('findEmbeddedKeyValues（提示文案里写死按钮名）', () => {

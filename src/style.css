@@ -87,14 +87,17 @@ body {
   @apply bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700;
 }
 
-/* 强调性次级按钮：黑（辅助色）。同一组并列操作里的非主操作 */
-.ui-btn-dark {
+/* 强调性次级按钮：黑（辅助色）。同一组并列操作里的非主操作。
+   刻意不叫 ui-btn-dark —— 它在 dark 模式下是浅底深字（slate-100 底 + slate-900 字），
+   "dark" 会被读成主题模式名，与实际观感正好相反。 */
+.ui-btn-emphasis {
   @apply bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900;
 }
 
-/* 危险按钮：红。删除、停止、重置等破坏性操作 */
+/* 危险按钮：红。删除、停止、重置等破坏性操作。
+   dark 变体与其它 token 同律：基础态与 light 同色，hover 更亮一档。 */
 .ui-btn-danger {
-  @apply bg-rose-600 hover:bg-rose-700 dark:hover:bg-rose-500 text-white;
+  @apply bg-rose-600 hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500 text-white;
 }
 
 /* 浅色主按钮：蓝。行内/标签式操作按钮 */

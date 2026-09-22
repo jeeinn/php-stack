@@ -184,8 +184,10 @@ describe('EnvConfigPage — Phase 3 三段式 apply', () => {
 
     expect(callsTo('pull_service_images').length).toBe(2)
     expect(callsTo('apply_env_config').length).toBe(1)
-    const warnCall = vi.mocked(showToast).mock.calls.find((c) => c[1] === 'warning')
-    expect(warnCall, '部分失败应给出 warning 提示').toBeTruthy()
+    // Toast 类型已收敛为三类（warning 与 info 视觉相同，无保留价值），
+    // 这里断言的是「部分失败必须给出提示」，而非某个特定类型名。
+    const infoCall = vi.mocked(showToast).mock.calls.find((c) => c[1] === 'info')
+    expect(infoCall, '部分失败应给出提示').toBeTruthy()
   })
 
   it('⑥ 拉取全部失败时二次确认：同意后才 apply', async () => {

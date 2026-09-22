@@ -211,7 +211,7 @@ function openEditDialog(option: MirrorSourceOption) {
 // 保存编辑（更新已有选项）并自动应用配置
 async function saveEdit() {
   if (!editValue.value.trim()) {
-    showToast(t('mirror.toast.urlRequired'), 'warning');
+    showToast(t('mirror.toast.urlRequired'), 'info');
     return;
   }
   
@@ -243,7 +243,7 @@ async function saveEdit() {
 // 保存自定义镜像源并自动应用配置
 async function saveCustomMirror() {
   if (!editValue.value.trim()) {
-    showToast(t('mirror.toast.urlRequired'), 'warning');
+    showToast(t('mirror.toast.urlRequired'), 'info');
     return;
   }
   

@@ -356,7 +356,7 @@ async function onWorkspaceMissingResolved() {
 function onWorkspaceMissingTemp() {
   showWorkspaceMissing.value = false;
   workspaceMissingDismissed.value = true;
-  showToast(t('workspace.missing.tempToast'), 'warning');
+  showToast(t('workspace.missing.tempToast'), 'info');
 }
 
 function openWorkspaceMissingOrConfig() {
@@ -494,7 +494,7 @@ const scrollToBottom = async () => {
 // 与界面看到的内容对不上——面板只保留最近 UI_LOG_LIMIT 条）
 async function copyLogs() {
   if (logs.value.length === 0) {
-    showToast(t('dashboard.log.empty'), 'warning');
+    showToast(t('dashboard.log.empty'), 'info');
     return;
   }
   try {

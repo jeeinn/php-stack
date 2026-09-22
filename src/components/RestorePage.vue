@@ -170,7 +170,7 @@ async function handleRestore() {
       progress.value = null;
     } else {
       // 部分失败：不静默吞掉，明细留在页面上供用户逐条查看
-      showToast(t('restore.toast.partialSuccess'), 'warning');
+      showToast(t('restore.toast.partialSuccess'), 'info');
       progress.value = null;
     }
   } catch (e) {

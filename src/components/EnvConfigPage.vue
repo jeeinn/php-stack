@@ -704,10 +704,10 @@ async function confirmPullAndApply(missingTags: string[]) {
         applying.value = false;
         return;
       }
-      showToast(t('envConfig.toast.pullAllFailed'), 'warning', 5000);
+      showToast(t('envConfig.toast.pullAllFailed'), 'info', 5000);
     } else if (failures.length > 0) {
       const failSummary = failures.map(f => `${f.tag} (${f.error || 'unknown'})`).join(', ');
-      showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'warning', 5000);
+      showToast(t('envConfig.toast.pullPartialSuccess', { details: failSummary }), 'info', 5000);
     } else if (results.length > 0) {
       showToast(t('envConfig.toast.pullAllSuccess', { count: results.length }), 'success', 3000);
     }

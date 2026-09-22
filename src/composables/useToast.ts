@@ -1,7 +1,19 @@
 import { computed, ref } from 'vue';
 import i18n from '../i18n';
 
-export type ToastType = 'success' | 'error' | 'warning' | 'info';
+/**
+ * Toast 只有三类视觉：成功=绿、错误=红、其余=蓝。
+ *
+ * 原本还有 'warning'，但它在 Toast.vue 里与 'info' 返回**完全相同**的配色与边框
+ * （统一配色时把 amber 改成了蓝），于是「类型名有四个、视觉只有三种」——
+ * 调用方以为传 'warning' 会更醒目，界面上却没有任何区别。
+ * 与其留一个名不副实的类型，不如把类型体系收敛到与实际视觉一致的三类：
+ * 需要强调的内容请写进文案（本项目已这么做，例如「恢复部分失败」会带明细）。
+ *
+ * 注意与 LogLevel 区分：日志面板的 warn 级别仍在（文字为 amber，且可过滤），
+ * 那是**日志**的语义，本轮未改动。
+ */
+export type ToastType = 'success' | 'error' | 'info';
 export type LogLevel = 'info' | 'warn' | 'error';
 
 export interface LogEntry {

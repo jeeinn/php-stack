@@ -846,14 +846,14 @@ const goToMirrorSettings = () => {
         <button
           @click="handleApply"
           :disabled="applying || portConflicts.length > 0"
-          class="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50 text-white"
+          class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50"
         >
           {{ applying ? $t('envConfig.applying') : $t('envConfig.apply') }}
         </button>
         <button
           @click="handleStart"
           :disabled="starting || !hasEnvFile"
-          class="w-full sm:w-auto px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed text-white"
+          class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
           :title="!hasEnvFile ? $t('envConfig.startTooltip') : ''"
         >
           {{ starting ? $t('envConfig.startingEnv') : $t('envConfig.startEnv') }}
@@ -862,16 +862,16 @@ const goToMirrorSettings = () => {
     </header>
     
     <!-- 版本清单加载失败提示：不回退硬编码列表，引导用户修正清单后重试 -->
-    <div v-if="versionLoadError" class="mb-4 p-4 sm:p-5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
+    <div v-if="versionLoadError" class="mb-4 p-4 sm:p-5 ui-hint-box-solid rounded-xl">
       <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div class="flex-1">
-          <p class="text-sm font-medium text-amber-900 dark:text-amber-200">{{ $t('envConfig.versionList.loadFailed') }}</p>
-          <p class="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">{{ $t('envConfig.versionList.loadFailedHint') }}</p>
+          <p class="text-sm font-medium text-blue-800 dark:text-blue-200">{{ $t('envConfig.versionList.loadFailed') }}</p>
+          <p class="text-xs text-blue-700 dark:text-blue-300 mt-1 leading-relaxed">{{ $t('envConfig.versionList.loadFailedHint') }}</p>
         </div>
         <button
           @click="retryLoadVersionMappings"
           :disabled="versionLoadRetrying"
-          class="w-full sm:w-auto shrink-0 px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full sm:w-auto shrink-0 ui-btn-primary px-3 py-1.5 text-sm rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {{ versionLoadRetrying ? $t('envConfig.versionList.retrying') : $t('envConfig.versionList.retry') }}
         </button>
@@ -879,7 +879,7 @@ const goToMirrorSettings = () => {
     </div>
 
     <!-- Nginx 配置提示 -->
-    <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
+    <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 ui-hint-box-solid rounded-xl">
       <div class="flex flex-col sm:flex-row items-start gap-3">
         <div class="flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -887,7 +887,7 @@ const goToMirrorSettings = () => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="text-base font-semibold text-blue-600 dark:text-blue-400 mb-2">{{ $t('envConfig.nginxHint.title') }}</h3>
+          <h3 class="text-base font-semibold text-blue-800 dark:text-blue-200 mb-2">{{ $t('envConfig.nginxHint.title') }}</h3>
           <p class="text-sm text-slate-700 dark:text-slate-300 mb-3">
             {{ $t('envConfig.nginxHint.description') }}
           </p>
@@ -897,14 +897,14 @@ const goToMirrorSettings = () => {
             <div class="space-y-1">
               <div v-for="(name, index) in phpContainerNames" :key="index" class="flex items-center gap-2">
                 <span class="text-xs text-slate-500 font-mono">{{ index + 1 }}.</span>
-                <code class="text-sm text-emerald-400 font-mono">{{ name }}</code>
+                <code class="text-sm text-blue-600 dark:text-blue-400 font-mono">{{ name }}</code>
               </div>
             </div>
           </div>
           
           <!-- 多 Nginx 版本提示 -->
-          <div v-if="nginxServicesList.length > 1" class="bg-amber-100 dark:bg-amber-950/30 rounded-lg p-3 mb-3 border border-amber-200 dark:border-amber-800">
-            <p class="text-xs text-amber-700 dark:text-amber-300 mb-2">{{ $t('envConfig.nginxHint.multiNginx') }}</p>
+          <div v-if="nginxServicesList.length > 1" class="ui-hint-box-solid rounded-lg p-3 mb-3">
+            <p class="text-xs text-blue-700 dark:text-blue-300 mb-2">{{ $t('envConfig.nginxHint.multiNginx') }}</p>
             <div class="space-y-2">
               <div v-for="(nginx, index) in nginxServicesList" :key="index" class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
                 <div class="flex items-center gap-2">
@@ -951,7 +951,7 @@ const goToMirrorSettings = () => {
             </button>
             <button
               @click="showNginxHint = false"
-              class="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-sm font-medium transition text-slate-700 dark:text-slate-300"
+              class="w-full sm:w-auto ui-btn-secondary px-4 py-2 rounded-lg text-sm font-medium transition"
             >
               {{ $t('envConfig.nginxHint.dismiss') }}
             </button>
@@ -960,7 +960,7 @@ const goToMirrorSettings = () => {
       </div>
     </div>
     
-    <div v-if="portConflicts.length > 0" class="mb-4 p-4 bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-600 dark:text-amber-400 text-sm">
+    <div v-if="portConflicts.length > 0" class="mb-4 p-4 ui-hint-box rounded-xl text-sm">
       <div class="font-bold mb-1">{{ $t('envConfig.portConflict.title') }}</div>
       <div v-for="c in portConflicts" :key="c">{{ c }}</div>
     </div>
@@ -978,7 +978,7 @@ const goToMirrorSettings = () => {
               aria-label="help"
             >?</button>
           </div>
-          <button @click="addPhpVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
+          <button @click="addPhpVersion" class="text-sm px-3 py-1 ui-btn-soft rounded-lg transition">
             {{ $t('envConfig.addVersion') }}
           </button>
         </div>
@@ -1029,12 +1029,12 @@ const goToMirrorSettings = () => {
 
                 <!-- 自定义扩展输入区 -->
                 <div class="pt-3 border-t border-slate-200 dark:border-slate-700/50">
-                  <label class="block text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">{{ $t('envConfig.php.customExtensions') }}</label>
+                  <label class="block text-[10px] font-medium text-blue-600 dark:text-blue-400 mb-1.5">{{ $t('envConfig.php.customExtensions') }}</label>
                   <input
                     v-model="customExtInput[idx]"
                     @blur="syncCustomExtensions(idx)"
                     :placeholder="$t('envConfig.php.customExtPlaceholder')"  
-                    class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 font-mono outline-none focus:ring-2 focus:ring-blue-500/50"
                   />
                   <div class="flex items-center justify-between mt-1.5">
                     <p class="text-[10px] text-slate-500 dark:text-slate-500">{{ $t('envConfig.php.customExtHint') }}</p>
@@ -1218,19 +1218,19 @@ const goToMirrorSettings = () => {
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">.env</div>
-              <pre class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-green-600 dark:text-green-300/80 border border-slate-200 dark:border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewEnv }}</pre>
+              <pre class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewEnv }}</pre>
             </div>
             <div>
               <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">docker-compose.yml</div>
-              <pre class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-blue-600 dark:text-blue-300/80 border border-slate-200 dark:border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewCompose }}</pre>
+              <pre class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-lg text-xs text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 max-h-80 sm:max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ previewCompose }}</pre>
             </div>
           </div>
         </div>
         <div class="p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-end gap-3">
-          <button @click="showPreviewModal = false" class="w-full sm:w-auto px-5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition">
+          <button @click="showPreviewModal = false" class="w-full sm:w-auto px-5 py-2 ui-btn-secondary rounded-lg font-medium transition">
             {{ $t('envConfig.previewModal.close') }}
           </button>
-          <button @click="handleApply" :disabled="applying" class="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50 text-white">
+          <button @click="handleApply" :disabled="applying" class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50">
             {{ applying ? $t('envConfig.applying') : $t('envConfig.previewModal.applyConfig') }}
           </button>
         </div>
@@ -1250,20 +1250,20 @@ const goToMirrorSettings = () => {
           <div class="flex gap-3">
             <button 
               @click="showStartConfirm = false"
-              class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
+              class="flex-1 px-4 py-2 ui-btn-secondary rounded-lg font-medium transition"
             >
               取消
             </button>
             <button 
               @click="goToMirrorSettings"
-              class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+              class="flex-1 px-4 py-2 ui-btn-primary rounded-lg font-medium transition"
             >
               去配置镜像源
             </button>
           </div>
           <button 
             @click="confirmStart"
-            class="w-full px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
+            class="w-full ui-btn-primary px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-blue-600/20"
           >
             直接启动
           </button>

@@ -11,7 +11,7 @@ function getToastClass(type: string): string {
     case 'error':
       return 'bg-rose-500/10 border-rose-500/20 text-rose-400';
     case 'warning':
-      return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+      return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
     case 'info':
     default:
       return 'bg-blue-500/10 border-blue-500/20 text-blue-400';

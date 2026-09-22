@@ -73,7 +73,7 @@ async function confirmWorkspace() {
             <button 
               type="button"
               @click="selectDirectory"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+              class="px-4 py-2 ui-btn-primary rounded-lg font-medium transition"
             >
               {{ $t('common.browse') }}
             </button>
@@ -88,7 +88,7 @@ async function confirmWorkspace() {
           <button 
             type="button"
             @click="confirmWorkspace"
-            class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
+            class="ui-btn-primary px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-blue-600/20"
           >
             {{ $t('workspace.confirmStart') }}
           </button>

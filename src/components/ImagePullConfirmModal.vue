@@ -81,7 +81,7 @@ const summary = computed(() => {
       </div>
       <div
         v-else-if="missing.length > 0"
-        class="px-4 sm:px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs"
+        class="px-4 sm:px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 text-xs"
       >
         ⚠️ {{ summary }}
       </div>
@@ -95,16 +95,16 @@ const summary = computed(() => {
       <!-- Body: 镜像清单 -->
       <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-2">
         <!-- 缺失的：需用户确认 -->
-        <div v-for="p in missing" :key="p.tag" class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
+        <div v-for="p in missing" :key="p.tag" class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
           <div class="flex items-center gap-2 min-w-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
             </svg>
             <code class="text-xs font-mono text-slate-700 dark:text-slate-200 truncate">{{ p.tag }}</code>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <span v-if="pulling && progress && progress[p.tag] != null" class="text-[10px] text-blue-500 font-mono">{{ progress[p.tag] }}%</span>
-            <span class="text-[10px] px-2 py-0.5 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 rounded font-medium">
+            <span class="text-[10px] px-2 py-0.5 ui-tag-blue rounded font-medium">
               {{ $t('envConfig.pullConfirm.toPull') }}
             </span>
           </div>
@@ -132,14 +132,14 @@ const summary = computed(() => {
         <button
           @click="emit('cancel')"
           :disabled="pulling"
-          class="px-5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition disabled:opacity-50"
+          class="px-5 py-2 ui-btn-secondary rounded-lg font-medium transition disabled:opacity-50"
         >
           {{ $t('common.cancel') }}
         </button>
         <button
           @click="emit('confirm', missing.map(p => p.tag))"
           :disabled="pulling || missing.length === 0"
-          class="px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed text-white flex items-center gap-2"
+          class="px-5 py-2 ui-btn-primary rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           <svg v-if="pulling" class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

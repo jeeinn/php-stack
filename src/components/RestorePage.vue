@@ -285,7 +285,7 @@ function formatTimestamp(ts: string): string {
           <section v-if="currentStep === 'preview'" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
             <div v-if="!preview">
               <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('restore.preview.title') }}</h2>
-              <button @click="handlePreview" :disabled="loading" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2 text-white">
+              <button @click="handlePreview" :disabled="loading" class="w-full py-3 ui-btn-primary rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2">
                 <span v-if="loading" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
                 {{ loading ? $t('restore.preview.previewing') : $t('restore.preview.startPreview') }}
               </button>
@@ -327,29 +327,29 @@ function formatTimestamp(ts: string): string {
               <div
                 v-if="preview.port_conflicts && preview.port_conflicts.length > 0"
                 data-testid="port-conflicts"
-                class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+                class="mb-4 p-3 ui-hint-box rounded-lg"
               >
-                <div class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{{ $t('restore.preview.portConflicts') }}</div>
-                <p class="text-xs text-amber-600/90 dark:text-amber-300/90 mb-2">{{ $t('restore.preview.portConflictsHint') }}</p>
+                <div class="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">{{ $t('restore.preview.portConflicts') }}</div>
+                <p class="text-xs text-blue-600/90 dark:text-blue-300/90 mb-2">{{ $t('restore.preview.portConflictsHint') }}</p>
                 <div
                   v-for="c in preview.port_conflicts"
                   :key="`${c.service}-${c.port}`"
-                  class="text-xs font-mono text-amber-700 dark:text-amber-200"
+                  class="text-xs font-mono text-blue-700 dark:text-blue-200"
                 >
                   {{ $t('restore.preview.portConflictItem', { service: c.service, port: c.port, suggested: c.suggested_port }) }}
                 </div>
               </div>
 
-              <div v-if="preview.manifest.errors.length > 0" class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <div class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">{{ $t('restore.preview.warnings') }}</div>
-                <div v-for="err in preview.manifest.errors" :key="err" class="text-xs text-amber-600 dark:text-amber-300">{{ err }}</div>
+              <div v-if="preview.manifest.errors.length > 0" class="mb-4 p-3 ui-hint-box rounded-lg">
+                <div class="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">{{ $t('restore.preview.warnings') }}</div>
+                <div v-for="err in preview.manifest.errors" :key="err" class="text-xs text-blue-600 dark:text-blue-300">{{ err }}</div>
               </div>
 
               <div class="flex gap-3">
-                <button disabled class="flex-1 py-3 bg-emerald-600 rounded-xl font-bold flex items-center justify-center gap-2 opacity-50 cursor-not-allowed text-white">
+                <button disabled class="flex-1 py-3 ui-btn-primary rounded-xl font-bold flex items-center justify-center gap-2 opacity-50 cursor-not-allowed">
                   {{ $t('restore.preview.done') }}
                 </button>
-                <button @click="goToStep('verify')" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition flex items-center justify-center gap-2 text-white">
+                <button @click="goToStep('verify')" class="flex-1 py-3 ui-btn-primary rounded-xl font-bold transition flex items-center justify-center gap-2">
                   {{ $t('restore.preview.next') }}
                 </button>
               </div>
@@ -362,7 +362,7 @@ function formatTimestamp(ts: string): string {
           <section v-if="currentStep === 'verify'" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
             <div v-if="verified === null">
               <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('restore.verify.title') }}</h2>
-              <button @click="handleVerify" :disabled="loading" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2 text-white">
+              <button @click="handleVerify" :disabled="loading" class="w-full py-3 ui-btn-primary rounded-xl font-bold transition disabled:opacity-50 flex items-center justify-center gap-2">
                 <span v-if="loading" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
                 {{ loading ? $t('restore.verify.verifying') : $t('restore.verify.startVerify') }}
               </button>
@@ -386,7 +386,7 @@ function formatTimestamp(ts: string): string {
                 <p class="text-xs text-rose-600/80 dark:text-rose-300/80 mt-2">{{ $t('restore.verify.failedHint') }}</p>
               </div>
               
-              <button v-if="verified" @click="goToStep('restore')" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition flex items-center justify-center gap-2 text-white">
+              <button v-if="verified" @click="goToStep('restore')" class="w-full py-3 ui-btn-primary rounded-xl font-bold transition flex items-center justify-center gap-2">
                 {{ $t('restore.verify.next') }}
               </button>
             </div>
@@ -398,7 +398,7 @@ function formatTimestamp(ts: string): string {
           <section v-if="currentStep === 'restore'" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
             <div v-if="!isStepCompleted('restore')">
               <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('restore.restoreAction.title') }}</h2>
-              <button @click="handleRestore" :disabled="!canRestore || restoring" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-white" :title="!canRestore ? '' : ''">
+              <button @click="handleRestore" :disabled="!canRestore || restoring" class="w-full py-3 ui-btn-primary rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" :title="!canRestore ? '' : ''">
                 <span v-if="restoring" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
                 {{ restoring ? $t('restore.restoreAction.restoring') : $t('restore.restoreAction.start') }}
               </button>
@@ -427,10 +427,10 @@ function formatTimestamp(ts: string): string {
               </div>
               <div
                 v-else-if="!restoreResult.success"
-                class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg"
+                class="p-3 ui-hint-box-solid rounded-lg"
               >
-                <h3 class="font-bold text-amber-700 dark:text-amber-400">{{ $t('restore.partialSuccess.title') }}</h3>
-                <p class="text-sm text-amber-700 dark:text-amber-400 mt-1">{{ $t('restore.partialSuccess.description') }}</p>
+                <h3 class="font-bold text-blue-800 dark:text-blue-200">{{ $t('restore.partialSuccess.title') }}</h3>
+                <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">{{ $t('restore.partialSuccess.description') }}</p>
               </div>
 
               <div v-if="restoreResult.restored_files.length">
@@ -444,9 +444,9 @@ function formatTimestamp(ts: string): string {
               </div>
 
               <div v-if="restoreResult.errors.length">
-                <h4 class="font-semibold text-sm text-red-700 dark:text-red-400 mb-2">{{ $t('restore.result.errors') }}</h4>
-                <ul class="max-h-48 overflow-y-auto text-xs space-y-1 bg-red-50 dark:bg-red-900/20 rounded-lg p-3" data-testid="restore-errors">
-                  <li v-for="(err, idx) in restoreResult.errors" :key="idx" class="font-mono text-red-600 dark:text-red-400 whitespace-pre-wrap">{{ err }}</li>
+                <h4 class="font-semibold text-sm text-rose-700 dark:text-rose-400 mb-2">{{ $t('restore.result.errors') }}</h4>
+                <ul class="max-h-48 overflow-y-auto text-xs space-y-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg p-3" data-testid="restore-errors">
+                  <li v-for="(err, idx) in restoreResult.errors" :key="idx" class="font-mono text-rose-600 dark:text-rose-400 whitespace-pre-wrap">{{ err }}</li>
                 </ul>
               </div>
 
@@ -458,7 +458,7 @@ function formatTimestamp(ts: string): string {
                   type="button"
                   data-testid="rollback-action"
                   @click="useRollbackBundle"
-                  class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+                  class="w-full sm:w-auto ui-btn-primary px-4 py-2 text-sm font-medium rounded-lg transition"
                 >
                   {{ $t('restore.result.rollbackAction') }}
                 </button>

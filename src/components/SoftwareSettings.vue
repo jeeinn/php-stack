@@ -165,7 +165,7 @@ onMounted(() => {
       </div>
       <button
         @click="resetAllOverrides"
-        class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition text-sm"
+        class="px-4 py-2 ui-btn-danger rounded-lg transition text-sm"
       >
         {{ $t('software.resetAll') }}
       </button>
@@ -229,7 +229,7 @@ onMounted(() => {
                   >
                     {{ version.image_tag }}
                   </code>
-                  <span v-if="version.has_user_override" class="ml-1 text-xs text-yellow-400">({{ $t('mirror.status.custom') }})</span>
+                  <span v-if="version.has_user_override" class="ml-1 text-xs text-slate-500 dark:text-slate-400">({{ $t('mirror.status.custom') }})</span>
                 </td>
                 <td class="py-3 px-3">
                   <code class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs text-slate-700 dark:text-slate-300">{{ version.service_dir }}</code>
@@ -249,7 +249,7 @@ onMounted(() => {
                   <div class="flex items-center gap-2">
                     <button
                       @click="openEditDialog(version)"
-                      class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition"
+                      class="px-3 py-1.5 ui-btn-secondary rounded text-xs transition"
                       title=""
                     >
                       {{ $t('common.edit') }}
@@ -257,7 +257,7 @@ onMounted(() => {
                     <button
                       v-if="version.has_user_override"
                       @click="removeOverride(version)"
-                      class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition"
+                      class="px-3 py-1.5 ui-btn-danger rounded text-xs transition"
                       title=""
                     >
                       {{ $t('common.delete') }}

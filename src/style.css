@@ -61,3 +61,63 @@ body {
 .theme-button-secondary {
   @apply bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300;
 }
+
+/* ==========================================================================
+   UI 配色规范（统一语义层）
+   --------------------------------------------------------------------------
+   调色板只有三组：
+     · 主色调  blue      —— 一切正向操作、提示、标签、交互强调
+     · 辅助色  黑/中性    —— 次级操作、取消、中性标签、正文
+     · 语义色  rose/red（错误、危险）、emerald/green（成功）、amber（仅日志警告级别）
+   规则：
+     1. 按钮：主操作=蓝；并列操作中的非主操作=黑；危险操作=红。
+     2. 提示类元素（提示框、横幅、标签、徽章、tooltip 触发图标）=蓝或中性。
+     3. 状态指示器（加载中、进行中、容器运行状态、进度条、步骤条）=保留原有语义色。
+     4. Toast：成功=绿，错误=红，其余提示=蓝。
+   所有 token 均自带 dark 变体，新增组件请复用而非另起配色。
+   ========================================================================== */
+
+/* 主按钮：蓝。正向主操作（启动、应用、保存、重试、提交、下载） */
+.ui-btn-primary {
+  @apply bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white;
+}
+
+/* 次级按钮：中性。取消、关闭、配置、浏览等非主操作 */
+.ui-btn-secondary {
+  @apply bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700;
+}
+
+/* 强调性次级按钮：黑（辅助色）。同一组并列操作里的非主操作 */
+.ui-btn-dark {
+  @apply bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900;
+}
+
+/* 危险按钮：红。删除、停止、重置等破坏性操作 */
+.ui-btn-danger {
+  @apply bg-rose-600 hover:bg-rose-700 dark:hover:bg-rose-500 text-white;
+}
+
+/* 浅色主按钮：蓝。行内/标签式操作按钮 */
+.ui-btn-soft {
+  @apply bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-600/30 hover:bg-blue-600 hover:text-white;
+}
+
+/* 提示框：蓝。告知、引导、警告类横幅与卡片（统一一种规格） */
+.ui-hint-box {
+  @apply bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300;
+}
+
+/* 提示框（实底）：蓝。需要更强存在感的引导卡/步骤提示 */
+.ui-hint-box-solid {
+  @apply bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300;
+}
+
+/* 标签：蓝。信息性徽章与状态文字 */
+.ui-tag-blue {
+  @apply bg-blue-500/20 text-blue-600 dark:text-blue-300;
+}
+
+/* 标签：中性。非强调性徽章与元信息 */
+.ui-tag-neutral {
+  @apply bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400;
+}

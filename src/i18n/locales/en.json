@@ -9,15 +9,7 @@
     "edit": "Edit",
     "reset": "Reset",
     "loading": "Loading...",
-    "select": "Select",
-    "test": "Test",
-    "testing": "Testing...",
     "browse": "Browse",
-    "copy": "Copy",
-    "retry": "Retry",
-    "start": "Start",
-    "stop": "Stop",
-    "version": "v0.1.0",
     "noOptions": "No options available",
     "selectPlaceholder": "Select...",
     "confirmAction": "Confirm"
@@ -169,13 +161,13 @@
       "title": "🔴 Redis Services",
       "version": "Redis Version",
       "versionPlaceholder": "Select Redis version",
-      "empty": "Click \"+ Add Version\" above to add a Redis service"
+      "empty": "Click “{action}” above to add a Redis service"
     },
     "nginx": {
       "title": "🚀 Nginx Services",
       "version": "Nginx Version",
       "versionPlaceholder": "Select Nginx version",
-      "empty": "Click \"+ Add Version\" above to add an Nginx service"
+      "empty": "Click “{action}” above to add an Nginx service"
     },
     "addVersion": "+ Add Version",
     "remove": "Remove",
@@ -655,7 +647,6 @@
       "configuredMissing": "Configured workspace {path} does not exist, waiting for you to recreate or choose a new path."
     },
     "status": {
-      "loading": "Loading...",
       "notConfigured": "Not configured",
       "loadFailed": "Load failed",
       "fallback": "Configured workspace is unavailable; data is written to {effective}. {reason}"
@@ -686,11 +677,8 @@
       "checking": "Checking...",
       "upToDate": "You are on the latest version",
       "available": "Update available: {version}",
-      "notes": "Release notes",
       "download": "Download and install",
       "downloading": "Downloading… {percent}%",
-      "installing": "Installing…",
-      "relaunching": "Relaunching…",
       "failed": "Update check failed: {error}",
       "devHint": "Update checks may fail in development mode.",
       "banner": "Version {version} is available",

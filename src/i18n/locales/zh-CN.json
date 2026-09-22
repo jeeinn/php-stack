@@ -9,15 +9,7 @@
     "edit": "编辑",
     "reset": "重置",
     "loading": "加载中...",
-    "select": "选择",
-    "test": "测试",
-    "testing": "测试中...",
     "browse": "浏览",
-    "copy": "复制",
-    "retry": "重试",
-    "start": "启动",
-    "stop": "停止",
-    "version": "v0.1.0",
     "noOptions": "暂无选项",
     "selectPlaceholder": "请选择...",
     "confirmAction": "确认操作"
@@ -169,13 +161,13 @@
       "title": "🔴 Redis 服务",
       "version": "Redis 版本",
       "versionPlaceholder": "选择 Redis 版本",
-      "empty": "点击上方\"+ 添加版本\"按钮添加 Redis 服务"
+      "empty": "点击上方“{action}”按钮添加 Redis 服务"
     },
     "nginx": {
       "title": "🚀 Nginx 服务",
       "version": "Nginx 版本",
       "versionPlaceholder": "选择 Nginx 版本",
-      "empty": "点击上方\"+ 添加版本\"按钮添加 Nginx 服务"
+      "empty": "点击上方“{action}”按钮添加 Nginx 服务"
     },
     "addVersion": "+ 添加版本",
     "remove": "删除",
@@ -655,7 +647,6 @@
       "configuredMissing": "配置的工作区 {path} 不存在，等待用户确认重建或更换"
     },
     "status": {
-      "loading": "加载中...",
       "notConfigured": "未配置",
       "loadFailed": "获取失败",
       "fallback": "配置的工作区不可用，数据实际写入 {effective}。{reason}"
@@ -686,11 +677,8 @@
       "checking": "正在检查...",
       "upToDate": "已是最新版本",
       "available": "发现新版本 {version}",
-      "notes": "更新说明",
       "download": "下载并安装",
       "downloading": "正在下载… {percent}%",
-      "installing": "正在安装…",
-      "relaunching": "即将重启…",
       "failed": "检查更新失败: {error}",
       "devHint": "开发模式下可能无法检查更新。",
       "banner": "新版本 {version} 可用",

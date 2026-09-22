@@ -225,7 +225,7 @@ onMounted(() => {
                   <code 
                     @click="copyImageName(version.image_tag)"
                     class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs block cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition truncate"
-                    :title="'点击复制: ' + version.image_tag"
+                    :title="t('software.toast.copyTooltip', { tag: version.image_tag })"
                   >
                     {{ version.image_tag }}
                   </code>

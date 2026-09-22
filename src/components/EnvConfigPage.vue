@@ -1130,7 +1130,7 @@ const goToMirrorSettings = () => {
           </div>
         </div>
         <div v-if="redisServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
-          点击上方“{{ $t('envConfig.addVersion') }}”按钮添加 Redis 服务
+          {{ $t('envConfig.redis.empty', { action: $t('envConfig.addVersion') }) }}
         </div>
       </section>
 
@@ -1162,7 +1162,7 @@ const goToMirrorSettings = () => {
           </div>
         </div>
         <div v-if="nginxServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
-          点击上方“{{ $t('envConfig.addVersion') }}”按钮添加 Nginx 服务
+          {{ $t('envConfig.nginx.empty', { action: $t('envConfig.addVersion') }) }}
         </div>
       </section>
 

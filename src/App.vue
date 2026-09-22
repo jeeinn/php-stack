@@ -25,6 +25,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { getVersion } from '@tauri-apps/api/app';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
+import MigrationPage from './components/MigrationPage.vue';
 import AboutPage from './components/AboutPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
@@ -36,6 +37,7 @@ import { pendingUpdateVersion, setPendingUpdateVersion } from './composables/use
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
 import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
+import { WORKSPACE_CHANGED_EVENT } from './utils/workspaceEvents';
 
 const { t } = useI18n();
 

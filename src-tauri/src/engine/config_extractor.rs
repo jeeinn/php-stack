@@ -123,23 +123,23 @@ impl ConfigExtractor {
         app_log!(
             info,
             "engine::config_extractor",
-            "开始拉取镜像: {}",
+            "Pulling image: {}",
             image_tag
         );
         let status = Command::new("docker")
             .args(["pull", image_tag])
             .status()
-            .map_err(|e| format!("docker pull 启动失败: {e}"))?;
+            .map_err(|e| format!("failed to start docker pull: {e}"))?;
         if !status.success() {
             return Err(format!(
-                "docker pull {image_tag} 失败（exit code: {:?}）",
+                "docker pull {image_tag} failed (exit code: {:?})",
                 status.code()
             ));
         }
         app_log!(
             info,
             "engine::config_extractor",
-            "镜像拉取完成: {}",
+            "Image pulled: {}",
             image_tag
         );
         Ok(())
@@ -174,7 +174,7 @@ impl ConfigExtractor {
             app_log!(
                 info,
                 "engine::config_extractor",
-                "目标配置已存在，跳过提取（保留用户修改）: {}",
+                "Config already exists, skipping extract: {}",
                 dest_path.display()
             );
             return ExtractOutcome::SkippedExists;
@@ -200,12 +200,12 @@ impl ConfigExtractor {
             Ok(s) => {
                 let _ = Self::cleanup_container(&container_name);
                 return ExtractOutcome::Failed {
-                    reason: format!("docker create 失败（exit code: {:?}）", s.code()),
+                    reason: format!("docker create failed (exit code: {:?})", s.code()),
                 };
             }
             Err(e) => {
                 return ExtractOutcome::Failed {
-                    reason: format!("docker create 启动失败: {e}"),
+                    reason: format!("failed to start docker create: {e}"),
                 };
             }
         }
@@ -216,7 +216,7 @@ impl ConfigExtractor {
         for src in &src_paths {
             if let Some(parent) = dest_path.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    last_err = Some(format!("创建目标目录失败: {e}"));
+                    last_err = Some(format!("failed to create dest dir: {e}"));
                     continue;
                 }
             }
@@ -236,12 +236,12 @@ impl ConfigExtractor {
                 }
                 Ok(s) => {
                     last_err = Some(format!(
-                        "docker cp {container_name}:{src} 失败（exit code: {:?}）",
+                        "docker cp {container_name}:{src} failed (exit code: {:?})",
                         s.code()
                     ));
                 }
                 Err(e) => {
-                    last_err = Some(format!("docker cp 启动失败: {e}"));
+                    last_err = Some(format!("failed to start docker cp: {e}"));
                 }
             }
         }
@@ -251,11 +251,11 @@ impl ConfigExtractor {
 
         // 6. 结果判定
         if extracted_bytes == 0 {
-            let reason = last_err.unwrap_or_else(|| "未提取到任何配置".to_string());
+            let reason = last_err.unwrap_or_else(|| "no config extracted".to_string());
             app_log!(
                 warn,
                 "engine::config_extractor",
-                "配置提取失败: {} ({})",
+                "Config extract failed: {} ({})",
                 service_dir,
                 reason
             );
@@ -264,7 +264,7 @@ impl ConfigExtractor {
         app_log!(
             info,
             "engine::config_extractor",
-            "配置提取成功: {} ← {} ({} bytes)",
+            "Config extracted: {} <- {} ({} bytes)",
             dest_path.display(),
             image_tag,
             extracted_bytes

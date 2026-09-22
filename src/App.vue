@@ -26,16 +26,18 @@ import { getVersion } from '@tauri-apps/api/app';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
 import MigrationPage from './components/MigrationPage.vue';
+import AboutPage from './components/AboutPage.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import WorkspaceMissingDialog from './components/WorkspaceMissingDialog.vue';
-import { getLogs, addLog, clearLogs, showToast, UI_LOG_LIMIT } from './composables/useToast';
+import { addLog, addLogKey, clearLogs, showToast, UI_LOG_LIMIT, visibleLogs, formatLogLine } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
-import { WORKSPACE_CHANGED_EVENT } from './utils/workspaceEvents';
+import { pendingUpdateVersion, setPendingUpdateVersion } from './composables/useUpdater';
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
 import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
+import { WORKSPACE_CHANGED_EVENT } from './utils/workspaceEvents';
 
 const { t } = useI18n();
 
@@ -45,7 +47,7 @@ const containers = ref<Container[]>([]);
 const loading = ref(false);
 const starting = ref(false); // 启动环境时的加载状态
 const operationType = ref<'start' | 'restart' | 'stop' | null>(null); // 当前操作类型
-const logs = getLogs(); // 使用 composable 中的全局日志
+const logs = visibleLogs;
 const dockerError = ref<string | null>(null);
 const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
@@ -92,7 +94,7 @@ const checkDocker = async () => {
     await checkDocker();
     // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
     if (dockerError.value !== null) {
-      addLog(t('dashboard.toast.dockerRestored'));
+      addLogKey('dashboard.toast.dockerRestored');
     }
     dockerError.value = null;
     return true;
@@ -101,7 +103,7 @@ const checkDocker = async () => {
     const wasAvailable = dockerError.value === null;
     dockerError.value = e as string;
     if (wasAvailable) {
-      addLog(t('dashboard.toast.dockerCheckFailed', { error: e }));
+      addLogKey('dashboard.toast.dockerCheckFailed', { error: e }, 'error');
     }
     return false;
   }
@@ -110,14 +112,14 @@ const checkDocker = async () => {
 const refreshContainers = async (silent = false) => {
   if (!silent) {
     loading.value = true;
-    addLog(t('dashboard.toast.refreshing'));
+    addLogKey('dashboard.toast.refreshing');
   }
   if (!(await checkDocker())) {
     consecutiveFailures += 1;
     containers.value = [];
     if (!silent) {
       loading.value = false;
-      addLog(t('dashboard.toast.dockerUnavailable'));
+      addLogKey('dashboard.toast.dockerUnavailable', undefined, 'warn');
     }
     return;
   }
@@ -128,52 +130,52 @@ const refreshContainers = async (silent = false) => {
     // 只有当内容真正改变时才更新，减少 DOM 抖动
     if (JSON.stringify(containers.value) !== JSON.stringify(result)) {
       containers.value = result;
-      if (!silent) addLog(t('dashboard.toast.containerUpdated', { count: result.length }));
+      if (!silent) addLogKey('dashboard.toast.containerUpdated', { count: result.length });
     } else if (!silent) {
-      addLog(t('dashboard.toast.containerNoChange'));
+      addLogKey('dashboard.toast.containerNoChange');
     }
   } catch (e) {
     consecutiveFailures += 1;
-    if (!silent) addLog(t('dashboard.toast.refreshFailed', { error: e }));
+    if (!silent) addLogKey('dashboard.toast.refreshFailed', { error: e }, 'error');
   } finally {
     if (!silent) {
       loading.value = false;
-      addLog(t('dashboard.toast.refreshDone'));
+      addLogKey('dashboard.toast.refreshDone');
     }
   }
 };
 
 const startService = async (name: string) => {
   try {
-    addLog(t('dashboard.toast.serviceStarting', { name }));
+    addLogKey('dashboard.toast.serviceStarting', { name });
     await startContainer(String(name));
-    addLog(t('dashboard.toast.serviceStarted', { name }));
+    addLogKey('dashboard.toast.serviceStarted', { name });
     await refreshContainers(true);
   } catch (e) {
-    addLog(t('dashboard.toast.serviceStartFailed', { error: e }));
+    addLogKey('dashboard.toast.serviceStartFailed', { error: e }, 'error');
   }
 };
 
 const stopService = async (name: string) => {
   try {
-    addLog(t('dashboard.toast.serviceStopping', { name }));
+    addLogKey('dashboard.toast.serviceStopping', { name });
     await stopContainer(String(name));
-    addLog(t('dashboard.toast.serviceStopped', { name }));
+    addLogKey('dashboard.toast.serviceStopped', { name });
     await refreshContainers(true);
   } catch (e) {
-    addLog(t('dashboard.toast.serviceStopFailed', { error: e }));
+    addLogKey('dashboard.toast.serviceStopFailed', { error: e }, 'error');
   }
 };
 
 const openServiceConfig = async (name: string) => {
   try {
-    addLog(t('dashboard.toast.configOpening', { name }));
+    addLogKey('dashboard.toast.configOpening', { name });
     // 容器名统一为 ps-{serviceDir}（如 ps-php82），去掉前缀即得服务配置目录
     const serviceName = String(name).replace(/^ps-/, '');
     await openServiceConfigApi(serviceName);
-    addLog(t('dashboard.toast.configOpened', { name: serviceName }));
+    addLogKey('dashboard.toast.configOpened', { name: serviceName });
   } catch (e) {
-    addLog(t('dashboard.toast.configOpenFailed', { error: normalizeError(e) }));
+    addLogKey('dashboard.toast.configOpenFailed', { error: normalizeError(e) }, 'error');
   }
 };
 
@@ -191,18 +193,18 @@ const handleStopEnvironment = async () => {
   
   operationType.value = 'stop';
   starting.value = true;
-  addLog(t('dashboard.toast.envStopping'));
+  addLogKey('dashboard.toast.envStopping');
   
   try {
     await stopEnvironment();
-    addLog(t('dashboard.toast.envStopped'));
+    addLogKey('dashboard.toast.envStopped');
     
     // 等待 1 秒让 Docker API 状态更新
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     await refreshContainers();
   } catch (e: any) {
-    addLog(t('dashboard.toast.envStopFailed', { error: e }));
+    addLogKey('dashboard.toast.envStopFailed', { error: e }, 'error');
   } finally {
     starting.value = false;
     operationType.value = null;
@@ -217,11 +219,11 @@ const confirmStart = async () => {
   
   operationType.value = 'start';
   starting.value = true;
-  addLog(t('dashboard.toast.envStarting'));
+  addLogKey('dashboard.toast.envStarting');
   
   try {
     await startEnvironment();
-    addLog(t('dashboard.toast.envStarted'));
+    addLogKey('dashboard.toast.envStarted');
     
     // 等待 1 秒让 Docker API 状态更新
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -246,24 +248,24 @@ const confirmStart = async () => {
       
       if (result) {
         // 用户选择继续
-        addLog(t('dashboard.toast.portConflictIgnore'));
+        addLogKey('dashboard.toast.portConflictIgnore', undefined, 'warn');
         try {
           await startEnvironment();
-          addLog(t('dashboard.toast.envStarted'));
+          addLogKey('dashboard.toast.envStarted');
           
           // 等待 1 秒让 Docker API 状态更新
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           await refreshContainers();
         } catch (err) {
-          addLog(t('dashboard.toast.envStartFailed', { error: err }));
+          addLogKey('dashboard.toast.envStartFailed', { error: err }, 'error');
         }
       } else {
         // 用户取消
-        addLog(t('dashboard.toast.portConflictCancel'));
+        addLogKey('dashboard.toast.portConflictCancel', undefined, 'warn');
       }
     } else {
-      addLog(t('dashboard.toast.envStartFailed', { error: e }));
+      addLogKey('dashboard.toast.envStartFailed', { error: e }, 'error');
     }
   } finally {
     starting.value = false;
@@ -279,18 +281,18 @@ const confirmRestart = async () => {
   
   operationType.value = 'restart';
   starting.value = true;
-  addLog(t('dashboard.toast.envRestarting'));
+  addLogKey('dashboard.toast.envRestarting');
   
   try {
     await restartEnvironment();
-    addLog(t('dashboard.toast.envRestarted'));
+    addLogKey('dashboard.toast.envRestarted');
     
     // 等待 1 秒让 Docker API 状态更新
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     await refreshContainers();
   } catch (e: any) {
-    addLog(t('dashboard.toast.envRestartFailed', { error: e }));
+    addLogKey('dashboard.toast.envRestartFailed', { error: e }, 'error');
   } finally {
     starting.value = false;
     operationType.value = null;
@@ -308,7 +310,7 @@ const checkEnvFileExists = async () => {
     const existingFiles = await checkConfigFilesExist();
     hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
   } catch (e) {
-    console.error('[App] 检查配置文件失败:', e);
+    console.error('[App] failed to check config file:', e);
     hasEnvFile.value = false;
   }
 };
@@ -320,7 +322,9 @@ async function loadWorkspaceFallbackBanner() {
     if (info?.using_fallback) {
       workspaceFallbackMsg.value = t('workspace.status.fallback', {
         effective: info.effective_path,
-        reason: info.fallback_reason || '',
+        reason: info.fallback_reason
+          ? t(info.fallback_reason, { path: info.workspace_path })
+          : '',
       });
     } else {
       workspaceFallbackMsg.value = '';
@@ -407,12 +411,30 @@ onMounted(async () => {
   
   // 监听后端发送的日志事件
   listen('env-log', (event) => {
-    const msg = event.payload as string;
-    addLog(msg);
+    const payload = event.payload as unknown;
+    if (typeof payload === 'string') {
+      addLog(payload, 'info');
+      return;
+    }
+    if (payload && typeof payload === 'object' && 'message' in payload) {
+      const { level, message } = payload as { level?: string; message: string };
+      const lv = level === 'warn' || level === 'error' ? level : 'info';
+      addLog(message, lv);
+    }
   });
 
   // 工作区初始化/切换后刷新，不再整页 reload
   window.addEventListener(WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
+
+  try {
+    const { check } = await import('@tauri-apps/plugin-updater');
+    const update = await check();
+    if (update) {
+      setPendingUpdateVersion(update.version);
+    }
+  } catch {
+    // Dev builds and unsigned local binaries cannot check GitHub latest.json.
+  }
 });
 
 async function onWorkspaceChanged() {
@@ -476,7 +498,7 @@ async function copyLogs() {
     return;
   }
   try {
-    await writeText(logs.value.join('\n'));
+    await writeText(logs.value.map(formatLogLine).join('\n'));
     showToast(t('dashboard.log.copied'), 'success');
   } catch (e) {
     showToast(t('dashboard.log.copyFailed', { error: e }), 'error');
@@ -564,9 +586,16 @@ async function exportLogs() {
       
       <!-- Version & Toggle Button -->
       <div class="mt-auto pt-3 sm:pt-4 border-t border-slate-200 dark:border-slate-800">
-        <div v-if="!sidebarCollapsed" class="text-xs sm:text-sm text-slate-500 dark:text-slate-500 text-center mb-2 sm:mb-3 hidden sm:block">
-          {{ appVersion }}
-        </div>
+        <button
+          type="button"
+          @click="activeTab = 'about'"
+          :class="{ 'active': activeTab === 'about' }"
+          class="sidebar-item text-sm sm:text-base w-full mb-2 sm:mb-3"
+          :title="$t('sidebar.about')"
+        >
+          <span class="text-base sm:text-lg">ℹ️</span>
+          <span v-if="!sidebarCollapsed" class="ml-2 hidden sm:inline font-mono">{{ appVersion }}</span>
+        </button>
                 
         <!-- Toggle Button -->
         <button 
@@ -607,6 +636,21 @@ async function exportLogs() {
           class="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap"
         >
           {{ workspaceMissingInfo ? $t('workspace.banner.handle') : $t('workspace.banner.action') }}
+        </button>
+      </div>
+
+      <div
+        v-if="pendingUpdateVersion"
+        data-testid="update-available-banner"
+        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3 text-blue-700 dark:text-blue-300"
+      >
+        <p class="flex-1 min-w-0 text-sm">{{ $t('about.update.banner', { version: pendingUpdateVersion }) }}</p>
+        <button
+          type="button"
+          class="flex-shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs sm:text-sm font-bold transition"
+          @click="activeTab = 'about'"
+        >
+          {{ $t('about.update.bannerAction') }}
         </button>
       </div>
 
@@ -754,6 +798,10 @@ async function exportLogs() {
         <MigrationPage />
       </div>
 
+      <div v-if="activeTab === 'about'" class="flex-1 flex flex-col overflow-hidden">
+        <AboutPage />
+      </div>
+
       <!-- Log Panel (Global) -->
       <div class="mt-auto border-t border-slate-200 dark:border-slate-800 pt-3 sm:pt-4 bg-slate-50/50 dark:bg-slate-950/50 backdrop-blur-md">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
@@ -807,10 +855,19 @@ async function exportLogs() {
             v-show="showLogs" 
             ref="logPanelRef"
             @scroll="handleLogScroll"
-            class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-xl font-mono text-xs sm:text-sm text-blue-600 dark:text-blue-300/80 border border-slate-300 dark:border-slate-800 h-32 sm:h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
+            class="bg-slate-100 dark:bg-black/40 p-3 sm:p-4 rounded-xl font-mono text-xs sm:text-sm border border-slate-300 dark:border-slate-800 h-32 sm:h-40 overflow-y-auto scrollbar-hide shadow-inner overflow-hidden"
           >
-            <div v-for="(log, i) in logs" :key="i" class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300">
-              {{ log }}
+            <div
+              v-for="(log, i) in logs"
+              :key="i"
+              class="mb-1 last:mb-0 animate-in fade-in slide-in-from-left-2 duration-300"
+              :class="{
+                'text-slate-600 dark:text-slate-300': log.level === 'info',
+                'text-amber-600 dark:text-amber-400': log.level === 'warn',
+                'text-rose-600 dark:text-rose-400': log.level === 'error',
+              }"
+            >
+              {{ formatLogLine(log) }}
             </div>
             <div v-if="logs.length === 0" class="text-slate-500 dark:text-slate-600 italic">{{ $t('dashboard.log.empty') }}</div>
           </div>

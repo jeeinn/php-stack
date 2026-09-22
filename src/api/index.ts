@@ -20,6 +20,7 @@ export {
   exportLogsTo,
   type WorkspaceInfo,
 } from './workspace'
+export { getSupportInfo, type SupportInfo } from './app'
 export {
   checkDocker,
   listContainers,

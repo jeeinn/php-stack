@@ -25,7 +25,7 @@ where
 {
     tokio::task::spawn_blocking(f)
         .await
-        .map_err(|e| format!("阻塞任务执行失败: {e}"))?
+        .map_err(|e| format!("blocking task failed: {e}"))?
 }
 
 /// 获取 Docker Compose 容器的最新日志
@@ -57,11 +57,11 @@ async fn get_compose_logs(
 
         let output = logs_cmd
             .output()
-            .map_err(|e| format!("执行 docker compose logs 失败: {e}"))?;
+            .map_err(|e| format!("failed to run docker compose logs: {e}"))?;
 
         if !output.status.success() {
             return Err(format!(
-                "docker compose logs 退出码: {:?}",
+                "docker compose logs exit code: {:?}",
                 output.status.code()
             ));
         }
@@ -87,41 +87,41 @@ fn parse_docker_progress(line: &str) -> Option<String> {
     // 拉取镜像: Pulling php ...
     if line.contains("Pulling") {
         if let Some(service) = extract_service_name(line, "Pulling") {
-            return Some(format!("正在拉取镜像: {}", service));
+            return Some(format!("Pulling image: {service}"));
         }
     }
 
     // 下载进度: php Pulled
     if line.contains("Pulled") {
         if let Some(service) = extract_service_name(line, "Pulled") {
-            return Some(format!("✅ 镜像拉取完成: {}", service));
+            return Some(format!("Image pulled: {service}"));
         }
     }
 
     // 构建镜像: Building php
     if line.contains("Building") {
         if let Some(service) = extract_service_name(line, "Building") {
-            return Some(format!("🔨 正在构建镜像: {}", service));
+            return Some(format!("Building image: {service}"));
         }
     }
 
     // 创建容器: Creating ps-php-1 ... done
     if line.contains("Creating") {
         if let Some(service) = extract_service_name(line, "Creating") {
-            return Some(format!("📦 正在创建容器: {}", service));
+            return Some(format!("Creating container: {service}"));
         }
     }
 
     // 启动容器: Starting ps-php-1 ... done
     if line.contains("Starting") {
         if let Some(service) = extract_service_name(line, "Starting") {
-            return Some(format!("🚀 正在启动服务: {}", service));
+            return Some(format!("Starting service: {service}"));
         }
     }
 
     // 容器已存在: Container ps-php-1 is running
     if line.contains("is running") || line.contains("Up to date") {
-        return Some("⚡ 服务已在运行".to_string());
+        return Some("Service already running".to_string());
     }
 
     None
@@ -268,9 +268,9 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
 
     // 读取 .env 文件
     let env_content =
-        std::fs::read_to_string(&env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?;
+        std::fs::read_to_string(&env_path).map_err(|e| format!("failed to read .env file: {e}"))?;
     let env_file = crate::engine::env_parser::EnvFile::parse(&env_content)
-        .map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+        .map_err(|e| format!("failed to parse .env file: {e}"))?;
     let env_map = env_file.to_map();
 
     // 创建 VersionManifest 用于 env prefix 反查
@@ -357,7 +357,7 @@ pub async fn apply_env_config(
         app_handle,
         info,
         "commands::apply_env_config",
-        "📝 开始应用配置..."
+        "Applying config..."
     );
 
     let project_root = get_project_root()?;
@@ -365,7 +365,7 @@ pub async fn apply_env_config(
         app_handle,
         info,
         "commands::apply_env_config",
-        "📁 项目根目录: {:?}",
+        "Project root: {:?}",
         project_root
     );
 
@@ -376,14 +376,14 @@ pub async fn apply_env_config(
             app_handle,
             info,
             "commands::apply_env_config",
-            "✅ 检测到用户版本覆盖配置"
+            "User version overrides found"
         );
     } else {
         ui_log!(
             app_handle,
             info,
             "commands::apply_env_config",
-            "ℹ️  未找到用户覆盖配置，使用默认配置"
+            "No user overrides, using defaults"
         );
     }
 
@@ -391,25 +391,25 @@ pub async fn apply_env_config(
         app_handle,
         info,
         "commands::apply_env_config",
-        "🔧 验证配置..."
+        "Validating config..."
     );
     ui_log!(
         app_handle,
         info,
         "commands::apply_env_config",
-        "📄 生成 .env 文件..."
+        "Generating .env..."
     );
     ui_log!(
         app_handle,
         info,
         "commands::apply_env_config",
-        "🐳 生成 docker-compose.yml..."
+        "Generating docker-compose.yml..."
     );
     ui_log!(
         app_handle,
         info,
         "commands::apply_env_config",
-        "📂 创建服务目录结构..."
+        "Creating service directories..."
     );
 
     match ConfigGenerator::apply(&config, &project_root, enable_backup).await {
@@ -419,7 +419,7 @@ pub async fn apply_env_config(
                     app_handle,
                     info,
                     "commands::apply_env_config",
-                    "💾 已备份 {} 个文件/目录",
+                    "Backed up {} files/dirs",
                     backed_up_files.len()
                 );
                 for file in &backed_up_files {
@@ -436,13 +436,13 @@ pub async fn apply_env_config(
                 app_handle,
                 info,
                 "commands::apply_env_config",
-                "✅ 配置应用成功！"
+                "Config applied"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::apply_env_config",
-                "💡 提示：请重启容器使新配置生效"
+                "Restart containers to apply the new config"
             );
             Ok(backed_up_files)
         }
@@ -451,7 +451,7 @@ pub async fn apply_env_config(
                 app_handle,
                 error,
                 "commands::apply_env_config",
-                "❌ 配置应用失败: {}",
+                "Config apply failed: {}",
                 e
             );
             Err(e)
@@ -519,7 +519,7 @@ pub async fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImag
                 app_log!(
                     info,
                     "commands::pull_service_images",
-                    "✅ 镜像拉取成功: {}",
+                    "Image pulled: {}",
                     tag
                 );
                 results.push(PullImageResult {
@@ -532,7 +532,7 @@ pub async fn pull_service_images(image_tags: Vec<String>) -> Result<Vec<PullImag
                 app_log!(
                     warn,
                     "commands::pull_service_images",
-                    "⚠️ 镜像拉取失败: {} ({})",
+                    "Image pull failed: {} ({})",
                     tag,
                     e
                 );
@@ -569,7 +569,7 @@ pub fn extract_service_config(
         "nginx" => VmServiceType::Nginx,
         other => {
             return Err(format!(
-                "未知服务类型 '{other}'（期望 php/mysql/redis/nginx）"
+                "unknown service type '{other}' (expected php/mysql/redis/nginx)"
             ))
         }
     };
@@ -577,9 +577,9 @@ pub fn extract_service_config(
     app_log!(
         info,
         "commands::extract_service_config",
-        "🔧 请求从镜像 {} 提取 {} (dir={}) 配置",
-        image_tag,
+        "Extracting {} config from {} (dir={})",
         service_type,
+        image_tag,
         service_dir
     );
 
@@ -599,7 +599,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "🚀 开始启动环境..."
+        "Starting environment..."
     );
 
     let project_root = get_project_root()?;
@@ -607,7 +607,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "📁 项目根目录: {:?}",
+        "Project root: {:?}",
         project_root
     );
 
@@ -616,18 +616,18 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     if !compose_file.exists() {
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::start_environment",
-            "❌ docker-compose.yml 文件不存在"
+            "docker-compose.yml not found"
         );
-        return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
+        return Err("docker-compose.yml not found; apply config first".to_string());
     }
 
     ui_log!(
         app_handle,
         info,
         "commands::start_environment",
-        "✅ docker-compose.yml 存在"
+        "docker-compose.yml found"
     );
 
     // 第一步：清理旧容器（避免名称冲突）
@@ -635,7 +635,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "🧹 清理旧容器..."
+        "Removing old containers..."
     );
     let mut down_cmd = Command::new("docker");
     down_cmd
@@ -653,11 +653,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     let down_output = run_blocking_command(move || {
         down_cmd
             .output()
-            .map_err(|e| format!("清理旧容器失败: {e}"))
+            .map_err(|e| format!("failed to remove old containers: {e}"))
     })
     .await
     .map_err(|e| {
-        ui_log!(app_handle, info, "commands::start_environment", "⚠️ {}", e);
+        ui_log!(app_handle, error, "commands::start_environment", "{}", e);
         e
     })?;
 
@@ -667,7 +667,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             app_handle,
             warn,
             "commands::start_environment",
-            "清理警告: {}",
+            "Cleanup warning: {}",
             stderr.lines().next().unwrap_or("")
         );
     } else {
@@ -675,7 +675,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             app_handle,
             info,
             "commands::start_environment",
-            "✅ 旧容器已清理"
+            "Old containers removed"
         );
     }
 
@@ -684,15 +684,15 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "⏳ 等待容器完全停止..."
+        "Waiting for containers to stop..."
     );
     let manager = DockerManager::new().map_err(|e| {
-        let err_msg = format!("创建 Docker 管理器失败: {e}");
+        let err_msg = format!("failed to create Docker manager: {e}");
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::start_environment",
-            "❌ {}",
+            "{}",
             err_msg
         );
         err_msg
@@ -700,12 +700,12 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
 
     for attempt in 1..=10 {
         let ps_containers = manager.list_ps_containers().await.map_err(|e| {
-            let err_msg = format!("检查容器状态失败: {e}");
+            let err_msg = format!("failed to check container status: {e}");
             ui_log!(
                 app_handle,
-                info,
+                error,
                 "commands::start_environment",
-                "❌ {}",
+                "{}",
                 err_msg
             );
             err_msg
@@ -722,7 +722,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 app_handle,
                 info,
                 "commands::start_environment",
-                "✅ 所有 ps- 容器已完全停止"
+                "All ps- containers stopped"
             );
             break;
         }
@@ -732,7 +732,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 app_handle,
                 warn,
                 "commands::start_environment",
-                "等待超时，仍有 {} 个容器未停止",
+                "Timed out waiting, {} containers still running",
                 running_ps_containers.len()
             );
             for container in &running_ps_containers {
@@ -756,29 +756,29 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "🔍 检查端口冲突..."
+        "Checking port conflicts..."
     );
 
     // 获取所有运行中的容器
     let manager = DockerManager::new().map_err(|e| {
-        let err_msg = format!("创建 Docker 管理器失败: {e}");
+        let err_msg = format!("failed to create Docker manager: {e}");
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::start_environment",
-            "❌ {}",
+            "{}",
             err_msg
         );
         err_msg
     })?;
 
     let all_containers = manager.list_all_running_containers().await.map_err(|e| {
-        let err_msg = format!("获取容器列表失败: {e}");
+        let err_msg = format!("failed to list containers: {e}");
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::start_environment",
-            "❌ {}",
+            "{}",
             err_msg
         );
         err_msg
@@ -809,18 +809,18 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         if !conflicts.is_empty() {
             ui_log!(
                 app_handle,
-                info,
+                warn,
                 "commands::start_environment",
-                "❌ 检测到端口冲突！"
+                "Port conflict detected"
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
 
             for (container_name, port, service_name) in &conflicts {
                 ui_log!(
                     app_handle,
-                    info,
+                    warn,
                     "commands::start_environment",
-                    "   ❌ 端口 {} ({}) 被容器 {} 占用",
+                    "Port {} ({}) in use by {}",
                     port,
                     service_name,
                     container_name
@@ -832,38 +832,38 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 app_handle,
                 info,
                 "commands::start_environment",
-                "💡 解决方案："
+                "How to fix:"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   • 停止冲突容器: docker stop <容器名>"
+                "Stop the container: docker stop <name>"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   • 或删除冲突容器: docker rm <容器名>"
+                "Or remove it: docker rm <name>"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   • 或在环境配置中修改为其他端口"
+                "Or change the port in Environment"
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
             ui_log!(
                 app_handle,
-                info,
+                warn,
                 "commands::start_environment",
-                "⚠️ 请在前端解决冲突后重新启动"
+                "Resolve the conflict, then start again"
             );
 
             // 返回错误，终止后续流程
             let conflict_details: Vec<String> = conflicts
                 .iter()
-                .map(|(name, port, service)| format!("端口 {port} ({service}) 被容器 {name} 占用"))
+                .map(|(name, port, service)| format!("port {port} ({service}) in use by {name}"))
                 .collect();
 
             return Err(format!("PORT_CONFLICT:{}", conflict_details.join("; ")));
@@ -872,7 +872,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 app_handle,
                 info,
                 "commands::start_environment",
-                "✅ 没有检测到端口冲突"
+                "No port conflicts"
             );
         }
     } else {
@@ -880,7 +880,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             app_handle,
             info,
             "commands::start_environment",
-            "⚠️ 未找到配置文件，跳过端口检查"
+            "No config file, skipping port check"
         );
     }
     ui_log!(app_handle, info, "commands::start_environment", "");
@@ -890,13 +890,13 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "🔧 执行: docker compose up -d"
+        "Running: docker compose up -d"
     );
     ui_log!(
         app_handle,
         info,
         "commands::start_environment",
-        "⏳ 首次启动可能需要几分钟(下载镜像、安装扩展)..."
+        "First start may take a few minutes (images, extensions)..."
     );
     ui_log!(app_handle, info, "commands::start_environment", "");
 
@@ -915,12 +915,12 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
 
     // 使用 spawn 而非 output，这样 build/pull 过程中可以实时读取 stderr 进度
     let mut child = compose_cmd.spawn().map_err(|e| {
-        let err_msg = format!("执行 docker compose 失败: {e}");
+        let err_msg = format!("failed to run docker compose: {e}");
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::start_environment",
-            "❌ {}",
+            "{}",
             err_msg
         );
         err_msg
@@ -959,16 +959,10 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             let reader = BufReader::new(stderr);
             for line in reader.lines().map_while(Result::ok) {
                 if !line.is_empty() {
-                    // 解析关键进度信息，添加 emoji
+                    // Parse compose progress lines
                     let progress_msg = parse_docker_progress(&line);
                     if let Some(msg) = progress_msg {
-                        ui_log!(
-                            &app_stderr,
-                            info,
-                            "commands::start_environment",
-                            "📦 {}",
-                            msg
-                        );
+                        ui_log!(&app_stderr, info, "commands::start_environment", "{}", msg);
                     } else {
                         ui_log!(
                             &app_stderr,
@@ -991,11 +985,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     let status = run_blocking_command(move || {
         child
             .wait()
-            .map_err(|e| format!("等待 docker compose 完成失败: {e}"))
+            .map_err(|e| format!("failed waiting for docker compose: {e}"))
     })
     .await
     .map_err(|e| {
-        ui_log!(app_handle, info, "commands::start_environment", "❌ {}", e);
+        ui_log!(app_handle, error, "commands::start_environment", "{}", e);
         e
     })?;
 
@@ -1021,85 +1015,80 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         if is_port_conflict {
             ui_log!(
                 app_handle,
-                info,
+                warn,
                 "commands::start_environment",
-                "❌ 端口冲突 detected！"
+                "Port conflict detected"
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "💡 可能的原因："
+                "Possible causes:"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   1. 其他 Docker 容器占用了相同端口"
+                "1. Another container is using the same port"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   2. 本地服务（如 MySQL、Nginx）正在运行"
-            );
-            ui_log!(app_handle, info, "commands::start_environment", "");
-            ui_log!(
-                app_handle,
-                info,
-                "commands::start_environment",
-                "🔧 解决方案："
-            );
-            ui_log!(
-                app_handle,
-                info,
-                "commands::start_environment",
-                "   方案 1: 停止占用端口的容器"
-            );
-            ui_log!(
-                app_handle,
-                info,
-                "commands::start_environment",
-                "           docker ps  # 查看运行中的容器"
-            );
-            ui_log!(
-                app_handle,
-                info,
-                "commands::start_environment",
-                "           docker stop <容器名>"
+                "2. A local service (MySQL, Nginx, ...) is running"
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   方案 2: 修改 .env 文件中的端口配置"
+                "How to fix:"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "           例如：MYSQL_PORT=3307 (改为其他端口)"
+                "Option 1: stop the container using the port"
             );
+            ui_log!(app_handle, info, "commands::start_environment", "docker ps");
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "           然后重新应用配置"
+                "docker stop <name>"
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   方案 3: 停止本地服务"
+                "Option 2: change the port in .env"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "           检查是否有本地 MySQL/Nginx/Redis 在运行"
+                "e.g. MYSQL_PORT=3307"
+            );
+            ui_log!(
+                app_handle,
+                info,
+                "commands::start_environment",
+                "Then apply config again"
+            );
+            ui_log!(app_handle, info, "commands::start_environment", "");
+            ui_log!(
+                app_handle,
+                info,
+                "commands::start_environment",
+                "Option 3: stop the local service"
+            );
+            ui_log!(
+                app_handle,
+                info,
+                "commands::start_environment",
+                "Check for local MySQL/Nginx/Redis"
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
 
@@ -1108,51 +1097,46 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     app_handle,
                     info,
                     "commands::start_environment",
-                    "📍 详细信息: {}",
+                    "Detail: {}",
                     line.trim()
                 );
             }
         } else {
             ui_log!(
                 app_handle,
-                info,
+                error,
                 "commands::start_environment",
-                "❌ Docker Compose 启动失败，退出码: {:?}",
+                "Docker Compose failed, exit code: {:?}",
                 exit_code
             );
             ui_log!(app_handle, info, "commands::start_environment", "");
+            ui_log!(app_handle, info, "commands::start_environment", "Check:");
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "💡 建议检查："
+                "1. Docker Desktop is running"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   1. Docker Desktop 是否正常运行"
+                "2. docker-compose.yml is valid"
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "   2. docker-compose.yml 文件格式是否正确"
-            );
-            ui_log!(
-                app_handle,
-                info,
-                "commands::start_environment",
-                "   3. 镜像是否存在或网络是否正常"
+                "3. Images exist and the network is OK"
             );
         }
 
         let err_msg = format!(
-            "Docker Compose 启动失败: {}",
+            "Docker Compose failed: {}",
             if is_port_conflict {
-                "端口冲突"
+                "port conflict"
             } else {
-                "未知错误"
+                "unknown error"
             }
         );
         return Err(err_msg);
@@ -1162,7 +1146,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "✅ 容器已在后台启动"
+        "Containers started in background"
     );
     ui_log!(app_handle, info, "commands::start_environment", "");
 
@@ -1171,7 +1155,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "📜 开始监控容器启动日志..."
+        "Watching container logs..."
     );
 
     let docker_manager = match DockerManager::new() {
@@ -1181,16 +1165,16 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 app_handle,
                 warn,
                 "commands::start_environment",
-                "⚠️ 无法创建 DockerManager: {}",
+                "DockerManager failed: {}",
                 e
             );
             ui_log!(
                 app_handle,
                 info,
                 "commands::start_environment",
-                "⚠️ 跳过日志监控，直接返回"
+                "Skipping log watch"
             );
-            return Ok("环境启动成功（未检查容器状态）".to_string());
+            return Ok("Environment started (container status not checked)".to_string());
         }
     };
 
@@ -1206,7 +1190,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                 app_handle,
                 warn,
                 "commands::start_environment",
-                "⚠️ 等待容器就绪超时（5 分钟），跳过日志监控"
+                "Timed out waiting for ready (5 min)"
             );
             break;
         }
@@ -1218,13 +1202,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     for line in &new_lines {
                         let progress_msg = parse_docker_progress(line);
                         if let Some(msg) = progress_msg {
-                            ui_log!(
-                                app_handle,
-                                info,
-                                "commands::start_environment",
-                                "📦 {}",
-                                msg
-                            );
+                            ui_log!(app_handle, info, "commands::start_environment", "{}", msg);
                         } else {
                             ui_log!(
                                 app_handle,
@@ -1246,7 +1224,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                         app_handle,
                         warn,
                         "commands::start_environment",
-                        "⚠️ 连续 {} 次获取日志失败，跳过日志监控: {}",
+                        "Failed to fetch logs {} times, skipping: {}",
                         consecutive_failures,
                         e
                     );
@@ -1262,20 +1240,14 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     app_handle,
                     info,
                     "commands::start_environment",
-                    "✅ 所有容器已就绪"
+                    "All containers ready"
                 );
                 if let Ok((final_lines, _)) = get_compose_logs(&project_root, last_line_count).await
                 {
                     for line in &final_lines {
                         let progress_msg = parse_docker_progress(line);
                         if let Some(msg) = progress_msg {
-                            ui_log!(
-                                app_handle,
-                                info,
-                                "commands::start_environment",
-                                "📦 {}",
-                                msg
-                            );
+                            ui_log!(app_handle, info, "commands::start_environment", "{}", msg);
                         } else {
                             ui_log!(
                                 app_handle,
@@ -1295,7 +1267,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
                     app_handle,
                     warn,
                     "commands::start_environment",
-                    "⚠️ 检查容器状态失败: {}",
+                    "Failed to check container status: {}",
                     e
                 );
             }
@@ -1309,9 +1281,9 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         app_handle,
         info,
         "commands::start_environment",
-        "✅ 环境启动成功！"
+        "Environment started"
     );
-    Ok("环境启动成功".to_string())
+    Ok("Environment started".to_string())
 }
 
 /// 一键重启环境（docker compose restart）
@@ -1325,7 +1297,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
         app_handle,
         info,
         "commands::restart_environment",
-        "🔄 开始重启环境..."
+        "Restarting environment..."
     );
 
     let project_root = get_project_root()?;
@@ -1333,7 +1305,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
         app_handle,
         info,
         "commands::restart_environment",
-        "📁 项目根目录: {:?}",
+        "Project root: {:?}",
         project_root
     );
 
@@ -1342,18 +1314,18 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     if !compose_file.exists() {
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::restart_environment",
-            "❌ docker-compose.yml 文件不存在"
+            "docker-compose.yml not found"
         );
-        return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
+        return Err("docker-compose.yml not found; apply config first".to_string());
     }
 
     ui_log!(
         app_handle,
         info,
         "commands::restart_environment",
-        "✅ docker-compose.yml 存在"
+        "docker-compose.yml found"
     );
 
     // 使用 docker compose restart 重启所有容器
@@ -1361,7 +1333,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
         app_handle,
         info,
         "commands::restart_environment",
-        "🔧 执行: docker compose restart"
+        "Running: docker compose restart"
     );
 
     let mut restart_cmd = Command::new("docker");
@@ -1377,12 +1349,12 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     }
 
     let output = restart_cmd.output().map_err(|e| {
-        let err_msg = format!("执行 docker compose restart 失败: {e}");
+        let err_msg = format!("failed to run docker compose restart: {e}");
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::restart_environment",
-            "❌ {}",
+            "{}",
             err_msg
         );
         err_msg
@@ -1394,18 +1366,18 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     if !output.status.success() {
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::restart_environment",
-            "❌ 重启失败"
+            "Restart failed"
         );
         ui_log!(
             app_handle,
             info,
             "commands::restart_environment",
-            "错误输出: {}",
+            "stderr: {}",
             stderr
         );
-        return Err(format!("Docker Compose 重启失败: {stderr}"));
+        return Err(format!("Docker Compose restart failed: {stderr}"));
     }
 
     // 记录重启结果
@@ -1427,9 +1399,9 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
         app_handle,
         info,
         "commands::restart_environment",
-        "✅ 环境重启成功！"
+        "Environment restarted"
     );
-    Ok("环境重启成功".to_string())
+    Ok("Environment restarted".to_string())
 }
 
 /// 一键停止环境（docker compose stop）
@@ -1443,7 +1415,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
         app_handle,
         info,
         "commands::stop_environment",
-        "🛑 开始停止环境..."
+        "Stopping environment..."
     );
 
     let project_root = get_project_root()?;
@@ -1451,7 +1423,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
         app_handle,
         info,
         "commands::stop_environment",
-        "📁 项目根目录: {:?}",
+        "Project root: {:?}",
         project_root
     );
 
@@ -1460,18 +1432,18 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     if !compose_file.exists() {
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::stop_environment",
-            "❌ docker-compose.yml 文件不存在"
+            "docker-compose.yml not found"
         );
-        return Err("docker-compose.yml 文件不存在，请先应用配置".to_string());
+        return Err("docker-compose.yml not found; apply config first".to_string());
     }
 
     ui_log!(
         app_handle,
         info,
         "commands::stop_environment",
-        "✅ docker-compose.yml 存在"
+        "docker-compose.yml found"
     );
 
     // 使用 docker compose stop 停止容器（保留容器，前端可显示"已停用"状态）
@@ -1479,7 +1451,7 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
         app_handle,
         info,
         "commands::stop_environment",
-        "🔧 执行: docker compose stop"
+        "Running: docker compose stop"
     );
 
     let mut stop_cmd = Command::new("docker");
@@ -1495,12 +1467,12 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     }
 
     let output = stop_cmd.output().map_err(|e| {
-        let err_msg = format!("执行 docker compose stop 失败: {e}");
+        let err_msg = format!("failed to run docker compose stop: {e}");
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::stop_environment",
-            "❌ {}",
+            "{}",
             err_msg
         );
         err_msg
@@ -1512,18 +1484,18 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
     if !output.status.success() {
         ui_log!(
             app_handle,
-            info,
+            error,
             "commands::stop_environment",
-            "❌ 停止失败"
+            "Stop failed"
         );
         ui_log!(
             app_handle,
             info,
             "commands::stop_environment",
-            "错误输出: {}",
+            "stderr: {}",
             stderr
         );
-        return Err(format!("Docker Compose 停止失败: {stderr}"));
+        return Err(format!("Docker Compose stop failed: {stderr}"));
     }
 
     // 记录停止结果
@@ -1545,9 +1517,9 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
         app_handle,
         info,
         "commands::stop_environment",
-        "✅ 环境停止成功！"
+        "Environment stopped"
     );
-    Ok("环境停止成功".to_string())
+    Ok("Environment stopped".to_string())
 }
 
 #[cfg(test)]

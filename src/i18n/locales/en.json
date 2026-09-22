@@ -28,7 +28,8 @@
     "settings": "Settings",
     "migration": "Migration",
     "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "collapse": "Collapse sidebar",
+    "about": "About"
   },
   "dashboard": {
     "title": "Status",
@@ -329,11 +330,6 @@
       "auto": "Auto",
       "light": "Light",
       "dark": "Dark"
-    },
-    "about": {
-      "title": "About PHP-Stack",
-      "hint": "In-app auto-update is not wired yet. Open GitHub Releases to see if a newer build is available.",
-      "checkUpdate": "Check for updates"
     }
   },
   "mirror": {
@@ -505,7 +501,17 @@
       "patternsHint": "💡 Tip: Only backup files within the project directory for cross-platform restore compatibility."
     },
     "progress": {
-      "title": "📊 Backup Progress"
+      "title": "📊 Backup Progress",
+      "steps": {
+        "envConfig": "Packing environment config...",
+        "dockerConfig": "Packing Docker config...",
+        "serviceConfig": "Packing service config...",
+        "userConfig": "Packing user custom config...",
+        "projectFiles": "Packing project files...",
+        "logs": "Packing logs...",
+        "manifest": "Generating backup manifest...",
+        "done": "✅ Backup complete"
+      }
     },
     "action": {
       "create": "Create Backup (.zip)",
@@ -589,7 +595,18 @@
       "rollbackAction": "Restore from this bundle"
     },
     "progress": {
-      "title": "📊 Restore Progress"
+      "title": "📊 Restore Progress",
+      "steps": {
+        "parsing": "Parsing backup package...",
+        "envConfig": "Restoring environment config...",
+        "dockerConfig": "Restoring Docker config...",
+        "serviceConfig": "Restoring service config...",
+        "userConfig": "Restoring user custom config...",
+        "vhost": "Restoring virtual host config...",
+        "projectFiles": "Restoring project files...",
+        "database": "Restoring database files...",
+        "done": "✅ Restore complete"
+      }
     },
     "confirm": {
       "title": "Restore Confirmation",
@@ -634,11 +651,50 @@
       "resolved": "Workspace is ready",
       "tempToast": "This session writes to the fallback directory; the banner stays as a reminder"
     },
+    "reason": {
+      "configuredMissing": "Configured workspace {path} does not exist, waiting for you to recreate or choose a new path."
+    },
     "status": {
       "loading": "Loading...",
       "notConfigured": "Not configured",
       "loadFailed": "Load failed",
       "fallback": "Configured workspace is unavailable; data is written to {effective}. {reason}"
+    }
+  },
+  "about": {
+    "title": "About PHP-Stack",
+    "support": "Support info",
+    "version": "Version",
+    "os": "Operating system",
+    "arch": "Architecture",
+    "copyAll": "Copy all",
+    "copied": "Copied to clipboard",
+    "copyFailed": "Copy failed: {error}",
+    "logLevel": "Log level",
+    "logLevelHint": "Affects the live log panel only. Exported files still include every level.",
+    "level": {
+      "info": "info",
+      "warn": "warn",
+      "error": "error"
+    },
+    "exportLogs": "Export logs",
+    "project": "Project",
+    "openRepo": "Open repository",
+    "update": {
+      "title": "Updates",
+      "check": "Check for updates",
+      "checking": "Checking...",
+      "upToDate": "You are on the latest version",
+      "available": "Update available: {version}",
+      "notes": "Release notes",
+      "download": "Download and install",
+      "downloading": "Downloading… {percent}%",
+      "installing": "Installing…",
+      "relaunching": "Relaunching…",
+      "failed": "Update check failed: {error}",
+      "devHint": "Update checks may fail in development mode.",
+      "banner": "Version {version} is available",
+      "bannerAction": "View"
     }
   }
 }

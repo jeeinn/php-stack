@@ -2,7 +2,8 @@ use crate::docker::manager::{DockerManager, PsContainer};
 
 #[tauri::command]
 pub async fn check_docker() -> Result<(), String> {
-    let manager = DockerManager::new().map_err(|e| format!("未找到 Docker 安装: {e}"))?;
+    let manager =
+        DockerManager::new().map_err(|e| format!("Docker installation not found: {e}"))?;
     manager.check_docker_availability().await
 }
 

@@ -83,16 +83,17 @@ impl MirrorManager {
         let preset = presets
             .iter()
             .find(|p| p.name == preset_name)
-            .ok_or_else(|| format!("未找到预设方案: {preset_name}"))?;
+            .ok_or_else(|| format!("preset not found: {preset_name}"))?;
 
         let content = if env_path.exists() {
-            std::fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            std::fs::read_to_string(env_path)
+                .map_err(|e| format!("failed to read .env file: {e}"))?
         } else {
             String::new()
         };
 
         let mut env_file =
-            EnvFile::parse(&content).map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+            EnvFile::parse(&content).map_err(|e| format!("failed to parse .env file: {e}"))?;
 
         env_file.set("DOCKER_REGISTRY_MIRROR", &preset.docker_registry);
         env_file.set("APT_MIRROR", preset.apt.as_str());
@@ -100,7 +101,7 @@ impl MirrorManager {
         env_file.set("NPM_MIRROR", &preset.npm);
 
         let output = env_file.format();
-        std::fs::write(env_path, output).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+        std::fs::write(env_path, output).map_err(|e| format!("failed to write .env file: {e}"))?;
 
         Ok(())
     }
@@ -116,22 +117,23 @@ impl MirrorManager {
             "composer" => "COMPOSER_MIRROR",
             "npm" => "NPM_MIRROR",
             "github_proxy" => "GITHUB_PROXY",
-            _ => return Err(format!("未知的镜像源类别: {category}")),
+            _ => return Err(format!("unknown mirror category: {category}")),
         };
 
         let content = if env_path.exists() {
-            std::fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            std::fs::read_to_string(env_path)
+                .map_err(|e| format!("failed to read .env file: {e}"))?
         } else {
             String::new()
         };
 
         let mut env_file =
-            EnvFile::parse(&content).map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+            EnvFile::parse(&content).map_err(|e| format!("failed to parse .env file: {e}"))?;
 
         env_file.set(key, value);
 
         let output = env_file.format();
-        std::fs::write(env_path, output).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+        std::fs::write(env_path, output).map_err(|e| format!("failed to write .env file: {e}"))?;
 
         Ok(())
     }
@@ -148,7 +150,7 @@ impl MirrorManager {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(3))
             .build()
-            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+            .map_err(|e| format!("failed to create HTTP client: {e}"))?;
 
         match client.head(url).send().await {
             Ok(response) => {
@@ -158,7 +160,7 @@ impl MirrorManager {
                 if e.is_timeout() || e.is_connect() {
                     Ok(false)
                 } else {
-                    Err(format!("连接测试失败: {e}"))
+                    Err(format!("connection test failed: {e}"))
                 }
             }
         }
@@ -169,12 +171,14 @@ impl MirrorManager {
     /// 从 .env 文件中读取 4 个镜像源键的值。
     pub fn get_current_status(env_path: &Path) -> Result<MirrorStatus, String> {
         let content = if env_path.exists() {
-            std::fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            std::fs::read_to_string(env_path)
+                .map_err(|e| format!("failed to read .env file: {e}"))?
         } else {
             String::new()
         };
 
-        let env_file = EnvFile::parse(&content).map_err(|e| format!("解析 .env 文件失败: {e}"))?;
+        let env_file =
+            EnvFile::parse(&content).map_err(|e| format!("failed to parse .env file: {e}"))?;
 
         Ok(MirrorStatus {
             docker_registry: env_file
@@ -292,7 +296,7 @@ mod tests {
         let (_dir, env_path) = create_temp_env("");
         let result = MirrorManager::apply_preset("不存在的预设", &env_path);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("未找到预设方案"));
+        assert!(result.unwrap_err().contains("preset not found"));
     }
 
     #[test]
@@ -317,7 +321,7 @@ mod tests {
         let (_dir, env_path) = create_temp_env("");
         let result = MirrorManager::update_single("invalid", "value", &env_path);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("未知的镜像源类别"));
+        assert!(result.unwrap_err().contains("unknown mirror category"));
     }
 
     #[test]

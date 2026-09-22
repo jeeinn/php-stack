@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { open } from '@tauri-apps/plugin-shell';
-import { getVersion } from '@tauri-apps/api/app';
 import MirrorPanel from './MirrorPanel.vue';
 import SoftwareSettings from './SoftwareSettings.vue';
 import { setLocale, getLocale, type SupportedLocale } from '../i18n';
@@ -15,17 +13,6 @@ type TabType = 'mirrors' | 'software';
 
 const activeTab = ref<TabType>('mirrors');
 const currentLocale = ref<SupportedLocale>(getLocale());
-const appVersion = ref('');
-
-const RELEASES_URL = 'https://github.com/jeeinn/php-stack/releases';
-
-getVersion()
-  .then((v) => {
-    appVersion.value = v;
-  })
-  .catch(() => {
-    appVersion.value = '';
-  });
 
 const tabs = [
   { id: 'mirrors' as TabType, labelKey: 'settings.tabs.mirrors', icon: '🌐' },
@@ -35,10 +22,6 @@ const tabs = [
 function switchLanguage(locale: SupportedLocale) {
   setLocale(locale);
   currentLocale.value = locale;
-}
-
-async function openReleases() {
-  await open(RELEASES_URL);
 }
 
 // 主题选项（使用计算属性确保响应式）
@@ -132,23 +115,6 @@ const themeOptions = computed(() => [
       </div>
       <div v-if="activeTab === 'software'" class="p-6">
         <SoftwareSettings />
-      </div>
-
-      <div class="px-6 pb-6">
-        <div class="mt-2 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div class="text-sm text-slate-600 dark:text-slate-400">
-            <span class="font-medium text-slate-800 dark:text-slate-200">{{ $t('settings.about.title') }}</span>
-            <span v-if="appVersion" class="ml-2 font-mono">v{{ appVersion }}</span>
-            <p class="text-xs mt-1 text-slate-500 dark:text-slate-500">{{ $t('settings.about.hint') }}</p>
-          </div>
-          <button
-            type="button"
-            class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition"
-            @click="openReleases"
-          >
-            {{ $t('settings.about.checkUpdate') }}
-          </button>
-        </div>
       </div>
     </div>
   </div>

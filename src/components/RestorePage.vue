@@ -152,7 +152,7 @@ async function handleRestore() {
   if (!confirmed) return;
   
   restoring.value = true;
-  progress.value = { step: t('common.loading'), percentage: 0 };
+  progress.value = { step: 'common.loading', percentage: 0 };
 
   restoreResult.value = null;
 
@@ -163,7 +163,7 @@ async function handleRestore() {
 
     if (result.success) {
       showToast(t('restore.toast.success'), 'success');
-      progress.value = { step: '✅', percentage: 100 };
+      progress.value = { step: 'restore.progress.steps.done', percentage: 100 };
       markStepCompleted('restore');
     } else if (result.restored_files.length === 0) {
       showToast(t('restore.toast.fatalFailed'), 'error');
@@ -471,7 +471,7 @@ function formatTimestamp(ts: string): string {
         <Transition name="step-fade">
           <section v-if="progress && restoring" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
             <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('restore.progress.title') }}</h2>
-            <div class="mb-2 text-sm text-slate-700 dark:text-slate-300">{{ progress.step }}</div>
+            <div class="mb-2 text-sm text-slate-700 dark:text-slate-300">{{ $t(progress.step) }}</div>
             <div class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
               <div class="h-full bg-emerald-600 rounded-full transition-all duration-300" :style="{ width: progress.percentage + '%' }"></div>
             </div>

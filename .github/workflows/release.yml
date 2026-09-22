@@ -76,6 +76,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'PHP-Stack ${{ github.ref_name }}'
@@ -94,5 +96,5 @@ jobs:
             > - **Windows**: 点击"更多信息" → "仍要运行"
             > - **macOS**: 系统偏好设置 → 安全性与隐私 → 允许打开
           releaseDraft: false
-          prerelease: true
+          prerelease: false
           args: --target ${{ matrix.target }}

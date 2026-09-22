@@ -28,7 +28,8 @@
     "settings": "其他设置",
     "migration": "环境迁移",
     "expand": "展开侧边栏",
-    "collapse": "收缩侧边栏"
+    "collapse": "收缩侧边栏",
+    "about": "关于"
   },
   "dashboard": {
     "title": "运行状态",
@@ -329,11 +330,6 @@
       "auto": "自动",
       "light": "明亮",
       "dark": "暗黑"
-    },
-    "about": {
-      "title": "关于 PHP-Stack",
-      "hint": "自动更新尚未接入；可打开 GitHub Releases 查看是否有新版本。",
-      "checkUpdate": "检查更新"
     }
   },
   "mirror": {
@@ -505,7 +501,17 @@
       "patternsHint": "💡 提示：为确保跨平台恢复成功，请仅备份项目目录内的文件。"
     },
     "progress": {
-      "title": "📊 备份进度"
+      "title": "📊 备份进度",
+      "steps": {
+        "envConfig": "打包环境配置...",
+        "dockerConfig": "打包 Docker 配置...",
+        "serviceConfig": "打包服务配置...",
+        "userConfig": "打包用户自定义配置...",
+        "projectFiles": "打包项目文件...",
+        "logs": "打包日志...",
+        "manifest": "生成备份清单...",
+        "done": "✅ 备份完成"
+      }
     },
     "action": {
       "create": "创建备份包 (.zip)",
@@ -589,7 +595,18 @@
       "rollbackAction": "用此包重新恢复"
     },
     "progress": {
-      "title": "📊 恢复进度"
+      "title": "📊 恢复进度",
+      "steps": {
+        "parsing": "解析备份包...",
+        "envConfig": "恢复环境配置...",
+        "dockerConfig": "恢复 Docker 配置...",
+        "serviceConfig": "恢复服务配置...",
+        "userConfig": "恢复用户自定义配置...",
+        "vhost": "恢复虚拟主机配置...",
+        "projectFiles": "恢复项目文件...",
+        "database": "恢复数据库文件...",
+        "done": "✅ 恢复完成"
+      }
     },
     "confirm": {
       "title": "环境恢复确认",
@@ -634,11 +651,50 @@
       "resolved": "工作区已就绪",
       "tempToast": "本会话将写入回退目录；横幅会保持提醒"
     },
+    "reason": {
+      "configuredMissing": "配置的工作区 {path} 不存在，等待用户确认重建或更换"
+    },
     "status": {
       "loading": "加载中...",
       "notConfigured": "未配置",
       "loadFailed": "获取失败",
       "fallback": "配置的工作区不可用，数据实际写入 {effective}。{reason}"
+    }
+  },
+  "about": {
+    "title": "关于 PHP-Stack",
+    "support": "支持信息",
+    "version": "版本",
+    "os": "操作系统",
+    "arch": "系统架构",
+    "copyAll": "复制全部",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "复制失败: {error}",
+    "logLevel": "日志等级",
+    "logLevelHint": "仅影响实时日志面板，导出文件仍包含全部等级。",
+    "level": {
+      "info": "info",
+      "warn": "warn",
+      "error": "error"
+    },
+    "exportLogs": "导出日志",
+    "project": "项目地址",
+    "openRepo": "打开仓库",
+    "update": {
+      "title": "检查更新",
+      "check": "检查更新",
+      "checking": "正在检查...",
+      "upToDate": "已是最新版本",
+      "available": "发现新版本 {version}",
+      "notes": "更新说明",
+      "download": "下载并安装",
+      "downloading": "正在下载… {percent}%",
+      "installing": "正在安装…",
+      "relaunching": "即将重启…",
+      "failed": "检查更新失败: {error}",
+      "devHint": "开发模式下可能无法检查更新。",
+      "banner": "新版本 {version} 可用",
+      "bannerAction": "查看"
     }
   }
 }

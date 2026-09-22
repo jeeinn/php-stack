@@ -71,7 +71,7 @@ function main() {
   const checkOnly = process.argv.includes('--check');
   const templatePath = join(SERVICES_DIR, TEMPLATE_DIR, 'Dockerfile');
   if (!existsSync(templatePath)) {
-    console.error(`模板不存在: ${templatePath}`);
+    console.error(`template not found: ${templatePath}`);
     process.exit(1);
   }
   const template = readFileSync(templatePath, 'utf8');
@@ -85,11 +85,11 @@ function main() {
 
     if (!existsSync(target)) {
       if (checkOnly) {
-        console.error(`[缺失] services/${dir}/Dockerfile`);
+        console.error(`[missing] services/${dir}/Dockerfile`);
         dirty++;
       } else {
         writeFileSync(target, expected, 'utf8');
-        console.log(`[新建] services/${dir}/Dockerfile  (php:${version}-fpm)`);
+        console.log(`[created] services/${dir}/Dockerfile  (php:${version}-fpm)`);
         changed++;
       }
       continue;
@@ -99,11 +99,11 @@ function main() {
     if (current === expected) continue;
 
     if (checkOnly) {
-      console.error(`[不同步] services/${dir}/Dockerfile`);
+      console.error(`[out of sync] services/${dir}/Dockerfile`);
       dirty++;
     } else {
       writeFileSync(target, expected, 'utf8');
-      console.log(`[已同步] services/${dir}/Dockerfile  (php:${version}-fpm)`);
+      console.log(`[synced] services/${dir}/Dockerfile  (php:${version}-fpm)`);
       changed++;
     }
   }
@@ -111,16 +111,16 @@ function main() {
   if (checkOnly) {
     if (dirty > 0) {
       console.error(
-        `\n${dirty} 份不同步。请运行 node scripts/sync-php-dockerfile.mjs 后提交。`,
+        `\n${dirty} Dockerfile(s) out of sync. Run node scripts/sync-php-dockerfile.mjs and commit.`,
       );
       process.exit(1);
     }
-    console.log(`全部 ${Object.keys(MAP).length} 份 Dockerfile 已同步。`);
+    console.log(`All ${Object.keys(MAP).length} Dockerfile(s) are in sync.`);
   } else {
     console.log(
       changed === 0
-        ? `全部 ${Object.keys(MAP).length} 份 Dockerfile 已同步，无需改动。`
-        : `已同步 ${changed} 份 Dockerfile。`,
+        ? `All ${Object.keys(MAP).length} Dockerfile(s) are in sync, nothing to change.`
+        : `Synced ${changed} Dockerfile(s).`,
     );
   }
 }

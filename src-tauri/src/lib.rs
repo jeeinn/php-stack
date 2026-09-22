@@ -17,7 +17,7 @@ pub fn run() {
             let app_data = app
                 .path()
                 .app_data_dir()
-                .map_err(|e| format!("无法获取应用数据目录: {e}"))?;
+                .map_err(|e| format!("failed to get app data dir: {e}"))?;
             commands::paths::init_app_data_dir(app_data.clone());
 
             // 旧版本把 workspace.json 放在 exe 同级目录，首次启动自动搬迁
@@ -42,7 +42,7 @@ pub fn run() {
                 app_log!(
                     info,
                     "app",
-                    "已从旧位置迁移用户配置到 {:?}: {}",
+                    "migrated user config to {:?}: {}",
                     app_data,
                     migrated.join(", ")
                 );
@@ -52,6 +52,9 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_clipboard_manager::init())?;
             app.handle().plugin(tauri_plugin_shell::init())?;
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+            app.handle().plugin(tauri_plugin_process::init())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -112,6 +115,7 @@ pub fn run() {
             // 日志导出
             commands::export_logs,
             commands::export_logs_to,
+            commands::get_support_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

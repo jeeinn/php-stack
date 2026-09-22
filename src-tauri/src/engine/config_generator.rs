@@ -126,7 +126,7 @@ impl ConfigGenerator {
         for (port, services) in &port_services {
             if services.len() > 1 {
                 return Err(format!(
-                    "端口冲突: 端口 {} 被以下服务同时使用: {}",
+                    "Port conflict: port {} used by: {}",
                     port,
                     services.join(", ")
                 ));
@@ -518,6 +518,9 @@ impl ConfigGenerator {
                 }
             }
         }
+        // 4. 编译期 crate 根（src-tauri/services）。CARGO_TARGET_DIR 被重定向时
+        //    按 exe 上溯找不到源码树，测试/开发仍能定位模板。
+        candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("services"));
         candidates
     }
 
@@ -535,10 +538,7 @@ impl ConfigGenerator {
             .find(|p| p.exists())
             .ok_or_else(|| {
                 format!(
-                    "模板文件不存在: {template_name}（已查找: {}）。\
-                     安装版请确认安装目录下 services/ 资源完整；\
-                     开发/构建产物请从 src-tauri/target/<profile>/ 下运行，\
-                     或使用安装包安装后运行",
+                    "template not found: {template_name} (searched: {}). Check services/ in the install dir, or run from src-tauri/target/<profile>/",
                     searched.join(", ")
                 )
             })
@@ -556,7 +556,7 @@ impl ConfigGenerator {
             app_log!(
                 info,
                 "engine::config_generator",
-                "目标文件已存在，跳过模板释放（保留用户配置）: {}",
+                "Dest exists, skipping template copy: {}",
                 dest_path.display()
             );
             return Ok(());
@@ -566,13 +566,13 @@ impl ConfigGenerator {
 
         // Create destination directory if needed
         if let Some(parent) = dest_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("failed to create dir: {e}"))?;
         }
 
         // Copy file (destination is guaranteed not to exist at this point)
         std::fs::copy(&template_path, dest_path).map_err(|e| {
             format!(
-                "复制文件 {} 到 {} 失败: {e}",
+                "failed to copy {} to {}: {e}",
                 template_path.display(),
                 dest_path.display()
             )
@@ -621,7 +621,7 @@ impl ConfigGenerator {
             app_log!(
                 warn,
                 "engine::config_generator",
-                "内置精确模板不存在（{}），尝试从镜像 {} 提取默认配置",
+                "Built-in template missing ({}), extracting from image {}",
                 tname,
                 image_tag
             );
@@ -635,7 +635,7 @@ impl ConfigGenerator {
                 app_log!(
                     info,
                     "engine::config_generator",
-                    "✅ 从镜像提取配置成功: {} ({} bytes)",
+                    "Extracted config from image: {} ({} bytes)",
                     dest,
                     bytes
                 );
@@ -646,7 +646,7 @@ impl ConfigGenerator {
                 app_log!(
                     warn,
                     "engine::config_generator",
-                    "⚠️ 镜像提取失败: {}",
+                    "Image extract failed: {}",
                     reason
                 );
                 // 继续走 fallback 模板
@@ -660,7 +660,7 @@ impl ConfigGenerator {
                 app_log!(
                     warn,
                     "engine::config_generator",
-                    "⚠️ 使用 fallback 模板（可能与目标版本不严格匹配）: {}",
+                    "Using fallback template (may not match target version): {}",
                     tname
                 );
                 return Ok(ConfigSource::TemplateCopied);
@@ -669,7 +669,7 @@ impl ConfigGenerator {
 
         // 5. 全部失败
         Err(format!(
-            "无法释放配置：内置模板缺失、镜像提取失败、fallback 模板也缺失（service: {service_dir}，image: {image_tag}，file: {dest_filename}）"
+            "failed to release config: no template, extract failed, fallback missing (service: {service_dir}, image: {image_tag}, file: {dest_filename})"
         ))
     }
 
@@ -713,11 +713,11 @@ impl ConfigGenerator {
     pub fn generate_service_dirs(config: &EnvConfig, root: &Path) -> Result<(), String> {
         // Create top-level directories
         std::fs::create_dir_all(root.join("services"))
-            .map_err(|e| format!("创建 services/ 目录失败: {e}"))?;
+            .map_err(|e| format!("failed to create services/ dir: {e}"))?;
         std::fs::create_dir_all(root.join("data"))
-            .map_err(|e| format!("创建 data/ 目录失败: {e}"))?;
+            .map_err(|e| format!("failed to create data/ dir: {e}"))?;
         std::fs::create_dir_all(root.join("logs"))
-            .map_err(|e| format!("创建 logs/ 目录失败: {e}"))?;
+            .map_err(|e| format!("failed to create logs/ dir: {e}"))?;
 
         // Create manifest once for service_dir lookups
         let manifest = VersionManifest::new();
@@ -762,7 +762,7 @@ impl ConfigGenerator {
                 app_log!(
                     info,
                     "engine::config_generator",
-                    "模板目录 services/{} 不存在，使用 {} 作为模板源",
+                    "No template dir services/{}, using {}",
                     service_dir_name,
                     template_dir
                 );
@@ -780,8 +780,9 @@ impl ConfigGenerator {
             match &service.service_type {
                 ServiceType::PHP => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
 
                     // Copy Dockerfile from template (项目自研，不从镜像提取)
                     Self::copy_template_file(
@@ -809,12 +810,15 @@ impl ConfigGenerator {
 
                     // Create log directory
                     std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
-                        .map_err(|e| format!("创建 logs/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create logs/{service_dir_name}/ dir: {e}")
+                        })?;
                 }
                 ServiceType::MySQL => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
 
                     // Copy mysql.cnf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
                     Self::ensure_config_with_extract_fallback(
@@ -830,14 +834,19 @@ impl ConfigGenerator {
 
                     // Create data and log directories
                     std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
-                        .map_err(|e| format!("创建 data/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create data/{service_dir_name}/ dir: {e}")
+                        })?;
                     std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
-                        .map_err(|e| format!("创建 logs/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create logs/{service_dir_name}/ dir: {e}")
+                        })?;
                 }
                 ServiceType::Redis => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
 
                     // Copy redis.conf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
                     Self::ensure_config_with_extract_fallback(
@@ -853,17 +862,20 @@ impl ConfigGenerator {
 
                     // Create data directory
                     std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
-                        .map_err(|e| format!("创建 data/{service_dir_name}/ 目录失败: {e}"))?;
+                        .map_err(|e| {
+                            format!("failed to create data/{service_dir_name}/ dir: {e}")
+                        })?;
                 }
                 ServiceType::Nginx => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir)
-                        .map_err(|e| format!("创建 services/{service_dir_name}/ 目录失败: {e}"))?;
+                    std::fs::create_dir_all(&service_dir).map_err(|e| {
+                        format!("failed to create services/{service_dir_name}/ dir: {e}")
+                    })?;
                     std::fs::create_dir_all(
                         root.join(format!("services/{service_dir_name}/conf.d")),
                     )
                     .map_err(|e| {
-                        format!("创建 services/{service_dir_name}/conf.d/ 目录失败: {e}")
+                        format!("failed to create services/{service_dir_name}/conf.d/ dir: {e}")
                     })?;
 
                     // Copy Dockerfile from template (项目自研，不从镜像提取)
@@ -892,7 +904,7 @@ impl ConfigGenerator {
 
                     // Create log directory
                     std::fs::create_dir_all(root.join("logs/nginx"))
-                        .map_err(|e| format!("创建 logs/nginx/ 目录失败: {e}"))?;
+                        .map_err(|e| format!("failed to create logs/nginx/ dir: {e}"))?;
                 }
             }
         }
@@ -926,7 +938,9 @@ impl ConfigGenerator {
         let backup_zip_path = project_root.join(&backup_zip_name);
 
         if backup_zip_path.exists() {
-            return Err(format!("备份文件已存在，请删除后重试: {backup_zip_name}"));
+            return Err(format!(
+                "backup file already exists, delete it and retry: {backup_zip_name}"
+            ));
         }
 
         Ok(BackupState::Ready {
@@ -947,13 +961,13 @@ impl ConfigGenerator {
                 app_log!(
                     info,
                     "engine::config_generator",
-                    "开始创建配置备份: {}",
+                    "Creating config backup: {}",
                     backup_zip_name
                 );
 
                 // Create ZIP file
                 let file = std::fs::File::create(&backup_zip_path)
-                    .map_err(|e| format!("创建备份文件失败: {e}"))?;
+                    .map_err(|e| format!("failed to create backup file: {e}"))?;
                 let mut zip = zip::ZipWriter::new(file);
                 let zip_options = FileOptions::<()>::default()
                     .compression_method(zip::CompressionMethod::Deflated);
@@ -969,13 +983,13 @@ impl ConfigGenerator {
                         match std::fs::read(&item_path) {
                             Ok(content) => {
                                 zip.start_file(item, zip_options)
-                                    .map_err(|e| format!("添加文件到ZIP失败: {e}"))?;
+                                    .map_err(|e| format!("failed to add file to zip: {e}"))?;
                                 zip.write_all(&content)
-                                    .map_err(|e| format!("写入文件内容失败: {e}"))?;
+                                    .map_err(|e| format!("failed to write zip entry: {e}"))?;
                                 app_log!(
                                     info,
                                     "engine::config_generator",
-                                    "已添加到备份: {}",
+                                    "Added to backup: {}",
                                     item
                                 );
                                 backed_up_count += 1;
@@ -984,7 +998,7 @@ impl ConfigGenerator {
                                 app_log!(
                                     error,
                                     "engine::config_generator",
-                                    "读取文件 {} 失败: {}",
+                                    "Failed to read {}: {}",
                                     item,
                                     e
                                 );
@@ -1003,7 +1017,7 @@ impl ConfigGenerator {
                                 app_log!(
                                     info,
                                     "engine::config_generator",
-                                    "已添加目录 {} ({} 个文件)",
+                                    "Added dir {} ({} files)",
                                     item,
                                     count
                                 );
@@ -1013,7 +1027,7 @@ impl ConfigGenerator {
                                 app_log!(
                                     error,
                                     "engine::config_generator",
-                                    "添加目录 {} 失败: {}",
+                                    "Failed to add dir {}: {}",
                                     item,
                                     e
                                 );
@@ -1032,14 +1046,15 @@ impl ConfigGenerator {
                     if config_path.exists() {
                         match std::fs::read(&config_path) {
                             Ok(content) => {
-                                zip.start_file(config_file, zip_options)
-                                    .map_err(|e| format!("添加用户配置文件到ZIP失败: {e}"))?;
+                                zip.start_file(config_file, zip_options).map_err(|e| {
+                                    format!("failed to add user config to zip: {e}")
+                                })?;
                                 zip.write_all(&content)
-                                    .map_err(|e| format!("写入用户配置文件失败: {e}"))?;
+                                    .map_err(|e| format!("failed to write user config: {e}"))?;
                                 app_log!(
                                     info,
                                     "engine::config_generator",
-                                    "已添加用户配置: {}",
+                                    "Added user config: {}",
                                     config_file
                                 );
                                 backed_up_count += 1;
@@ -1048,7 +1063,7 @@ impl ConfigGenerator {
                                 app_log!(
                                     warn,
                                     "engine::config_generator",
-                                    "读取用户配置文件 {} 失败: {}",
+                                    "Failed to read user config {}: {}",
                                     config_file,
                                     e
                                 );
@@ -1059,7 +1074,8 @@ impl ConfigGenerator {
                 }
 
                 // Finish ZIP file
-                zip.finish().map_err(|e| format!("完成ZIP文件失败: {e}"))?;
+                zip.finish()
+                    .map_err(|e| format!("failed to finish zip: {e}"))?;
 
                 if backed_up_count == 0 {
                     // No files were successfully added, delete the empty ZIP
@@ -1067,7 +1083,7 @@ impl ConfigGenerator {
                     app_log!(
                         warn,
                         "engine::config_generator",
-                        "没有文件被成功备份，已删除空ZIP文件"
+                        "No files backed up, removed empty zip"
                     );
                     return Ok(vec![]);
                 }
@@ -1075,7 +1091,7 @@ impl ConfigGenerator {
                 app_log!(
                     info,
                     "engine::config_generator",
-                    "备份完成: {} (共 {} 个文件/目录项)",
+                    "Backup done: {} ({} items)",
                     backup_zip_name,
                     items.len()
                 );
@@ -1093,8 +1109,8 @@ impl ConfigGenerator {
     ) -> Result<usize, String> {
         let mut file_count = 0;
 
-        for entry in std::fs::read_dir(dir_path).map_err(|e| format!("读取目录失败: {e}"))? {
-            let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+        for entry in std::fs::read_dir(dir_path).map_err(|e| format!("failed to read dir: {e}"))? {
+            let entry = entry.map_err(|e| format!("failed to read dir entry: {e}"))?;
             let path = entry.path();
 
             if path.is_file() {
@@ -1103,16 +1119,16 @@ impl ConfigGenerator {
                     match std::fs::read(&path) {
                         Ok(content) => {
                             zip.start_file(&zip_path, options)
-                                .map_err(|e| format!("添加文件到ZIP失败: {e}"))?;
+                                .map_err(|e| format!("failed to add file to zip: {e}"))?;
                             zip.write_all(&content)
-                                .map_err(|e| format!("写入文件内容失败: {e}"))?;
+                                .map_err(|e| format!("failed to write zip entry: {e}"))?;
                             file_count += 1;
                         }
                         Err(e) => {
                             app_log!(
                                 warn,
                                 "engine::config_generator",
-                                "跳过文件 {:?}: {}",
+                                "Skipping file {:?}: {}",
                                 path,
                                 e
                             );
@@ -1136,13 +1152,13 @@ impl ConfigGenerator {
     /// Format: config_backup_YYYYMMDD_HHMMSS.zip
     /// Contains: .env, docker-compose.yml, services/, .user_mirror_config.json, .user_version_overrides.json
     pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
-        app_log!(info, "engine::config_generator", "开始预检查备份...");
+        app_log!(info, "engine::config_generator", "Prechecking backup...");
 
         // Phase 1: Pre-check
         let backup_state = Self::precheck_backup(project_root)?;
 
         // Phase 2: Execute with rollback
-        app_log!(info, "engine::config_generator", "执行备份...");
+        app_log!(info, "engine::config_generator", "Running backup...");
         Self::execute_backup(backup_state, project_root)
     }
 
@@ -1166,12 +1182,12 @@ impl ConfigGenerator {
         let env_path = project_root.join(".env");
         let env_file = Self::generate_env(config, None, project_root);
         std::fs::write(&env_path, env_file.format())
-            .map_err(|e| format!("写入 .env 文件失败: {e}"))?;
+            .map_err(|e| format!("failed to write .env file: {e}"))?;
 
         // Generate and write docker-compose.yml
         let compose = Self::generate_compose(config);
         std::fs::write(project_root.join("docker-compose.yml"), compose)
-            .map_err(|e| format!("写入 docker-compose.yml 失败: {e}"))?;
+            .map_err(|e| format!("failed to write docker-compose.yml: {e}"))?;
 
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
@@ -1192,7 +1208,7 @@ impl ConfigGenerator {
             let npmrc_content = format!("registry={npm_mirror}\n");
             let npmrc_path = workspace_path.join(".npmrc");
             std::fs::write(&npmrc_path, npmrc_content)
-                .map_err(|e| format!("写入 .npmrc 文件失败: {e}"))?;
+                .map_err(|e| format!("failed to write .npmrc file: {e}"))?;
         }
 
         Ok(backed_up_files)
@@ -1305,7 +1321,7 @@ mod tests {
         let result = ConfigGenerator::validate(&config);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("端口冲突"));
+        assert!(err.contains("Port conflict"));
         assert!(err.contains("3306"));
         // display_name from manifest: "MySQL 8.0" and "Redis 7.0"
         assert!(err.contains("MySQL 8.0"));

@@ -4,6 +4,13 @@ use std::path::Path;
 use std::sync::Mutex;
 use tracing_subscriber::{fmt, EnvFilter};
 
+/// Payload pushed to the frontend via the `env-log` event.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct UiLogPayload {
+    pub level: String,
+    pub message: String,
+}
+
 /// 全局日志文件句柄（线程安全）
 static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 
@@ -34,11 +41,11 @@ fn rotate_logs(dir: &Path) -> Result<(), String> {
         // 最老的一份已被挤出保留范围，直接丢弃
         if generation == RETAINED_LOG_GENERATIONS && to.exists() {
             std::fs::remove_file(&to)
-                .map_err(|e| format!("删除旧日志失败 {}: {}", to.display(), e))?;
+                .map_err(|e| format!("failed to delete old log {}: {e}", to.display()))?;
         }
 
         std::fs::rename(&from, &to)
-            .map_err(|e| format!("轮转日志失败 {}: {}", from.display(), e))?;
+            .map_err(|e| format!("failed to rotate log {}: {e}", from.display()))?;
     }
 
     Ok(())
@@ -55,8 +62,12 @@ fn lock_log_file() -> std::sync::MutexGuard<'static, Option<File>> {
 /// 初始化日志系统
 pub fn init_logging(app_data_dir: &std::path::PathBuf) -> Result<(), String> {
     // 确保目录存在
-    std::fs::create_dir_all(app_data_dir)
-        .map_err(|e| format!("无法创建应用数据目录 {}: {}", app_data_dir.display(), e))?;
+    std::fs::create_dir_all(app_data_dir).map_err(|e| {
+        format!(
+            "failed to create app data dir {}: {e}",
+            app_data_dir.display()
+        )
+    })?;
 
     rotate_logs(app_data_dir)?;
 
@@ -68,13 +79,13 @@ pub fn init_logging(app_data_dir: &std::path::PathBuf) -> Result<(), String> {
         .write(true)
         .truncate(true)
         .open(&log_path)
-        .map_err(|e| format!("无法创建日志文件 {}: {}", log_path.display(), e))?;
+        .map_err(|e| format!("failed to create log file {}: {e}", log_path.display()))?;
 
     // 写入启动分隔线，便于区分多次启动的日志段
     let now = chrono::Local::now();
     let _ = writeln!(
         file,
-        "=========== PHP-Stack 启动 {} ===========",
+        "=========== PHP-Stack started {} ===========",
         now.format("%Y-%m-%d %H:%M:%S")
     );
     let _ = file.flush();
@@ -144,16 +155,19 @@ mod tests {
 
         rotate_logs(&dir).unwrap();
 
-        assert!(!dir.join("php-stack.log").exists(), "当前日志应被移走");
+        assert!(
+            !dir.join("php-stack.log").exists(),
+            "current log should be rotated away"
+        );
         assert_eq!(
             std::fs::read_to_string(dir.join("php-stack.1.log")).unwrap(),
             "current",
-            "本次日志应成为 .1"
+            "current log should become .1"
         );
         assert_eq!(
             std::fs::read_to_string(dir.join("php-stack.2.log")).unwrap(),
             "previous",
-            "上一份 .1 应顺延为 .2"
+            "previous .1 should become .2"
         );
     }
 
@@ -199,5 +213,19 @@ mod tests {
             std::fs::read_to_string(dir.join("php-stack.1.log")).unwrap(),
             body
         );
+    }
+
+    #[test]
+    fn test_ui_log_payload_roundtrip() {
+        let payload = UiLogPayload {
+            level: "warn".to_string(),
+            message: "port in use".to_string(),
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        let back: UiLogPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.level, "warn");
+        assert_eq!(back.message, "port in use");
+        assert!(json.contains("\"level\""));
+        assert!(json.contains("\"message\""));
     }
 }

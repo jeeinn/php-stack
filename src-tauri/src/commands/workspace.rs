@@ -12,7 +12,10 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
     let service_dir = project_root.join("services").join(&service_name);
 
     if !service_dir.exists() {
-        return Err(format!("服务配置目录不存在: {}", service_dir.display()));
+        return Err(format!(
+            "service config dir not found: {}",
+            service_dir.display()
+        ));
     }
 
     // 在 Windows 上使用 explorer 打开目录
@@ -21,7 +24,7 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(service_dir)
             .spawn()
-            .map_err(|e| format!("无法打开目录: {e}"))?;
+            .map_err(|e| format!("failed to open directory: {e}"))?;
     }
 
     // 在 macOS 上使用 open 命令
@@ -30,7 +33,7 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
         std::process::Command::new("open")
             .arg(service_dir)
             .spawn()
-            .map_err(|e| format!("无法打开目录: {}", e))?;
+            .map_err(|e| format!("failed to open directory: {e}"))?;
     }
 
     // 在 Linux 上使用 xdg-open 命令
@@ -39,7 +42,7 @@ pub fn open_service_config(service_name: String) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(service_dir)
             .spawn()
-            .map_err(|e| format!("无法打开目录: {}", e))?;
+            .map_err(|e| format!("failed to open directory: {e}"))?;
     }
 
     Ok(())
@@ -90,7 +93,7 @@ pub fn get_workspace_info() -> Result<Option<WorkspaceInfo>, String> {
 pub fn set_workspace_path(path: String) -> Result<(), String> {
     // 验证路径是否存在
     if !std::path::PathBuf::from(&path).exists() {
-        return Err("指定的工作目录路径不存在".to_string());
+        return Err("workspace path does not exist".to_string());
     }
     WorkspaceManager::save_workspace(&path)
 }
@@ -102,11 +105,11 @@ pub fn recreate_workspace_dir() -> Result<WorkspaceInfo, String> {
     app_log!(
         info,
         "commands::recreate_workspace_dir",
-        "已按用户确认重建工作区: {}",
+        "Recreated workspace: {}",
         path.display()
     );
 
-    get_workspace_info()?.ok_or_else(|| "重建后仍无法读取工作区信息".to_string())
+    get_workspace_info()?.ok_or_else(|| "failed to read workspace info after recreate".to_string())
 }
 
 /// 获取所有可用的版本映射配置
@@ -154,7 +157,7 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
         result.insert(key.to_string(), serde_json::Value::Array(versions));
     }
 
-    serde_json::to_value(result).map_err(|e| format!("序列化失败: {e}"))
+    serde_json::to_value(result).map_err(|e| format!("serialize failed: {e}"))
 }
 
 /// 验证指定的版本是否存在
@@ -166,7 +169,7 @@ pub fn validate_version(service_type: String, version: String) -> Result<bool, S
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {service_type}")),
+        _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
     Ok(manifest.is_id_valid(&vm_service_type, &version))
@@ -181,7 +184,7 @@ pub fn get_recommended_version(service_type: String) -> Result<Option<String>, S
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {service_type}")),
+        _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
     Ok(manifest
@@ -205,7 +208,7 @@ pub fn save_user_override(
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {service_type}")),
+        _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
     let override_config = UserVersionOverride {
@@ -227,7 +230,7 @@ pub fn remove_user_override(service_type: String, id: String) -> Result<(), Stri
         "mysql" => VmServiceType::Mysql,
         "redis" => VmServiceType::Redis,
         "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("不支持的服务类型: {service_type}")),
+        _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
     manager.remove_user_override(&project_root, &vm_service_type, &id)
@@ -251,10 +254,10 @@ pub fn export_logs_to(dest: String) -> Result<(), String> {
     let log_path = get_log_file()?;
 
     if !log_path.exists() {
-        return Err("日志文件不存在，请先执行一些操作".to_string());
+        return Err("log file not found; run some operations first".to_string());
     }
 
-    std::fs::copy(&log_path, &dest).map_err(|e| format!("导出日志失败: {e}"))?;
+    std::fs::copy(&log_path, &dest).map_err(|e| format!("failed to export log: {e}"))?;
 
     Ok(())
 }
@@ -267,8 +270,8 @@ pub fn export_logs() -> Result<String, String> {
     let log_path = get_log_file()?;
 
     if !log_path.exists() {
-        return Err("日志文件不存在，请先执行一些操作".to_string());
+        return Err("log file not found; run some operations first".to_string());
     }
 
-    std::fs::read_to_string(&log_path).map_err(|e| format!("读取日志失败: {e}"))
+    std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read log: {e}"))
 }

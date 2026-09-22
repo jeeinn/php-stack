@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use crate::app_log;
+
 /// 镜像源配置
 ///
 /// 统一管理容器内依赖镜像源（APT/Composer/PyPI/NPM）
@@ -108,12 +110,16 @@ impl MirrorConfig {
         let env_path = Path::new(".env");
 
         if !env_path.exists() {
-            log::warn!("⚠️ .env 文件不存在，使用默认配置");
+            app_log!(
+                warn,
+                "engine::mirror_config",
+                ".env file not found, using default config"
+            );
             return Ok(Self::default());
         }
 
         let env_content =
-            fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?;
+            fs::read_to_string(env_path).map_err(|e| format!("failed to read .env file: {e}"))?;
 
         let env_map = Self::parse_env_file(&env_content);
 
@@ -179,7 +185,7 @@ impl MirrorConfig {
     pub fn save_to_env(&self) -> Result<(), String> {
         let env_path = Path::new(".env");
         let mut env_content = if env_path.exists() {
-            fs::read_to_string(env_path).map_err(|e| format!("读取 .env 文件失败: {e}"))?
+            fs::read_to_string(env_path).map_err(|e| format!("failed to read .env file: {e}"))?
         } else {
             String::new()
         };
@@ -202,8 +208,12 @@ impl MirrorConfig {
             env_content = Self::update_env_value(&env_content, "HTTPS_PROXY", proxy);
         }
 
-        fs::write(env_path, env_content).map_err(|e| format!("写入 .env 文件失败: {e}"))?;
-        log::info!("✅ 容器内镜像源配置已保存到 .env");
+        fs::write(env_path, env_content).map_err(|e| format!("failed to write .env file: {e}"))?;
+        app_log!(
+            info,
+            "engine::mirror_config",
+            "in-container mirror config saved to .env"
+        );
         Ok(())
     }
 

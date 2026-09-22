@@ -77,11 +77,13 @@ fn validate_archive_entry_names<R: Read + std::io::Seek>(
     for i in 0..archive.len() {
         let name = archive
             .by_index(i)
-            .map_err(|e| format!("读取 ZIP 条目失败: {e}"))?
+            .map_err(|e| format!("failed to read ZIP entry: {e}"))?
             .name()
             .to_string();
         if !is_safe_entry_name(&name) {
-            return Err(format!("备份包包含非法路径条目，已拒绝恢复: {name}"));
+            return Err(format!(
+                "backup contains an entry with an illegal path, restore rejected: {name}"
+            ));
         }
     }
     Ok(())
@@ -151,9 +153,10 @@ impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
     pub fn preview(zip_path: &str) -> Result<RestorePreview, String> {
-        let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| format!("failed to open backup file: {e}"))?;
         let mut archive =
-            zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+            zip::ZipArchive::new(file).map_err(|e| format!("failed to parse ZIP file: {e}"))?;
 
         // 预览阶段即做 zip-slip 扫描，恶意包不必等到执行恢复才暴露
         validate_archive_entry_names(&mut archive)?;
@@ -183,9 +186,10 @@ impl RestoreEngine {
     /// For each file in manifest.files, read from ZIP and compute SHA256,
     /// compare with recorded hash.
     pub fn verify_integrity(zip_path: &str) -> Result<bool, String> {
-        let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| format!("failed to open backup file: {e}"))?;
         let mut archive =
-            zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+            zip::ZipArchive::new(file).map_err(|e| format!("failed to parse ZIP file: {e}"))?;
 
         validate_archive_entry_names(&mut archive)?;
 
@@ -195,12 +199,12 @@ impl RestoreEngine {
         for (file_path, expected_hash) in &manifest.files {
             let mut zip_file = archive
                 .by_name(file_path)
-                .map_err(|e| format!("读取 ZIP 条目 '{file_path}' 失败: {e}"))?;
+                .map_err(|e| format!("failed to read ZIP entry '{file_path}': {e}"))?;
 
             let mut content = Vec::new();
             zip_file
                 .read_to_end(&mut content)
-                .map_err(|e| format!("读取文件内容 '{file_path}' 失败: {e}"))?;
+                .map_err(|e| format!("failed to read file content '{file_path}': {e}"))?;
 
             let actual_hash = BackupEngine::compute_sha256(&content);
             if &actual_hash != expected_hash {
@@ -221,45 +225,46 @@ impl RestoreEngine {
         let mut restored_files: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
 
-        let file = std::fs::File::open(zip_path).map_err(|e| format!("打开备份文件失败: {e}"))?;
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| format!("failed to open backup file: {e}"))?;
         let mut archive =
-            zip::ZipArchive::new(file).map_err(|e| format!("解析 ZIP 文件失败: {e}"))?;
+            zip::ZipArchive::new(file).map_err(|e| format!("failed to parse ZIP file: {e}"))?;
 
         // Step 0: 安全校验——拒绝包含路径遍历条目的备份包，在任何写盘操作之前拦截
         validate_archive_entry_names(&mut archive)?;
 
         // Step 1: Read manifest
-        Self::emit_progress(app_handle, "解析备份包...", 5);
+        Self::emit_progress(app_handle, "restore.progress.steps.parsing", 5);
         let manifest = Self::read_manifest_from_archive(&mut archive)?;
         check_manifest_version(&manifest.version)?;
 
         // Step 2: Extract .env
-        Self::emit_progress(app_handle, "恢复环境配置...", 15);
+        Self::emit_progress(app_handle, "restore.progress.steps.envConfig", 15);
         match Self::restore_env_file(&mut archive, project_root) {
             Ok(()) => restored_files.push(".env".to_string()),
-            Err(e) => errors.push(format!("恢复 .env 失败: {e}")),
+            Err(e) => errors.push(format!("failed to restore .env: {e}")),
         }
 
         // Step 3: Extract docker-compose.yml
-        Self::emit_progress(app_handle, "恢复 Docker 配置...", 25);
+        Self::emit_progress(app_handle, "restore.progress.steps.dockerConfig", 25);
         match Self::extract_file_to_path(
             &mut archive,
             "docker-compose.yml",
             &project_root.join("docker-compose.yml"),
         ) {
             Ok(()) => restored_files.push("docker-compose.yml".to_string()),
-            Err(e) => errors.push(format!("恢复 docker-compose.yml 失败: {e}")),
+            Err(e) => errors.push(format!("failed to restore docker-compose.yml: {e}")),
         }
 
         // Step 4: Extract services/ directory contents
-        Self::emit_progress(app_handle, "恢复服务配置...", 40);
+        Self::emit_progress(app_handle, "restore.progress.steps.serviceConfig", 40);
         match Self::extract_prefix(&mut archive, "services/", &project_root.join("services")) {
             Ok(files) => restored_files.extend(files),
-            Err(e) => errors.push(format!("恢复 services/ 失败: {e}")),
+            Err(e) => errors.push(format!("failed to restore services/: {e}")),
         }
 
         // Step 4.5: Restore user custom configuration files
-        Self::emit_progress(app_handle, "恢复用户自定义配置...", 45);
+        Self::emit_progress(app_handle, "restore.progress.steps.userConfig", 45);
 
         // .user_mirror_config.json - User mirror source configuration
         match Self::extract_file_to_path(
@@ -286,37 +291,37 @@ impl RestoreEngine {
         }
 
         // Step 5: Extract vhosts/ to services/nginx/conf.d/
-        Self::emit_progress(app_handle, "恢复虚拟主机配置...", 55);
+        Self::emit_progress(app_handle, "restore.progress.steps.vhost", 55);
         match Self::extract_prefix(
             &mut archive,
             "vhosts/",
             &project_root.join("services/nginx/conf.d"),
         ) {
             Ok(files) => restored_files.extend(files),
-            Err(e) => errors.push(format!("恢复 vhosts/ 失败: {e}")),
+            Err(e) => errors.push(format!("failed to restore vhosts/: {e}")),
         }
 
         // Step 6: Extract projects/ to project_root (paths are already relative to project_root)
-        Self::emit_progress(app_handle, "恢复项目文件...", 70);
+        Self::emit_progress(app_handle, "restore.progress.steps.projectFiles", 70);
         if !manifest.options.project_patterns.is_empty() {
             // 备份时已经将文件路径存储为相对于 project_root 的路径
             // 例如："www/test/index.php" → ZIP 中为 "projects/www/test/index.php"
             // 恢复时直接提取到 project_root 即可
             match Self::extract_prefix(&mut archive, "projects/", project_root) {
                 Ok(files) => restored_files.extend(files),
-                Err(e) => errors.push(format!("恢复项目文件失败: {e}")),
+                Err(e) => errors.push(format!("failed to restore project files: {e}")),
             }
         }
 
         // Step 7: Extract database/ SQL files
-        Self::emit_progress(app_handle, "恢复数据库文件...", 85);
+        Self::emit_progress(app_handle, "restore.progress.steps.database", 85);
         match Self::extract_prefix(&mut archive, "database/", &project_root.join("database")) {
             Ok(files) => restored_files.extend(files),
-            Err(e) => errors.push(format!("恢复数据库文件失败: {e}")),
+            Err(e) => errors.push(format!("failed to restore database files: {e}")),
         }
 
         // Step 8: Done
-        Self::emit_progress(app_handle, "恢复完成", 100);
+        Self::emit_progress(app_handle, "restore.progress.steps.done", 100);
 
         let _ = manifest; // manifest was used for reading
 
@@ -335,12 +340,12 @@ impl RestoreEngine {
     ) -> Result<BackupManifest, String> {
         let mut manifest_file = archive
             .by_name("manifest.json")
-            .map_err(|e| format!("读取 manifest.json 失败: {e}"))?;
+            .map_err(|e| format!("failed to read manifest.json: {e}"))?;
 
         let mut manifest_json = String::new();
         manifest_file
             .read_to_string(&mut manifest_json)
-            .map_err(|e| format!("读取 manifest.json 内容失败: {e}"))?;
+            .map_err(|e| format!("failed to read manifest.json content: {e}"))?;
 
         BackupManifest::deserialize(&manifest_json)
     }
@@ -353,19 +358,20 @@ impl RestoreEngine {
     ) -> Result<(), String> {
         let mut zip_file = archive
             .by_name(zip_entry)
-            .map_err(|e| format!("读取 ZIP 条目 '{zip_entry}' 失败: {e}"))?;
+            .map_err(|e| format!("failed to read ZIP entry '{zip_entry}': {e}"))?;
 
         let mut content = Vec::new();
         zip_file
             .read_to_end(&mut content)
-            .map_err(|e| format!("读取文件内容 '{zip_entry}' 失败: {e}"))?;
+            .map_err(|e| format!("failed to read file content '{zip_entry}': {e}"))?;
 
         if let Some(parent) = target_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create directory: {e}"))?;
         }
 
         std::fs::write(target_path, &content)
-            .map_err(|e| format!("写入文件 '{}' 失败: {}", target_path.display(), e))?;
+            .map_err(|e| format!("failed to write file '{}': {}", target_path.display(), e))?;
 
         Ok(())
     }
@@ -398,20 +404,21 @@ impl RestoreEngine {
 
             let mut zip_file = archive
                 .by_index(idx)
-                .map_err(|e| format!("读取 ZIP 条目 '{name}' 失败: {e}"))?;
+                .map_err(|e| format!("failed to read ZIP entry '{name}': {e}"))?;
 
             let mut content = Vec::new();
             zip_file
                 .read_to_end(&mut content)
-                .map_err(|e| format!("读取文件内容 '{name}' 失败: {e}"))?;
+                .map_err(|e| format!("failed to read file content '{name}': {e}"))?;
 
             if let Some(parent) = target_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("创建目录 '{}' 失败: {}", parent.display(), e))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("failed to create directory '{}': {}", parent.display(), e)
+                })?;
             }
 
             std::fs::write(&target_path, &content)
-                .map_err(|e| format!("写入文件 '{}' 失败: {}", target_path.display(), e))?;
+                .map_err(|e| format!("failed to write file '{}': {}", target_path.display(), e))?;
 
             extracted.push(name);
         }
@@ -426,20 +433,23 @@ impl RestoreEngine {
     ) -> Result<(), String> {
         let mut zip_file = archive
             .by_name(".env")
-            .map_err(|e| format!("读取 .env 失败: {e}"))?;
+            .map_err(|e| format!("failed to read .env: {e}"))?;
 
         let mut content = String::new();
         zip_file
             .read_to_string(&mut content)
-            .map_err(|e| format!("读取 .env 内容失败: {e}"))?;
+            .map_err(|e| format!("failed to read .env content: {e}"))?;
 
         let env_path = project_root.join(".env");
-        std::fs::write(&env_path, content).map_err(|e| format!("写入 .env 失败: {e}"))?;
+        std::fs::write(&env_path, content).map_err(|e| format!("failed to write .env: {e}"))?;
 
         Ok(())
     }
 
     /// Helper: emit progress event via Tauri.
+    ///
+    /// `step` 传的是 i18n key（如 `restore.progress.steps.parsing`），
+    /// 由前端 `t()` 翻译后再展示，不要在这里拼自然语言。
     fn emit_progress(app_handle: Option<&tauri::AppHandle>, step: &str, percentage: u8) {
         if let Some(handle) = app_handle {
             use tauri::Emitter;
@@ -531,7 +541,8 @@ mod tests {
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("manifest.json", zip_options).unwrap();
-        zip.write_all(br#"{"version":"1.0.0","timestamp":"t","services":[]}"#).unwrap();
+        zip.write_all(br#"{"version":"1.0.0","timestamp":"t","services":[]}"#)
+            .unwrap();
         zip.start_file("../../escaped.txt", zip_options).unwrap();
         zip.write_all(b"pwned").unwrap();
         zip.finish().unwrap();
@@ -584,7 +595,7 @@ mod tests {
 
         let err = RestoreEngine::preview(zip_path.to_str().unwrap())
             .expect_err("格式版本过新应在预览阶段拒绝");
-        assert!(err.contains("过新"), "实际: {err}");
+        assert!(err.contains("too new"), "实际: {err}");
         assert!(err.contains("2.0.0"), "实际: {err}");
     }
 

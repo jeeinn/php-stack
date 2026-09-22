@@ -46,7 +46,7 @@ impl UserOverrideManager {
             app_log!(
                 info,
                 "engine::user_override",
-                "未找到用户覆盖配置文件，使用默认配置"
+                "No user override file, using defaults"
             );
             return HashMap::new();
         }
@@ -54,7 +54,7 @@ impl UserOverrideManager {
         app_log!(
             info,
             "engine::user_override",
-            "加载用户覆盖配置: {:?}",
+            "Loading user overrides: {:?}",
             overrides_path
         );
 
@@ -79,7 +79,7 @@ impl UserOverrideManager {
                             app_log!(
                                 info,
                                 "engine::user_override",
-                                "{service_key}: {} 个版本覆盖",
+                                "{service_key}: {} version override(s)",
                                 versions.len()
                             );
                             result.insert(service_type, versions);
@@ -88,19 +88,27 @@ impl UserOverrideManager {
                         app_log!(
                             info,
                             "engine::user_override",
-                            "加载成功，共 {} 个服务类型，{override_count} 个版本覆盖",
+                            "Loaded {} service type(s), {override_count} override(s)",
                             result.len()
                         );
                         result
                     }
                     Err(e) => {
-                        app_log!(warn, "engine::user_override", "解析配置文件失败: {e}");
+                        app_log!(
+                            warn,
+                            "engine::user_override",
+                            "failed to parse override file: {e}"
+                        );
                         HashMap::new()
                     }
                 }
             }
             Err(e) => {
-                app_log!(error, "engine::user_override", "读取配置文件失败: {e}");
+                app_log!(
+                    error,
+                    "engine::user_override",
+                    "failed to read override file: {e}"
+                );
                 HashMap::new()
             }
         }
@@ -118,7 +126,7 @@ impl UserOverrideManager {
             app_log!(
                 info,
                 "engine::user_override",
-                "{} {} 使用自定义标签: {}",
+                "{} {} using custom tag: {}",
                 format!("{service_type:?}").to_lowercase(),
                 id,
                 user_override.image_tag
@@ -163,9 +171,9 @@ impl UserOverrideManager {
         // 序列化并保存到文件（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         let json = serde_json::to_string_pretty(&self.user_overrides)
-            .map_err(|e| format!("序列化失败: {e}"))?;
+            .map_err(|e| format!("serialize failed: {e}"))?;
 
-        std::fs::write(&overrides_path, json).map_err(|e| format!("写入文件失败: {e}"))?;
+        std::fs::write(&overrides_path, json).map_err(|e| format!("failed to write file: {e}"))?;
 
         Ok(())
     }
@@ -184,9 +192,9 @@ impl UserOverrideManager {
         // 重新保存（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         let json = serde_json::to_string_pretty(&self.user_overrides)
-            .map_err(|e| format!("序列化失败: {e}"))?;
+            .map_err(|e| format!("serialize failed: {e}"))?;
 
-        std::fs::write(&overrides_path, json).map_err(|e| format!("写入文件失败: {e}"))?;
+        std::fs::write(&overrides_path, json).map_err(|e| format!("failed to write file: {e}"))?;
 
         Ok(())
     }
@@ -198,7 +206,8 @@ impl UserOverrideManager {
         // 删除配置文件（与 .env 同级目录）
         let overrides_path = project_root.join(".user_version_overrides.json");
         if overrides_path.exists() {
-            std::fs::remove_file(&overrides_path).map_err(|e| format!("删除文件失败: {e}"))?;
+            std::fs::remove_file(&overrides_path)
+                .map_err(|e| format!("failed to delete file: {e}"))?;
         }
 
         Ok(())

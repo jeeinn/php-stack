@@ -26,34 +26,35 @@ impl BackupEngine {
         project_root: &Path,
         app_handle: Option<&tauri::AppHandle>,
     ) -> Result<(), String> {
-        let file = fs::File::create(save_path).map_err(|e| format!("创建备份文件失败: {e}"))?;
+        let file = fs::File::create(save_path)
+            .map_err(|e| format!("failed to create backup file: {e}"))?;
         let mut zip = zip::ZipWriter::new(file);
         let mut manifest = BackupManifest::new();
         manifest.options = options.clone();
 
         // Step 1: Pack .env (10%)
-        Self::emit_progress(app_handle, "打包环境配置...", 10);
+        Self::emit_progress(app_handle, "backup.progress.steps.envConfig", 10);
         let env_path = project_root.join(".env");
         if env_path.exists() {
             Self::add_file_to_zip(&mut zip, ".env", &env_path, &mut manifest)?;
         }
 
         // Step 2: Pack docker-compose.yml (20%)
-        Self::emit_progress(app_handle, "打包 Docker 配置...", 20);
+        Self::emit_progress(app_handle, "backup.progress.steps.dockerConfig", 20);
         let compose_path = project_root.join("docker-compose.yml");
         if compose_path.exists() {
             Self::add_file_to_zip(&mut zip, "docker-compose.yml", &compose_path, &mut manifest)?;
         }
 
         // Step 3: Pack services/ configs (30%)
-        Self::emit_progress(app_handle, "打包服务配置...", 30);
+        Self::emit_progress(app_handle, "backup.progress.steps.serviceConfig", 30);
         let services_dir = project_root.join("services");
         if services_dir.exists() {
             Self::add_dir_to_zip(&mut zip, &services_dir, "services", &mut manifest)?;
         }
 
         // Step 3.5: Pack user custom configuration files (35%)
-        Self::emit_progress(app_handle, "打包用户自定义配置...", 35);
+        Self::emit_progress(app_handle, "backup.progress.steps.userConfig", 35);
 
         // .user_mirror_config.json - User mirror source configuration
         let user_mirror_config_path = project_root.join(".user_mirror_config.json");
@@ -79,7 +80,7 @@ impl BackupEngine {
 
         // Step 4: Optional — Project files (50%)
         if options.include_projects && !options.project_patterns.is_empty() {
-            Self::emit_progress(app_handle, "打包项目文件...", 60);
+            Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 60);
             for pattern in &options.project_patterns {
                 // 将相对路径模式转换为绝对路径模式
                 let mut normalized_pattern = pattern.clone();
@@ -103,7 +104,7 @@ impl BackupEngine {
                 app_log!(
                     debug,
                     "engine::backup",
-                    "尝试匹配模式: {} -> {}",
+                    "Trying glob: {} -> {}",
                     pattern,
                     abs_pattern
                 );
@@ -120,7 +121,7 @@ impl BackupEngine {
                                         .map(|p| p.to_string_lossy().replace('\\', "/"))
                                         .unwrap_or_else(|| path.display().to_string());
                                     let zip_path = format!("projects/{relative_path}");
-                                    app_log!(debug, "engine::backup", "添加文件: {}", zip_path);
+                                    app_log!(debug, "engine::backup", "Adding file: {}", zip_path);
                                     // 流式写入：单个大文件不再整体进内存
                                     if let Err(e) = Self::add_file_to_zip(
                                         &mut zip,
@@ -129,7 +130,7 @@ impl BackupEngine {
                                         &mut manifest,
                                     ) {
                                         manifest.errors.push(format!(
-                                            "打包项目文件失败 {}: {}",
+                                            "failed to pack project file {}: {}",
                                             path.display(),
                                             e
                                         ));
@@ -137,24 +138,24 @@ impl BackupEngine {
                                 }
                                 Ok(path) => {
                                     // 跳过目录
-                                    app_log!(debug, "engine::backup", "跳过目录: {:?}", path);
+                                    app_log!(debug, "engine::backup", "Skipping dir: {:?}", path);
                                 }
                                 Err(e) => {
-                                    manifest.errors.push(format!("Glob 匹配错误: {e}"));
-                                    app_log!(warn, "engine::backup", "Glob 匹配错误: {}", e);
+                                    manifest.errors.push(format!("Glob match error: {e}"));
+                                    app_log!(warn, "engine::backup", "Glob match error: {}", e);
                                 }
                             }
                         }
                         app_log!(
                             info,
                             "engine::backup",
-                            "模式 '{}' 匹配到 {} 个文件",
+                            "Pattern '{}' matched {} file(s)",
                             pattern,
                             matched_count
                         );
                     }
                     Err(e) => {
-                        let error_msg = format!("Glob 模式错误 '{pattern}': {e}");
+                        let error_msg = format!("Invalid glob '{pattern}': {e}");
                         manifest.errors.push(error_msg.clone());
                         app_log!(error, "engine::backup", "{}", error_msg);
                     }
@@ -164,7 +165,7 @@ impl BackupEngine {
 
         // Step 5: Optional — Recent logs (70%)
         if options.include_logs {
-            Self::emit_progress(app_handle, "打包日志文件...", 85);
+            Self::emit_progress(app_handle, "backup.progress.steps.logs", 85);
             let logs_dir = project_root.join("logs");
             if logs_dir.exists() {
                 // MVP: pack all logs (7-day filter can be added later)
@@ -173,20 +174,20 @@ impl BackupEngine {
         }
 
         // Step 8: Write manifest.json (95%)
-        Self::emit_progress(app_handle, "生成备份清单...", 95);
+        Self::emit_progress(app_handle, "backup.progress.steps.manifest", 95);
         let manifest_json = manifest.serialize()?;
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("manifest.json", zip_options)
-            .map_err(|e| format!("创建 manifest 条目失败: {e}"))?;
+            .map_err(|e| format!("failed to create manifest entry: {e}"))?;
         zip.write_all(manifest_json.as_bytes())
-            .map_err(|e| format!("写入 manifest 失败: {e}"))?;
+            .map_err(|e| format!("failed to write manifest: {e}"))?;
 
         // Finish ZIP
         zip.finish()
-            .map_err(|e| format!("完成 ZIP 文件失败: {e}"))?;
+            .map_err(|e| format!("failed to finalize ZIP file: {e}"))?;
 
-        Self::emit_progress(app_handle, "备份完成", 100);
+        Self::emit_progress(app_handle, "backup.progress.steps.done", 100);
         Ok(())
     }
 
@@ -198,6 +199,9 @@ impl BackupEngine {
     }
 
     /// Helper: emit progress event via Tauri.
+    ///
+    /// `step` 传的是 i18n key（如 `backup.progress.steps.envConfig`），
+    /// 由前端 `t()` 翻译后再展示，不要在这里拼自然语言。
     fn emit_progress(app_handle: Option<&tauri::AppHandle>, step: &str, percentage: u8) {
         if let Some(handle) = app_handle {
             use tauri::Emitter;
@@ -225,23 +229,23 @@ impl BackupEngine {
         let zip_options =
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(zip_path, zip_options)
-            .map_err(|e| format!("创建 ZIP 条目失败: {e}"))?;
+            .map_err(|e| format!("failed to create ZIP entry: {e}"))?;
 
         let mut file = fs::File::open(source)
-            .map_err(|e| format!("打开文件失败 {}: {}", source.display(), e))?;
+            .map_err(|e| format!("failed to open file {}: {}", source.display(), e))?;
 
         let mut hasher = Sha256::new();
         let mut buffer = [0u8; 64 * 1024];
         loop {
             let read = file
                 .read(&mut buffer)
-                .map_err(|e| format!("读取文件失败 {}: {}", source.display(), e))?;
+                .map_err(|e| format!("failed to read file {}: {}", source.display(), e))?;
             if read == 0 {
                 break;
             }
             hasher.update(&buffer[..read]);
             zip.write_all(&buffer[..read])
-                .map_err(|e| format!("写入 ZIP 内容失败: {e}"))?;
+                .map_err(|e| format!("failed to write ZIP content: {e}"))?;
         }
 
         let sha256 = format!("{:x}", hasher.finalize());
@@ -259,12 +263,17 @@ impl BackupEngine {
         if !src_dir.exists() {
             return Ok(());
         }
-        for entry in fs::read_dir(src_dir).map_err(|e| format!("读取目录失败: {e}"))? {
-            let entry = entry.map_err(|e| format!("读取目录条目失败: {e}"))?;
+        for entry in fs::read_dir(src_dir).map_err(|e| format!("failed to read directory: {e}"))? {
+            let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
             let path = entry.path();
             // 无文件名（盘符根等）时跳过而非 panic
             let Some(name) = path.file_name() else {
-                app_log!(warn, "engine::backup", "跳过无文件名的路径: {:?}", path);
+                app_log!(
+                    warn,
+                    "engine::backup",
+                    "Skipping path with no file name: {:?}",
+                    path
+                );
                 continue;
             };
             let zip_path = format!("{zip_prefix}/{}", name.to_string_lossy());

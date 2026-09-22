@@ -33,7 +33,7 @@
   },
   "dashboard": {
     "title": "运行状态",
-    "refresh": "手动刷新",
+    "refresh": "刷新",
     "refreshing": "刷新中...",
     "startEnv": "一键启动",
     "startingEnv": "启动中...",

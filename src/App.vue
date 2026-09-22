@@ -662,7 +662,7 @@ async function exportLogs() {
             <button 
               @click="() => refreshContainers()" 
               :disabled="loading"
-              class="w-full sm:w-auto ui-btn-primary disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
+              class="w-full sm:w-auto ui-btn-dark disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
             >
               {{ loading ? $t('dashboard.refreshing') : $t('dashboard.refresh') }}
             </button>

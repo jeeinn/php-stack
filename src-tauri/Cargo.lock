@@ -95,7 +95,6 @@ dependencies = [
  "futures-util",
  "glob",
  "handlebars",
- "log",
  "os_info",
  "pathdiff",
  "reqwest 0.12.28",

@@ -15,8 +15,8 @@ const activeTab = ref<TabType>('mirrors');
 const currentLocale = ref<SupportedLocale>(getLocale());
 
 const tabs = [
-  { id: 'mirrors' as TabType, labelKey: 'settings.tabs.mirrors', icon: '🌐' },
-  { id: 'software' as TabType, labelKey: 'settings.tabs.software', icon: '🔧' },
+  { id: 'mirrors' as TabType, labelKey: 'settings.tabs.mirrors' },
+  { id: 'software' as TabType, labelKey: 'settings.tabs.software' },
 ];
 
 function switchLanguage(locale: SupportedLocale) {
@@ -53,7 +53,6 @@ const themeOptions = computed(() => [
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100'
               ]"
             >
-              <span>{{ tab.icon }}</span>
               <span>{{ $t(tab.labelKey) }}</span>
             </button>
           </div>

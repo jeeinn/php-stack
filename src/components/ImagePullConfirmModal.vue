@@ -56,7 +56,7 @@ const summary = computed(() => {
       <div class="flex justify-between items-start p-4 sm:p-5 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <div>
           <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-200">
-            📦 {{ $t('envConfig.pullConfirm.title') }}
+            {{ $t('envConfig.pullConfirm.title') }}
           </h2>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
             {{ $t('envConfig.pullConfirm.desc') }}
@@ -83,13 +83,13 @@ const summary = computed(() => {
         v-else-if="missing.length > 0"
         class="px-4 sm:px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 text-xs"
       >
-        ⚠️ {{ summary }}
+        {{ summary }}
       </div>
       <div
         v-else
         class="px-4 sm:px-5 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs"
       >
-        ✅ {{ $t('envConfig.pullConfirm.allPresent') }}
+        {{ $t('envConfig.pullConfirm.allPresent') }}
       </div>
 
       <!-- Body: 镜像清单 -->
@@ -123,7 +123,7 @@ const summary = computed(() => {
 
         <!-- 提示文字 -->
         <div class="text-xs text-slate-500 dark:text-slate-500 mt-4 px-1 leading-relaxed">
-          💡 {{ $t('envConfig.pullConfirm.tip', { action: $t('envConfig.startEnv') }) }}
+          {{ $t('envConfig.pullConfirm.tip', { action: $t('envConfig.startEnv') }) }}
         </div>
       </div>
 

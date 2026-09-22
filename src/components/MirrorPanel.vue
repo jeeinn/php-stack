@@ -417,7 +417,7 @@ onMounted(() => {
           ]"
         >
           {{ categoryLabels[category.category_id] || category.category_id }}
-          <span v-if="category.has_user_override" class="ml-1 text-xs opacity-70">✏️</span>
+          <span v-if="category.has_user_override" class="ml-1 text-xs opacity-70" :title="$t('mirror.overriddenBadge')">({{ $t('mirror.overriddenBadge') }})</span>
         </button>
       </div>
 

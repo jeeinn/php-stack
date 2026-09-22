@@ -817,21 +817,21 @@ async function exportLogs() {
               class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               :title="$t('dashboard.log.copyTip')"
             >
-              📋 {{ $t('dashboard.log.copy') }}
+              {{ $t('dashboard.log.copy') }}
             </button>
             <button 
               @click="clearLogPanel"
               class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               :title="$t('dashboard.log.clearTip')"
             >
-              🗑️ {{ $t('dashboard.log.clear') }}
+              {{ $t('dashboard.log.clear') }}
             </button>
             <button 
               @click="exportLogs"
               class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               :title="$t('dashboard.log.exportTip')"
             >
-              💾 {{ $t('dashboard.log.export') }}
+              {{ $t('dashboard.log.export') }}
             </button>
             <button 
               @click="scrollToBottom"

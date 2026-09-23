@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::site_manager::ManifestSite;
+
 /// 当前写入备份包的格式版本
 pub const MANIFEST_FORMAT_VERSION: &str = "1.0.0";
 
@@ -38,6 +40,9 @@ pub struct BackupOptions {
     pub include_projects: bool,
     pub project_patterns: Vec<String>,
     pub include_logs: bool,
+    /// 勾选「包含项目文件」时，要打包源码的站点 id。空表示不按站点打包。
+    #[serde(default)]
+    pub site_ids: Vec<String>,
 }
 
 /// 服务信息
@@ -68,6 +73,9 @@ pub struct BackupManifest {
     pub files: HashMap<String, String>,
     /// 错误信息（部分失败时记录）
     pub errors: Vec<String>,
+    /// 站点与当时的宿主机路径。旧备份没有该字段时为空，预览阶段再从 `.env` 合成。
+    #[serde(default)]
+    pub sites: Vec<ManifestSite>,
 }
 
 impl Default for BackupManifest {
@@ -117,9 +125,11 @@ impl BackupManifest {
                 include_projects: false,
                 project_patterns: Vec::new(),
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             files: HashMap::new(),
             errors: Vec::new(),
+            sites: Vec::new(),
         }
     }
 }
@@ -160,9 +170,11 @@ mod tests {
                 include_projects: true,
                 project_patterns: vec!["*.php".to_string(), "*.html".to_string()],
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             files,
             errors: vec!["mysqldump for db2 failed".to_string()],
+            sites: Vec::new(),
         }
     }
 
@@ -305,5 +317,26 @@ mod tests {
         assert!(parsed.get("version").is_some());
         assert!(parsed.get("timestamp").is_some());
         assert!(parsed.get("services").is_some());
+    }
+
+    #[test]
+    fn old_manifest_without_sites_still_deserializes() {
+        let json = r#"{
+            "version": "1.0.0",
+            "timestamp": "2025-01-15T10:30:00+08:00",
+            "app_version": "0.1.0",
+            "os_info": "linux",
+            "services": [],
+            "options": {
+                "include_projects": false,
+                "project_patterns": [],
+                "include_logs": false
+            },
+            "files": {},
+            "errors": []
+        }"#;
+        let manifest = BackupManifest::deserialize(json).expect("旧清单应能读取");
+        assert!(manifest.sites.is_empty());
+        assert!(manifest.options.site_ids.is_empty());
     }
 }

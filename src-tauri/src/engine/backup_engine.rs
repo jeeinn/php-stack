@@ -78,6 +78,19 @@ impl BackupEngine {
             )?;
         }
 
+        // .user_sites.json - 站点定义（不含宿主机绝对路径）
+        let user_sites_path = project_root.join(crate::engine::site_manager::SITES_FILE_NAME);
+        if user_sites_path.exists() {
+            Self::add_file_to_zip(
+                &mut zip,
+                crate::engine::site_manager::SITES_FILE_NAME,
+                &user_sites_path,
+                &mut manifest,
+            )?;
+        }
+
+        manifest.sites = crate::engine::site_manager::collect_manifest_sites(project_root);
+
         // Step 4: Optional — Project files (50%)
         if options.include_projects && !options.project_patterns.is_empty() {
             Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 60);
@@ -159,6 +172,32 @@ impl BackupEngine {
                         manifest.errors.push(error_msg.clone());
                         app_log!(error, "engine::backup", "{}", error_msg);
                     }
+                }
+            }
+        }
+
+        // 按站点打包源码。工作区外目录写入 projects/sites/{id}/，避免把盘符写进 ZIP 条目名。
+        if options.include_projects && !options.site_ids.is_empty() {
+            Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 70);
+            for site in manifest.sites.clone() {
+                if !options.site_ids.iter().any(|id| id == &site.id) {
+                    continue;
+                }
+                let host =
+                    crate::engine::site_manager::resolve_host_path(project_root, &site.host_path);
+                if !host.is_dir() {
+                    manifest.errors.push(format!(
+                        "site {} source directory does not exist: {}",
+                        site.id,
+                        host.display()
+                    ));
+                    continue;
+                }
+                let prefix = crate::engine::site_manager::site_zip_prefix(&site);
+                if let Err(e) = Self::add_dir_to_zip(&mut zip, &host, &prefix, &mut manifest) {
+                    manifest
+                        .errors
+                        .push(format!("failed to pack site {} files: {e}", site.id));
                 }
             }
         }
@@ -318,6 +357,7 @@ mod tests {
                 include_projects: true,
                 project_patterns: vec!["big.bin".to_string()],
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             project_root,
             None,
@@ -426,6 +466,7 @@ mod tests {
             include_projects: false,
             project_patterns: Vec::new(),
             include_logs: false,
+            site_ids: Vec::new(),
         };
 
         // Run backup synchronously (no Tauri runtime needed)
@@ -502,5 +543,63 @@ mod tests {
             manifest.files.contains_key(".user_version_overrides.json"),
             "manifest 应包含 .user_version_overrides.json 的 SHA256"
         );
+    }
+
+    #[test]
+    fn packs_external_site_without_drive_letter_in_zip_name() {
+        let workspace = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        fs::write(external.path().join("index.php"), b"<?php echo 1;\n").unwrap();
+        let host = external.path().to_string_lossy().replace('\\', "/");
+        fs::write(workspace.path().join(".env"), format!("SITE_SHOP={host}\n")).unwrap();
+        fs::write(
+            workspace.path().join(".user_sites.json"),
+            r#"{"sites":[{"id":"shop","server_name":"shop.test","env_key":"SITE_SHOP","container_path":"/sites/shop","nginx_service":"nginx125","php_service":"php82"}]}"#,
+        )
+        .unwrap();
+
+        let backup_path = workspace.path().join("backup.zip");
+        let options = BackupOptions {
+            include_projects: true,
+            project_patterns: Vec::new(),
+            include_logs: false,
+            site_ids: vec!["shop".to_string()],
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(BackupEngine::create_backup(
+            backup_path.to_str().unwrap(),
+            options,
+            workspace.path(),
+            None,
+        ))
+        .expect("备份应成功");
+
+        let file = fs::File::open(&backup_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let names: Vec<String> = (0..archive.len())
+            .map(|i| archive.by_index(i).unwrap().name().to_string())
+            .collect();
+        assert!(
+            names
+                .iter()
+                .any(|name| name == "projects/sites/shop/index.php"),
+            "外部站点应打进 projects/sites/shop，实际: {names:?}"
+        );
+        assert!(
+            names.iter().all(|name| !name.contains(':')),
+            "ZIP 条目名不应包含盘符: {names:?}"
+        );
+        assert!(names.iter().any(|name| name == ".user_sites.json"));
+
+        let mut manifest_file = archive.by_name("manifest.json").unwrap();
+        let mut json = String::new();
+        use std::io::Read;
+        manifest_file.read_to_string(&mut json).unwrap();
+        let manifest: BackupManifest = serde_json::from_str(&json).unwrap();
+        assert_eq!(manifest.sites[0].kind, "absolute");
+        assert_eq!(manifest.sites[0].id, "shop");
     }
 }

@@ -38,6 +38,21 @@ export interface EnvConfig {
   mysql_root_password?: string;  // MySQL root密码（可选）
   puid?: number;                 // Host user ID for file permissions (Linux only)
   pgid?: number;                 // Host group ID for file permissions (Linux only)
+  /** 启用 Nginx 时的站点。空数组表示只有一条 SOURCE_DIR 挂载。 */
+  sites?: SiteEntry[];
+}
+
+export interface SiteEntry {
+  id: string;
+  server_name: string;
+  /** 挂进容器的项目根。PHP 能读到其中的依赖。 */
+  host_path: string;
+  env_key: string;
+  container_path: string;
+  nginx_service: string;
+  php_service: string;
+  /** 相对挂载目录的对外子目录，如 public、www。空表示挂载目录本身就是网站根。 */
+  public_dir?: string;
 }
 
 export interface MirrorSourceOption {
@@ -70,6 +85,8 @@ export interface BackupOptions {
   project_patterns: string[];
   // include_vhosts: boolean;
   include_logs: boolean;
+  /** 勾选包含项目文件时，要打包源码的站点 id */
+  site_ids?: string[];
 }
 
 export interface ManifestService {
@@ -88,6 +105,24 @@ export interface BackupManifest {
   options: BackupOptions;
   files: Record<string, string>;
   errors: string[];
+  sites?: ManifestSite[];
+}
+
+export interface ManifestSite {
+  id: string;
+  env_key: string;
+  container_path: string;
+  host_path: string;
+  kind: 'workspace-relative' | 'absolute' | string;
+  server_name: string;
+  /** 相对挂载目录的对外子目录。旧备份没有该字段。 */
+  public_dir?: string;
+}
+
+export interface SitePathOverride {
+  env_key: string;
+  host_path: string;
+  skipped: boolean;
 }
 
 export interface PortConflict {

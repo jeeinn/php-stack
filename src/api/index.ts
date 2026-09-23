@@ -11,6 +11,8 @@ export {
   executeRestore,
   createBackup,
   convertToRelativePath,
+  normalizeMountPath,
+  relativePublicDir,
 } from './backup'
 export {
   getWorkspaceInfo,

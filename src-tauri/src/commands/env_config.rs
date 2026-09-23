@@ -2,6 +2,7 @@ use super::get_project_root;
 use crate::docker::manager::DockerManager;
 use crate::engine::config_extractor::{ConfigExtractor, ExtractOutcome, ImageStatus};
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
+use crate::engine::site_manager;
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 
 /// 单个镜像拉取结果（前端"待拉取"确认弹窗使用）
@@ -297,6 +298,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
         source_dir,
         timezone,
         mysql_root_password,
+        sites: site_manager::load_sites_with_hosts(&project_root, &env_file),
     }))
 }
 
@@ -1286,7 +1288,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     Ok("Environment started".to_string())
 }
 
-/// 一键重启环境（docker compose restart）
+/// 一键重启环境。
+///
+/// 使用 `docker compose up -d --force-recreate`，而不是 `compose restart`。
+/// 后者只重启进程，不会套用新的 volumes。站点挂载变更后，Nginx 配置已经指向新目录，
+/// 容器里却没有对应挂载，PHP 就会返回 File not found.
 #[tauri::command]
 pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
     use crate::ui_log;
@@ -1328,17 +1334,17 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
         "docker-compose.yml found"
     );
 
-    // 使用 docker compose restart 重启所有容器
+    // compose restart 不会更新 volumes；站点目录变更后必须按新 compose 重建容器。
     ui_log!(
         app_handle,
         info,
         "commands::restart_environment",
-        "Running: docker compose restart"
+        "Running: docker compose up -d --force-recreate"
     );
 
     let mut restart_cmd = Command::new("docker");
     restart_cmd
-        .args(["compose", "restart"])
+        .args(["compose", "up", "-d", "--force-recreate"])
         .current_dir(&project_root);
 
     #[cfg(windows)]
@@ -1349,7 +1355,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     }
 
     let output = restart_cmd.output().map_err(|e| {
-        let err_msg = format!("failed to run docker compose restart: {e}");
+        let err_msg = format!("failed to run docker compose up: {e}");
         ui_log!(
             app_handle,
             error,
@@ -1377,7 +1383,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
             "stderr: {}",
             stderr
         );
-        return Err(format!("Docker Compose restart failed: {stderr}"));
+        return Err(format!("Docker Compose recreate failed: {stderr}"));
     }
 
     // 记录重启结果

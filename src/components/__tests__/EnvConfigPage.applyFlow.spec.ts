@@ -21,6 +21,7 @@ import type { ImagePresence, PullImageResultItem, VersionInfo } from '../../type
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: vi.fn() }))
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(async () => null) }))
 vi.mock('../../composables/useToast', () => ({ showToast: vi.fn() }))
 vi.mock('../../composables/useConfirmDialog', () => ({ showConfirm: vi.fn() }))
 

@@ -61,6 +61,10 @@ vi.mock('@tauri-apps/api/core', () => ({
   }),
 }))
 
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn(async () => null),
+}))
+
 // Mock composables
 vi.mock('../../composables/useToast', () => ({
   showToast: vi.fn(),

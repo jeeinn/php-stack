@@ -986,12 +986,6 @@ async function exportLogs() {
 <style scoped>
 @reference "tailwindcss";
 
-.sidebar-item {
-  @apply w-full text-left px-4 py-3 rounded-lg transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent flex items-center bg-transparent;
-}
-.sidebar-item.active {
-  @apply bg-blue-600/10 text-blue-600 dark:text-blue-400 border-blue-600/20;
-}
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

@@ -88,10 +88,11 @@ body {
 }
 
 /* 强调性次级按钮：黑（辅助色）。同一组并列操作里的非主操作。
-   刻意不叫 ui-btn-dark —— 它在 dark 模式下是浅底深字（slate-100 底 + slate-900 字），
-   "dark" 会被读成主题模式名，与实际观感正好相反。 */
+   刻意不叫 ui-btn-dark —— 名称易与主题模式混淆。
+   夜间不再反成近白实心（刺眼、抢主色），改为抬升灰面 + 浅字，保持暗色氛围。 */
 .ui-btn-emphasis {
-  @apply bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900;
+  @apply bg-slate-900 hover:bg-slate-800 text-white
+    dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-100;
 }
 
 /* 危险按钮：红。删除、停止、重置等破坏性操作。
@@ -123,4 +124,19 @@ body {
 /* 标签：中性。非强调性徽章与元信息 */
 .ui-tag-neutral {
   @apply bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400;
+}
+
+/* 侧边栏导航项（放全局：Vue scoped 内 @apply 的 dark: 变体在本项目不生效，
+   会回落到亮色 hover:bg-slate-100，夜间悬停呈刺眼白块） */
+.sidebar-item {
+  @apply w-full text-left px-4 py-3 rounded-lg transition-all cursor-pointer
+    text-slate-600 dark:text-slate-400
+    hover:bg-slate-100 dark:hover:bg-white/5
+    hover:text-slate-900 dark:hover:text-slate-200
+    border border-transparent flex items-center bg-transparent;
+}
+.sidebar-item.active {
+  @apply bg-blue-600/10 text-blue-600 border-blue-600/20
+    dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/25
+    dark:hover:bg-blue-500/20;
 }

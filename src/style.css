@@ -126,6 +126,15 @@ body {
   @apply bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400;
 }
 
+/* 隐藏滚动条（横向 Tab 溢出时用） */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* 侧边栏导航项（放全局：Vue scoped 内 @apply 的 dark: 变体在本项目不生效，
    会回落到亮色 hover:bg-slate-100，夜间悬停呈刺眼白块） */
 .sidebar-item {

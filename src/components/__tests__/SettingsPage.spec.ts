@@ -89,13 +89,14 @@ describe('SettingsPage', () => {
 
   it('switches to software tab when clicked', async () => {
     const wrapper = mount(SettingsPage)
-    const buttons = wrapper.findAll('button')
-    const softwareTab = buttons.find(b => b.text().includes('🔧'))
-    if (softwareTab) {
-      await softwareTab.trigger('click')
-      await wrapper.vm.$nextTick()
-      const softwareContent = wrapper.findComponent({ name: 'SoftwareSettings' })
-      expect(softwareContent.exists()).toBe(true)
-    }
+    const softwareTab = wrapper.findAll('[role="tab"]').find((b) =>
+      /软件|Software|版本/i.test(b.text()),
+    )
+    expect(softwareTab, '应能找到软件版本映射 Tab').toBeTruthy()
+    await softwareTab!.trigger('click')
+    await wrapper.vm.$nextTick()
+    const softwareContent = wrapper.findComponent({ name: 'SoftwareSettings' })
+    expect(softwareContent.exists()).toBe(true)
   })
 })
+

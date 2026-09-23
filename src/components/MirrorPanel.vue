@@ -14,6 +14,7 @@ import {
 import type { MergedMirrorCategory, MirrorSourceOption } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
+import UiTabs from './UiTabs.vue';
 
 const { t } = useI18n();
 
@@ -42,6 +43,14 @@ const sortedCategories = computed(() => {
     return indexA - indexB;
   });
 });
+
+const categoryTabItems = computed(() =>
+  sortedCategories.value.map((category) => ({
+    id: category.category_id,
+    label: categoryLabels[category.category_id] || category.category_id,
+    badge: category.has_user_override ? t('mirror.overriddenBadge') : undefined,
+  })),
+);
 
 // 从 i18n 获取 tm 函数（用于获取数组类型的翻译）
 const { tm } = useI18n();
@@ -404,21 +413,8 @@ onMounted(() => {
     <!-- Content -->
     <div v-else-if="categories.length > 0" class="flex-1 flex flex-col min-h-0">
       <!-- Category Tabs -->
-      <div class="flex gap-2 mb-3 sm:mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex-shrink-0 overflow-x-auto scrollbar-hide">
-        <button
-          v-for="category in sortedCategories"
-          :key="category.category_id"
-          @click="selectedCategory = category.category_id"
-          :class="[
-            'px-3 sm:px-4 py-1.5 rounded-lg font-medium transition whitespace-nowrap text-xs sm:text-sm',
-            selectedCategory === category.category_id
-              ? 'bg-blue-600 text-white'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-          ]"
-        >
-          {{ categoryLabels[category.category_id] || category.category_id }}
-          <span v-if="category.has_user_override" class="ml-1 text-xs opacity-70" :title="$t('mirror.overriddenBadge')">({{ $t('mirror.overriddenBadge') }})</span>
-        </button>
+      <div class="mb-3 sm:mb-4 flex-shrink-0">
+        <UiTabs v-model="selectedCategory" :items="categoryTabItems" size="sm" />
       </div>
 
       <!-- Add Custom Button (仅非 Docker Registry 显示) -->

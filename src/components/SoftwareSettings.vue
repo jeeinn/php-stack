@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   getVersionMappings,
@@ -11,6 +11,7 @@ import {
 import type { VersionMappings, VersionInfo, ServiceTypeLower } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
+import UiTabs from './UiTabs.vue';
 
 const { t } = useI18n();
 
@@ -31,6 +32,13 @@ const serviceLabels: Record<ServiceTypeLower, string> = {
   redis: 'Redis',
   nginx: 'Nginx'
 };
+
+const serviceTabItems = computed(() =>
+  (Object.keys(serviceLabels) as ServiceTypeLower[]).map((service) => ({
+    id: service,
+    label: serviceLabels[service],
+  })),
+);
 
 // 加载版本映射数据
 async function loadVersionMappings() {
@@ -182,20 +190,8 @@ onMounted(() => {
     <!-- Content -->
     <div v-else-if="versionMappings" class="flex-1 flex flex-col min-h-0">
       <!-- Service Tabs -->
-      <div class="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2 flex-shrink-0">
-        <button
-          v-for="(label, service) in serviceLabels"
-          :key="service"
-          @click="selectedService = service as ServiceTypeLower"
-          :class="[
-            'px-4 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm',
-            selectedService === service
-              ? 'bg-blue-600 text-white'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-          ]"
-        >
-          {{ label }}
-        </button>
+      <div class="mb-4 flex-shrink-0">
+        <UiTabs v-model="selectedService" :items="serviceTabItems" size="sm" />
       </div>
 
       <!-- Version Table -->

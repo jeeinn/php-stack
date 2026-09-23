@@ -50,24 +50,31 @@ pub struct RestoreEngine;
 
 /// 校验 ZIP 条目名是否安全（zip-slip 路径遍历防护）
 ///
-/// 拒绝三类条目：
-/// - 绝对路径（`/etc/passwd`、Windows 盘符 `C:\...` 或 UNC `\\...`）
-/// - 包含父目录引用（`../`）
-/// - 根目录组件
+/// **刻意不使用 `std::path` 的平台语义**：`Path::new("C:\\Windows\\evil.txt")`
+/// 在 Windows 上是绝对路径，在 Linux 上却只是一个普通文件名 —— 而备份包是跨
+/// 平台流转的，同一份包的安全判定不能随解压机器漂移（在 Linux 上放行、到
+/// Windows 上恢复才会触发的漏洞，等于没有防护）。
+///
+/// 改为按 ZIP 规范自行判定：APPNOTE 4.4.17 规定条目名以 `/` 为分隔符，
+/// 不得含盘符、设备名与反斜杠。三平台行为一致。
+///
+/// 拒绝四类条目：
+/// - 反斜杠（`C:\...`、`\\server\share\...`）—— 规范不允许，且是 Windows 分隔符
+/// - Windows 盘符前缀（`C:/...`、`C:evil.txt`）
+/// - 绝对路径与 UNC（`/etc/passwd`、`//server/share`）
+/// - 含父目录引用（`../`）
+///
+/// 冒号只在开头按盘符判定，不整体禁止：Unix 文件名允许含冒号
+/// （`report:v2.txt`），一刀切会让合法备份无法恢复。
 fn is_safe_entry_name(name: &str) -> bool {
-    let path = std::path::Path::new(name);
-    if path.is_absolute() {
+    if name.is_empty() || name.contains('\\') || name.starts_with('/') {
         return false;
     }
-    for comp in path.components() {
-        match comp {
-            std::path::Component::ParentDir
-            | std::path::Component::RootDir
-            | std::path::Component::Prefix(_) => return false,
-            _ => {}
-        }
+    let bytes = name.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return false;
     }
-    true
+    !name.split('/').any(|seg| seg == "..")
 }
 
 /// 扫描 ZIP 全部条目名；任一非法则整体拒绝（写盘前 / 预览前均可调用）。
@@ -493,6 +500,40 @@ mod tests {
         assert!(is_safe_entry_name(
             "services/php82/sub/dir/conf.d/default.conf"
         ));
+    }
+
+    /// Feature: restore-security, Property: 判定必须与解压平台无关
+    ///
+    /// 回归：原实现依赖 `std::path` 的平台语义 —— `C:\Windows\evil.txt` 在
+    /// Windows 上是绝对路径（被拒），在 Linux 上却只是普通文件名（被放行），
+    /// 于是同一份备份包的安全边界随机器漂移，CI（ubuntu）上断言失败。
+    /// 备份包跨平台流转，防护必须在所有平台上同样生效。
+    #[test]
+    fn test_is_safe_entry_name_is_platform_independent() {
+        // Windows 绝对路径 / UNC：无论在哪台机器上解压都要拒绝
+        assert!(!is_safe_entry_name("C:/Windows/evil.txt"));
+        assert!(!is_safe_entry_name("C:\\Windows\\evil.txt"));
+        assert!(!is_safe_entry_name("\\\\server\\share\\evil.txt"));
+        assert!(!is_safe_entry_name("//server/share/evil.txt"));
+        // 盘符：即使不含反斜杠也不能放过
+        assert!(!is_safe_entry_name("C:evil.txt"));
+        // 空条目名
+        assert!(!is_safe_entry_name(""));
+    }
+
+    /// 拒绝要严，但不能误伤规范允许的写法 —— 备份侧确实会写出这些条目
+    #[test]
+    fn test_is_safe_entry_name_accepts_zip_conventional_names() {
+        // 目录条目带结尾斜杠；重复分隔符来自路径拼接，无害
+        assert!(is_safe_entry_name("services/"));
+        assert!(is_safe_entry_name("services//php82/php.ini"));
+        assert!(is_safe_entry_name("./.env"));
+        // ".." 只有在作为独立路径段时才构成遍历
+        assert!(is_safe_entry_name("..hidden"));
+        assert!(is_safe_entry_name("a..b/config.ini"));
+        // Unix 文件名允许含冒号，不能因为防盘符而误拒
+        assert!(is_safe_entry_name("report:v2.txt"));
+        assert!(is_safe_entry_name("services/php82/notes 2026-09:final.md"));
     }
 
     /// Feature: restore-security, Property: 含路径遍历条目的 ZIP 必须整体拒绝且不写盘

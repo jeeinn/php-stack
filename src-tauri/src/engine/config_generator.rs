@@ -454,6 +454,10 @@ impl ConfigGenerator {
                     ));
                     lines.push(format!("      - ${{{env_prefix}_LOG_DIR}}:/var/log/php"));
                     lines.push("    restart: always".to_string());
+                    // 运行时注入 TZ：覆盖 Dockerfile 构建时 bake 进镜像的 ENV，
+                    // 这样改 .env 里的时区后只需 recreate，不必重建镜像。
+                    lines.push("    environment:".to_string());
+                    lines.push("      TZ: \"${TZ}\"".to_string());
                     lines.push("    networks:".to_string());
                     lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
@@ -499,6 +503,8 @@ impl ConfigGenerator {
                     lines.push(
                         "    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]".to_string(),
                     );
+                    lines.push("    environment:".to_string());
+                    lines.push("      TZ: \"${TZ}\"".to_string());
                     lines.push("    networks:".to_string());
                     lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
@@ -532,6 +538,9 @@ impl ConfigGenerator {
                     ));
                     lines.push("      - ${NGINX_LOG_DIR}:/var/log/nginx".to_string());
                     lines.push("    restart: always".to_string());
+                    // Nginx 官方镜像不会 bake TZ；必须运行时注入，否则 error/access 日志落 UTC
+                    lines.push("    environment:".to_string());
+                    lines.push("      TZ: \"${TZ}\"".to_string());
                     lines.push("    networks:".to_string());
                     lines.push("      - php-stack-network".to_string());
                     lines.push(String::new());
@@ -1510,6 +1519,30 @@ mod tests {
         assert!(compose.contains("${PHP82_EXTENSIONS}"));
         assert!(compose.contains("${PHP82_PHP_CONF_FILE}"));
         assert!(compose.contains("${TZ}"));
+
+        // 各服务均应运行时注入 TZ（Nginx/Redis 此前缺失，日志会落 UTC）
+        assert!(
+            compose.contains("nginx125:") && compose.contains("TZ: \"${TZ}\""),
+            "nginx 服务应注入运行时 TZ"
+        );
+        let nginx_block = compose
+            .split("nginx125:")
+            .nth(1)
+            .and_then(|s| s.split("\nnetworks:").next())
+            .unwrap_or("");
+        assert!(
+            nginx_block.contains("environment:") && nginx_block.contains("TZ: \"${TZ}\""),
+            "nginx 应有 environment.TZ，实际段落:\n{nginx_block}"
+        );
+        let redis_block = compose
+            .split("redis70:")
+            .nth(1)
+            .and_then(|s| s.split("\n  nginx").next())
+            .unwrap_or("");
+        assert!(
+            redis_block.contains("environment:") && redis_block.contains("TZ: \"${TZ}\""),
+            "redis 应有 environment.TZ，实际段落:\n{redis_block}"
+        );
 
         // Should NOT contain hardcoded values for versions/ports
         assert!(!compose.contains("image: mysql:8.0"));

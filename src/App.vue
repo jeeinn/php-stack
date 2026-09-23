@@ -145,18 +145,33 @@ const refreshContainers = async (silent = false) => {
   }
 };
 
+// 单容器操作进行中：容器名 -> 操作类型。用 Record 支持多容器并行操作互不干扰；
+// 操作完成后要等容器状态真实刷新（refreshContainers）才复位，避免状态与界面脱节。
+const busyContainers = ref<Record<string, 'start' | 'stop'>>({});
+const isContainerBusy = (name: string) => Boolean(busyContainers.value[name]);
+
 const startService = async (name: string) => {
+  if (busyContainers.value[name]) return; // 防御：正常路径按钮已 disabled
+  busyContainers.value = { ...busyContainers.value, [name]: 'start' };
   try {
     addLogKey('dashboard.toast.serviceStarting', { name });
     await startContainer(String(name));
     addLogKey('dashboard.toast.serviceStarted', { name });
     await refreshContainers(true);
   } catch (e) {
+    // 失败必须同时给 toast：实时日志只对主动排查的人可见，弹窗才是即时反馈
     addLogKey('dashboard.toast.serviceStartFailed', { error: e }, 'error');
+    showToast(t('dashboard.toast.serviceStartFailed', { error: normalizeError(e) }), 'error', 6000);
+  } finally {
+    const next = { ...busyContainers.value };
+    delete next[name];
+    busyContainers.value = next;
   }
 };
 
 const stopService = async (name: string) => {
+  if (busyContainers.value[name]) return;
+  busyContainers.value = { ...busyContainers.value, [name]: 'stop' };
   try {
     addLogKey('dashboard.toast.serviceStopping', { name });
     await stopContainer(String(name));
@@ -164,6 +179,11 @@ const stopService = async (name: string) => {
     await refreshContainers(true);
   } catch (e) {
     addLogKey('dashboard.toast.serviceStopFailed', { error: e }, 'error');
+    showToast(t('dashboard.toast.serviceStopFailed', { error: normalizeError(e) }), 'error', 6000);
+  } finally {
+    const next = { ...busyContainers.value };
+    delete next[name];
+    busyContainers.value = next;
   }
 };
 
@@ -673,7 +693,8 @@ async function exportLogs() {
                 class="w-full sm:w-auto ui-btn-primary disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
                 :title="!hasEnvFile ? $t('dashboard.startTooltip.noEnv') : (!canStart ? $t('dashboard.startTooltip.hasRunning') : '')"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <svg v-if="operationType === 'start'" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 {{ operationType === 'start' ? $t('dashboard.startingEnv') : $t('dashboard.startEnv') }}
               </button>
               <button 
@@ -754,18 +775,22 @@ async function exportLogs() {
             </div>
             
             <div class="flex gap-2">
-              <button 
+              <button
                 v-if="!isContainerRunning(c.state)"
                 @click="startService(String(c.name))"
-                class="flex-1 py-2 ui-btn-soft rounded text-sm font-medium transition-all"
+                :disabled="isContainerBusy(String(c.name))"
+                class="flex-1 py-2 ui-btn-soft rounded text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
+                <svg v-if="isContainerBusy(String(c.name))" class="animate-spin shrink-0" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                 {{ $t('dashboard.container.start') }}
               </button>
-              <button 
+              <button
                 v-else
                 @click="stopService(String(c.name))"
-                class="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-600 dark:text-rose-400 hover:text-white border border-rose-600/30 rounded text-sm font-medium transition-all"
+                :disabled="isContainerBusy(String(c.name))"
+                class="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-600 dark:text-rose-400 hover:text-white border border-rose-600/30 rounded text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-rose-600/20 flex items-center justify-center gap-1.5"
               >
+                <svg v-if="isContainerBusy(String(c.name))" class="animate-spin shrink-0" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                 {{ $t('dashboard.container.stop') }}
               </button>
               <button 

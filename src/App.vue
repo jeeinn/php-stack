@@ -812,7 +812,7 @@ async function exportLogs() {
 
       <!-- 环境配置 (EnvConfig) -->
       <div v-if="activeTab === 'env-config'" class="flex-1 flex flex-col overflow-hidden">
-        <EnvConfigPage @request-switch-tab="(tab) => activeTab = tab" />
+        <EnvConfigPage />
       </div>
 
       <!-- New: 设置项 (SettingsPage) -->

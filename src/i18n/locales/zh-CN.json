@@ -136,6 +136,7 @@
     "previewing": "生成中...",
     "apply": "应用配置",
     "applying": "应用中...",
+    "applyAndStart": "应用&启动",
     "startEnv": "一键启动",
     "startingEnv": "启动中...",
     "startTooltip": "请先应用配置生成 .env 文件",

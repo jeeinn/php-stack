@@ -136,6 +136,7 @@
     "previewing": "Generating...",
     "apply": "Apply Config",
     "applying": "Applying...",
+    "applyAndStart": "Apply & Start",
     "startEnv": "Start All",
     "startingEnv": "Starting...",
     "startTooltip": "Please apply config to generate .env file first",

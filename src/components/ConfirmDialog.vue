@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getConfirmState, handleConfirm, handleCancel } from '../composables/useConfirmDialog';
+import { getConfirmState, handleConfirm, handleSecondary, handleCancel } from '../composables/useConfirmDialog';
 
 const state = getConfirmState();
 
@@ -62,12 +62,19 @@ function getIconConfig() {
           </div>
           
           <!-- 按钮栏 -->
-          <div class="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
+          <div class="p-6 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-end gap-3">
             <button 
               @click="handleCancel" 
               class="px-5 py-2 ui-btn-secondary rounded-lg font-medium transition"
             >
               {{ state.options.cancelText }}
+            </button>
+            <button
+              v-if="state.options.secondaryText"
+              @click="handleSecondary"
+              class="px-5 py-2 ui-btn-emphasis rounded-lg font-medium transition"
+            >
+              {{ state.options.secondaryText }}
             </button>
             <button 
               @click="handleConfirm" 

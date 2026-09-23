@@ -29,10 +29,6 @@ import { WORKSPACE_CHANGED_EVENT } from '../utils/workspaceEvents';
 
 const { t } = useI18n();
 
-const emit = defineEmits<{
-  (e: 'request-switch-tab', tabName: string): void;
-}>();
-
 // Available versions (将从后端动态加载)
 const phpVersions = ref<VersionInfo[]>([]);
 const mysqlVersions = ref<VersionInfo[]>([]);
@@ -133,12 +129,10 @@ const starting = ref(false);
 const previewEnv = ref('');
 const previewCompose = ref('');
 const showPreviewModal = ref(false);
-const hasEnvFile = ref(false);  // .env 文件是否存在
 
 // Nginx 配置提示状态
 const showNginxHint = ref(false);
 const nginxServicesList = ref<Array<{ name: string; version: string; port?: number }>>([]); // 存储所有 Nginx 服务信息
-const showStartConfirm = ref(false);
 
 // ==================== Phase 3: 版本帮助 / 镜像探测 / 拉取确认 ====================
 
@@ -158,6 +152,8 @@ const pullStatusText = ref('');
 /// 必须是 ref 而非 handleApply 的局部变量：走「镜像缺失 → 拉取 → 再 apply」
 /// 这条路径时，handleApply 已经返回，局部变量会丢失，导致备份选择被静默丢弃。
 const enableBackup = ref(false);
+/// 应用成功后是否继续启动环境（「应用&启动」）
+const startAfterApply = ref(false);
 
 /// 打开版本帮助弹窗（"?" 按钮）
 function openVersionHelp() {
@@ -168,7 +164,6 @@ function openVersionHelp() {
 onMounted(async () => {
   await loadWorkspaceInfo();
   await loadVersionMappings();
-  await checkEnvFileExists();
   await loadExistingConfig();
   window.addEventListener(WORKSPACE_CHANGED_EVENT, loadWorkspaceInfo);
 });
@@ -188,17 +183,6 @@ async function loadWorkspaceInfo() {
     }
   } catch (e) {
     workspacePath.value = t('workspace.status.loadFailed');
-  }
-}
-
-// 检查 .env 文件是否存在
-async function checkEnvFileExists() {
-  try {
-    const existingFiles = await checkConfigFilesExist();
-    hasEnvFile.value = existingFiles.some(f => f.includes('.env'));
-  } catch (e) {
-    console.error('[EnvConfig] failed to check config file:', e);
-    hasEnvFile.value = false;
   }
 }
 
@@ -753,38 +737,43 @@ async function handlePreview() {
 }
 
 // Apply
-async function handleApply() {
+async function handleApply(options?: { startAfter?: boolean }) {
   if (portConflicts.value.length > 0) {
     showError(portConflicts.value.join('\n'));
     return;
   }
+
+  startAfterApply.value = options?.startAfter ?? false;
   
   // 检查配置文件是否存在（结果写入 enableBackup ref，供后续拉取路径复用）
   enableBackup.value = false;
   try {
     const existingFiles = await checkConfigFilesExist();
     if (existingFiles.length > 0) {
-      // 有文件存在，显示确认对话框
+      // 有文件存在，显示确认对话框（含「应用&启动」次级按钮）
       const fileList = existingFiles.map(f => `• ${f}`).join('\n');
       const result = await showConfirm({
         title: t('envConfig.confirmOverwrite.title'),
         message: t('envConfig.confirmOverwrite.message', { files: fileList }),
         confirmText: t('envConfig.confirmOverwrite.confirm'),
+        secondaryText: t('envConfig.applyAndStart'),
         cancelText: t('common.cancel'),
         type: 'warning',
         checkboxLabel: t('envConfig.confirmOverwrite.backupLabel'),
         checkboxDefault: true
       });
       
-      // 如果返回的是对象（有复选框），解构获取结果
+      // 如果返回的是对象（有复选框 / 次级按钮），解构获取结果
       const confirmed = typeof result === 'object' ? result.confirmed : result;
       if (!confirmed) {
+        startAfterApply.value = false;
         return; // 用户取消
       }
       
-      // 获取复选框的值
+      // 获取复选框与次级按钮选择（弹窗选择覆盖入口意图）
       if (typeof result === 'object') {
         enableBackup.value = result.checkboxValue;
+        startAfterApply.value = !!result.secondary;
       }
     }
   } catch (e) {
@@ -813,7 +802,12 @@ async function handleApply() {
     console.error('[EnvConfig] failed to check image existence:', e);
     showError(formatErrorMessage(e));
     applying.value = false;
+    startAfterApply.value = false;
   }
+}
+
+async function handleApplyAndStart() {
+  await handleApply({ startAfter: true });
 }
 
 /// 用户在 pullConfirm 弹窗点击"确认拉取"：逐个拉取缺失镜像，然后继续 apply
@@ -865,6 +859,7 @@ async function confirmPullAndApply(missingTags: string[]) {
       if (!confirmed) {
         pulling.value = false;
         applying.value = false;
+        startAfterApply.value = false;
         return;
       }
       showToast(t('envConfig.toast.pullAllFailed'), 'info', 5000);
@@ -887,6 +882,7 @@ async function confirmPullAndApply(missingTags: string[]) {
     showPullConfirm.value = false;
     showError(formatErrorMessage(e));
     applying.value = false;
+    startAfterApply.value = false;
   }
 }
 
@@ -894,6 +890,7 @@ async function confirmPullAndApply(missingTags: string[]) {
 function cancelPull() {
   showPullConfirm.value = false;
   applying.value = false;
+  startAfterApply.value = false;
 }
 
 /// 真正应用配置（在镜像确认/拉取完成后调用）
@@ -917,9 +914,6 @@ async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
     showToast(successMsg, 'success', 6000);
     showPreviewModal.value = false;
     
-    // 更新 .env 文件存在状态
-    hasEnvFile.value = true;
-    
     // 检查是否同时启用了 PHP 和 Nginx
     const hasPHP = phpServices.value.length > 0;
     const hasNginx = nginxServices.value.length > 0;
@@ -939,10 +933,25 @@ async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
       
       showNginxHint.value = true;
     }
+
+    // 「应用&启动」：配置写盘成功后再启动环境
+    if (startAfterApply.value) {
+      applying.value = false;
+      starting.value = true;
+      try {
+        const result = await startEnvironment();
+        showToast(t('envConfig.toast.startSuccess', { result }), 'success', 5000);
+      } catch (e) {
+        showError(formatErrorMessage(e));
+      } finally {
+        starting.value = false;
+      }
+    }
   } catch (e) {
     showError(formatErrorMessage(e));
   } finally {
     applying.value = false;
+    startAfterApply.value = false;
   }
 }
 
@@ -959,29 +968,6 @@ async function openNginxConfigDir(serviceDir?: string) {
     showToast(t('envConfig.toast.nginxConfigFailed', { dir: targetDir }), 'error');
   }
 }
-
-// Start environment
-async function handleStart() {
-  showStartConfirm.value = true;
-}
-
-async function confirmStart() {
-  showStartConfirm.value = false;
-  starting.value = true;
-  try {
-    const result = await startEnvironment();
-    showToast(t('envConfig.toast.startSuccess', { result }), 'success', 5000);
-  } catch (e) {
-    showError(formatErrorMessage(e));
-  } finally {
-    starting.value = false;
-  }
-}
-
-const goToMirrorSettings = () => {
-  showStartConfirm.value = false;
-  emit('request-switch-tab', 'mirrors-unified');
-};
 </script>
 
 <template>
@@ -1000,19 +986,11 @@ const goToMirrorSettings = () => {
           {{ loading ? $t('envConfig.previewing') : $t('envConfig.preview') }}
         </button>
         <button
-          @click="handleApply"
-          :disabled="applying || portConflicts.length > 0"
+          @click="handleApply()"
+          :disabled="applying || starting || portConflicts.length > 0"
           class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50"
         >
-          {{ applying ? $t('envConfig.applying') : $t('envConfig.apply') }}
-        </button>
-        <button
-          @click="handleStart"
-          :disabled="starting || !hasEnvFile"
-          class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-          :title="!hasEnvFile ? $t('envConfig.startTooltip') : ''"
-        >
-          {{ starting ? $t('envConfig.startingEnv') : $t('envConfig.startEnv') }}
+          {{ applying || starting ? $t('envConfig.applying') : $t('envConfig.apply') }}
         </button>
       </div>
     </header>
@@ -1387,42 +1365,15 @@ const goToMirrorSettings = () => {
           <button @click="showPreviewModal = false" class="w-full sm:w-auto px-5 py-2 ui-btn-secondary rounded-lg font-medium transition">
             {{ $t('envConfig.previewModal.close') }}
           </button>
-          <button @click="handleApply" :disabled="applying" class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50">
-            {{ applying ? $t('envConfig.applying') : $t('envConfig.previewModal.applyConfig') }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Start Environment Confirmation Dialog -->
-    <div v-if="showStartConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
-        <h2 class="text-2xl font-bold text-slate-900 dark:text-slate-200 mb-4">{{ $t('dashboard.startConfirm.title') }}</h2>
-        <p class="text-slate-600 dark:text-slate-400 mb-6">
-          {{ $t('dashboard.startConfirm.message', { proxy: '' }) }}
-          <strong>{{ $t('dashboard.startConfirm.proxy') }}</strong>
-        </p>
-
-        <div class="space-y-4">
-          <div class="flex gap-3">
-            <button 
-              @click="showStartConfirm = false"
-              class="flex-1 px-4 py-2 ui-btn-secondary rounded-lg font-medium transition"
-            >
-              {{ $t('common.cancel') }}
-            </button>
-            <button 
-              @click="goToMirrorSettings"
-              class="flex-1 px-4 py-2 ui-btn-primary rounded-lg font-medium transition"
-            >
-              {{ $t('dashboard.startConfirm.goMirror') }}
-            </button>
-          </div>
-          <button 
-            @click="confirmStart"
-            class="w-full ui-btn-primary px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-blue-600/20"
+          <button
+            @click="handleApplyAndStart"
+            :disabled="applying || starting"
+            class="w-full sm:w-auto px-5 py-2 ui-btn-emphasis rounded-lg font-medium transition disabled:opacity-50"
           >
-            {{ $t('dashboard.startConfirm.directStart') }}
+            {{ applying || starting ? $t('envConfig.applying') : $t('envConfig.applyAndStart') }}
+          </button>
+          <button @click="handleApply()" :disabled="applying || starting" class="w-full sm:w-auto ui-btn-primary px-5 py-2 rounded-lg font-medium transition disabled:opacity-50">
+            {{ applying || starting ? $t('envConfig.applying') : $t('envConfig.previewModal.applyConfig') }}
           </button>
         </div>
       </div>

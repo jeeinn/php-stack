@@ -415,7 +415,7 @@
     "hints": {
       "title": "提示：",
       "autoApply": "点击“{action}”按钮后会自动应用配置到 .env 文件",
-      "customSaved": "自定义镜像源会被保存到 .user_mirror_config.json",
+      "customSaved": "自定义镜像源会被保存到 .user-config/mirror_config.json",
       "testConnection": "点击“{action}”验证镜像源是否可用"
     },
     "confirm": {

@@ -6,6 +6,7 @@ use std::path::Path;
 use zip::write::FileOptions;
 
 use super::backup_manifest::{BackupManifest, BackupOptions};
+use super::user_config;
 use crate::app_log;
 
 /// 备份进度事件
@@ -56,37 +57,20 @@ impl BackupEngine {
         // Step 3.5: Pack user custom configuration files (35%)
         Self::emit_progress(app_handle, "backup.progress.steps.userConfig", 35);
 
-        // .user_mirror_config.json - User mirror source configuration
-        let user_mirror_config_path = project_root.join(".user_mirror_config.json");
-        if user_mirror_config_path.exists() {
-            Self::add_file_to_zip(
-                &mut zip,
-                ".user_mirror_config.json",
-                &user_mirror_config_path,
-                &mut manifest,
-            )?;
-        }
-
-        // .user_version_overrides.json - User version override configuration
-        let user_version_overrides_path = project_root.join(".user_version_overrides.json");
-        if user_version_overrides_path.exists() {
-            Self::add_file_to_zip(
-                &mut zip,
-                ".user_version_overrides.json",
-                &user_version_overrides_path,
-                &mut manifest,
-            )?;
-        }
-
-        // .user_sites.json - 站点定义（不含宿主机绝对路径）
-        let user_sites_path = project_root.join(crate::engine::site_manager::SITES_FILE_NAME);
-        if user_sites_path.exists() {
-            Self::add_file_to_zip(
-                &mut zip,
-                crate::engine::site_manager::SITES_FILE_NAME,
-                &user_sites_path,
-                &mut manifest,
-            )?;
+        for file_name in [
+            user_config::MIRROR_CONFIG,
+            user_config::VERSION_OVERRIDES,
+            user_config::SITES,
+        ] {
+            let disk_path = user_config::path(project_root, file_name);
+            if disk_path.exists() {
+                Self::add_file_to_zip(
+                    &mut zip,
+                    &user_config::relative(file_name),
+                    &disk_path,
+                    &mut manifest,
+                )?;
+            }
         }
 
         manifest.sites = crate::engine::site_manager::collect_manifest_sites(project_root);
@@ -330,6 +314,7 @@ impl BackupEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::user_config;
 
     /// 流式写入必须跨分块边界算出与全量读取一致的 SHA256。
     ///
@@ -449,17 +434,17 @@ mod tests {
         fs::create_dir_all(&services_dir).expect("创建 services 目录失败");
         fs::write(services_dir.join("php.ini"), "memory_limit=256M\n").expect("写入 php.ini 失败");
 
-        // Create user custom configuration files
+        user_config::ensure_dir(project_root).expect("创建 .user-config 失败");
         fs::write(
-            project_root.join(".user_mirror_config.json"),
+            user_config::path(project_root, user_config::MIRROR_CONFIG),
             "{\"apt\":{\"source\":\"http://mirrors.aliyun.com/debian/\",\"enabled\":true}}",
         )
-        .expect("写入 .user_mirror_config.json 失败");
+        .expect("写入 mirror_config.json 失败");
         fs::write(
-            project_root.join(".user_version_overrides.json"),
+            user_config::path(project_root, user_config::VERSION_OVERRIDES),
             "{\"php\":{\"8.2\":{\"tag\":\"8.2-custom\"}}}",
         )
-        .expect("写入 .user_version_overrides.json 失败");
+        .expect("写入 version_overrides.json 失败");
 
         let backup_path = project_root.join("backup.zip");
         let options = BackupOptions {
@@ -501,12 +486,12 @@ mod tests {
             "ZIP 应包含 services/php82/php.ini，实际: {file_names:?}"
         );
         assert!(
-            file_names.contains(&".user_mirror_config.json".to_string()),
-            "ZIP 应包含 .user_mirror_config.json，实际: {file_names:?}"
+            file_names.contains(&user_config::relative(user_config::MIRROR_CONFIG)),
+            "ZIP 应包含 .user-config/mirror_config.json，实际: {file_names:?}"
         );
         assert!(
-            file_names.contains(&".user_version_overrides.json".to_string()),
-            "ZIP 应包含 .user_version_overrides.json，实际: {file_names:?}"
+            file_names.contains(&user_config::relative(user_config::VERSION_OVERRIDES)),
+            "ZIP 应包含 .user-config/version_overrides.json，实际: {file_names:?}"
         );
         assert!(
             file_names.contains(&"manifest.json".to_string()),
@@ -536,12 +521,16 @@ mod tests {
             "manifest 应包含 services/php82/php.ini 的 SHA256"
         );
         assert!(
-            manifest.files.contains_key(".user_mirror_config.json"),
-            "manifest 应包含 .user_mirror_config.json 的 SHA256"
+            manifest
+                .files
+                .contains_key(&user_config::relative(user_config::MIRROR_CONFIG)),
+            "manifest 应包含 .user-config/mirror_config.json 的 SHA256"
         );
         assert!(
-            manifest.files.contains_key(".user_version_overrides.json"),
-            "manifest 应包含 .user_version_overrides.json 的 SHA256"
+            manifest
+                .files
+                .contains_key(&user_config::relative(user_config::VERSION_OVERRIDES)),
+            "manifest 应包含 .user-config/version_overrides.json 的 SHA256"
         );
     }
 
@@ -552,8 +541,9 @@ mod tests {
         fs::write(external.path().join("index.php"), b"<?php echo 1;\n").unwrap();
         let host = external.path().to_string_lossy().replace('\\', "/");
         fs::write(workspace.path().join(".env"), format!("SITE_SHOP={host}\n")).unwrap();
+        user_config::ensure_dir(workspace.path()).unwrap();
         fs::write(
-            workspace.path().join(".user_sites.json"),
+            user_config::path(workspace.path(), user_config::SITES),
             r#"{"sites":[{"id":"shop","server_name":"shop.test","env_key":"SITE_SHOP","container_path":"/sites/shop","nginx_service":"nginx125","php_service":"php82"}]}"#,
         )
         .unwrap();
@@ -592,7 +582,9 @@ mod tests {
             names.iter().all(|name| !name.contains(':')),
             "ZIP 条目名不应包含盘符: {names:?}"
         );
-        assert!(names.iter().any(|name| name == ".user_sites.json"));
+        assert!(names
+            .iter()
+            .any(|name| name == &user_config::relative(user_config::SITES)));
 
         let mut manifest_file = archive.by_name("manifest.json").unwrap();
         let mut json = String::new();

@@ -103,7 +103,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 | 模块 | 文件 | 职责 |
 |------|------|------|
 | **版本清单** | `version_manifest.rs` | 管理 `VersionEntry` 数据，提供 `get_entry()`、`get_available_entries()`、`find_entry_by_env_prefix()` 等查询 API |
-| **用户覆盖** | `user_override_manager.rs` | 管理 `.user_version_overrides.json`，通过 `get_merged_entry()` 合并用户自定义 `image_tag` |
+| **用户覆盖** | `user_override_manager.rs` | 管理 `.user-config/version_overrides.json`，通过 `get_merged_entry()` 合并用户自定义 `image_tag` |
 | **配置生成** | `config_generator.rs` | 根据 GUI 输入生成 `.env`、`docker-compose.yml`、`services/` 目录 |
 | **Env 解析** | `env_parser.rs` | `.env` 文件可靠读写，保留注释和空行 |
 | **镜像源管理** | `mirror_manager.rs` | 统一管理 Docker/APT/Composer/NPM 镜像源 |
@@ -263,7 +263,10 @@ php-stack/
 │       └── nginx124/ ~ nginx128/    # Nginx 服务模板（5 个版本）
 ├── .env                             # 生成的环境变量
 ├── docker-compose.yml               # 生成的 Compose 文件
-├── .user_version_overrides.json     # 用户版本覆盖配置
+├── .user-config/                    # 用户侧配置
+│   ├── mirror_config.json
+│   ├── version_overrides.json
+│   └── sites.json
 └── workspace.json                   # 工作目录配置（现位于 app_data_dir）
 ```
 
@@ -277,8 +280,9 @@ php-stack/
 |--------|------|----------|------|
 | `.env` / `docker-compose.yml` | **工作区**（`workspace.json` 配置路径） | `config_generator` / `env_config` | 可视化配置生成 |
 | `services/` / `data/` / `logs/` | 工作区 | `config_generator` / Docker 挂载 | 模板与运行时数据 |
-| `.user_mirror_config.json` | 工作区 | `mirror_config_manager` | 用户镜像源覆盖 |
-| `.user_version_overrides.json` | 工作区 | `user_override_manager` | 用户镜像 tag 覆盖 |
+| `.user-config/mirror_config.json` | 工作区 | `mirror_config_manager` | 用户镜像源覆盖 |
+| `.user-config/version_overrides.json` | 工作区 | `user_override_manager` | 用户镜像 tag 覆盖 |
+| `.user-config/sites.json` | 工作区 | `site_manager` | 站点定义（不含宿主机绝对路径） |
 | 备份 ZIP / `.restore_rollback_*.zip` | 用户选择路径 / 工作区 | `backup_engine` / `commands::backup` | 备份与恢复前回滚包 |
 | `workspace.json` | **app_data_dir** | `workspace_manager` | 工作区路径持久化 |
 | `php-stack.log` | **app_data_dir** | `logging` | 文件日志（轮转） |

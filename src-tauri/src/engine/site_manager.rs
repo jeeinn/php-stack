@@ -1,6 +1,6 @@
 //! 精简站点清单。
 //!
-//! 宿主机路径只写入 `.env`。`.user_sites.json` 与生成的 Nginx conf 只保留容器路径，
+//! 宿主机路径只写入 `.env`。`.user-config/sites.json` 与生成的 Nginx conf 只保留容器路径，
 //! 这样备份换机器时只需重写 `.env` 里的盘符。
 
 use std::fs;
@@ -9,9 +9,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::env_parser::EnvFile;
+use super::user_config;
 use crate::app_log;
-
-pub const SITES_FILE_NAME: &str = ".user_sites.json";
 pub const MANAGED_MARKER_PREFIX: &str = "# php-stack:managed site=";
 pub const PRIMARY_ENV_KEY: &str = "SOURCE_DIR";
 pub const PRIMARY_CONTAINER_PATH: &str = "/www";
@@ -34,7 +33,7 @@ pub struct SiteEntry {
     pub public_dir: String,
 }
 
-/// 写入 `.user_sites.json` 的站点，不含宿主机绝对路径。
+/// 写入 `.user-config/sites.json` 的站点，不含宿主机绝对路径。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SiteRecord {
     id: String,
@@ -387,21 +386,26 @@ pub fn load_sites_with_hosts(project_root: &Path, env: &EnvFile) -> Vec<SiteEntr
         .collect()
 }
 
+fn sites_path(project_root: &Path) -> PathBuf {
+    user_config::path(project_root, user_config::SITES)
+}
+
 pub fn save_sites(project_root: &Path, sites: &[SiteEntry]) -> Result<(), String> {
-    let path = project_root.join(SITES_FILE_NAME);
+    let path = sites_path(project_root);
+    let label = user_config::relative(user_config::SITES);
     if sites.is_empty() {
         if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|e| format!("failed to remove {SITES_FILE_NAME}: {e}"))?;
+            fs::remove_file(&path).map_err(|e| format!("failed to remove {label}: {e}"))?;
         }
         return Ok(());
     }
+    user_config::ensure_dir(project_root)?;
     let file = UserSitesFile {
         sites: sites.iter().map(SiteEntry::to_record).collect(),
     };
     let json = serde_json::to_string_pretty(&file)
-        .map_err(|e| format!("failed to serialize {SITES_FILE_NAME}: {e}"))?;
-    fs::write(&path, json).map_err(|e| format!("failed to write {SITES_FILE_NAME}: {e}"))
+        .map_err(|e| format!("failed to serialize {label}: {e}"))?;
+    fs::write(&path, json).map_err(|e| format!("failed to write {label}: {e}"))
 }
 
 impl SiteEntry {
@@ -419,14 +423,14 @@ impl SiteEntry {
 }
 
 fn read_records(project_root: &Path) -> Result<Vec<SiteRecord>, String> {
-    let path = project_root.join(SITES_FILE_NAME);
+    let path = sites_path(project_root);
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let text =
-        fs::read_to_string(&path).map_err(|e| format!("failed to read {SITES_FILE_NAME}: {e}"))?;
-    let file: UserSitesFile = serde_json::from_str(&text)
-        .map_err(|e| format!("failed to parse {SITES_FILE_NAME}: {e}"))?;
+    let label = user_config::relative(user_config::SITES);
+    let text = fs::read_to_string(&path).map_err(|e| format!("failed to read {label}: {e}"))?;
+    let file: UserSitesFile =
+        serde_json::from_str(&text).map_err(|e| format!("failed to parse {label}: {e}"))?;
     Ok(file.sites)
 }
 
@@ -766,7 +770,7 @@ mod tests {
         let mut sites = vec![sample_site("main", "D:/code/app")];
         normalize_sites(&mut sites);
         save_sites(root, &sites).unwrap();
-        let raw = fs::read_to_string(root.join(SITES_FILE_NAME)).unwrap();
+        let raw = fs::read_to_string(super::sites_path(root)).unwrap();
         assert!(!raw.contains("D:/code"));
         assert!(raw.contains("SOURCE_DIR"));
 
@@ -796,7 +800,7 @@ mod tests {
             root.join("services/nginx125/conf.d/custom.conf").exists(),
             "无标记的用户 conf 不应删除"
         );
-        assert!(!root.join(SITES_FILE_NAME).exists());
+        assert!(!super::sites_path(root).exists());
     }
 
     #[test]

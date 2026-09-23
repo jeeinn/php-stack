@@ -8,6 +8,7 @@ use super::config_extractor::{ConfigExtractor, ExtractOutcome};
 use super::env_parser::EnvFile;
 use super::mirror_config_manager::UserMirrorConfig;
 use super::site_manager::{self, SiteEntry};
+use super::user_config;
 use super::user_override_manager::UserOverrideManager;
 use super::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::app_log;
@@ -174,10 +175,10 @@ impl ConfigGenerator {
 
     /// Generate .env file content from EnvConfig.
     /// If existing_env is provided, preserve user custom variables.
-    /// Also merges mirror configuration from .user_mirror_config.json.
+    /// Also merges mirror configuration from `.user-config/mirror_config.json`.
     ///
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql84").
-    /// `project_root` is the user's workspace directory where `.user_version_overrides.json` resides.
+    /// `project_root` is the user's workspace directory where `.user-config/` resides.
     pub fn generate_env(
         config: &EnvConfig,
         existing_env: Option<&EnvFile>,
@@ -339,7 +340,7 @@ impl ConfigGenerator {
             }
         }
 
-        // Merge mirror configuration from .user_mirror_config.json
+        // Merge mirror configuration from .user-config/mirror_config.json
         if let Ok(user_mirror_config) = UserMirrorConfig::load(project_root) {
             // APT Mirror
             if let Some(apt_cat) = user_mirror_config.get_category("apt") {
@@ -1105,15 +1106,19 @@ impl ConfigGenerator {
                 }
 
                 // Add user custom configuration files (same as backup_engine.rs)
-                let user_config_files =
-                    vec![".user_mirror_config.json", ".user_version_overrides.json"];
+                let user_config_files = [
+                    user_config::MIRROR_CONFIG,
+                    user_config::VERSION_OVERRIDES,
+                    user_config::SITES,
+                ];
 
-                for config_file in &user_config_files {
-                    let config_path = project_root.join(config_file);
+                for file_name in user_config_files {
+                    let config_path = user_config::path(project_root, file_name);
+                    let zip_name = user_config::relative(file_name);
                     if config_path.exists() {
                         match std::fs::read(&config_path) {
                             Ok(content) => {
-                                zip.start_file(config_file, zip_options).map_err(|e| {
+                                zip.start_file(&zip_name, zip_options).map_err(|e| {
                                     format!("failed to add user config to zip: {e}")
                                 })?;
                                 zip.write_all(&content)
@@ -1122,7 +1127,7 @@ impl ConfigGenerator {
                                     info,
                                     "engine::config_generator",
                                     "Added user config: {}",
-                                    config_file
+                                    zip_name
                                 );
                                 backed_up_count += 1;
                             }
@@ -1131,7 +1136,7 @@ impl ConfigGenerator {
                                     warn,
                                     "engine::config_generator",
                                     "Failed to read user config {}: {}",
-                                    config_file,
+                                    zip_name,
                                     e
                                 );
                                 // Continue with other config files
@@ -1217,7 +1222,7 @@ impl ConfigGenerator {
 
     /// Backup existing configuration files by creating a ZIP archive.
     /// Format: config_backup_YYYYMMDD_HHMMSS.zip
-    /// Contains: .env, docker-compose.yml, services/, .user_mirror_config.json, .user_version_overrides.json
+    /// Contains: .env, docker-compose.yml, services/, .user-config/
     pub fn backup_existing_config(project_root: &Path) -> Result<Vec<String>, String> {
         app_log!(info, "engine::config_generator", "Prechecking backup...");
 

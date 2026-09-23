@@ -106,7 +106,7 @@
 2. 用户级配置（workspace.json、.user_*.json、日志）迁移到 Tauri 官方 `app.path().app_data_dir()`（通过 `AppHandle` 传入，不再自己爬目录）；工作区内的文件（.env、services/、备份）保持原地不动——它们本来就是"工作区"的一部分。
 3. 首次启动时检测旧位置文件并自动迁移 + 提示。
 
-**实现偏差（2026-09-21）**：本轮只迁移了 `workspace.json` 与日志文件，`.user_mirror_config.json` / `.user_version_overrides.json` **保留在项目根**。原因：这两个文件被 `backup_engine` 按项目根打包、`restore_engine` 按项目根还原，且语义上随工作区走（换工作区就该换一套覆盖）——迁到 app_data_dir 会直接打断备份/恢复闭环，收益不抵风险。若后续要做，需连同备份/恢复管道一起改，届时应作为一个独立改动统一处理。
+**实现偏差（2026-09-21）**：本轮只迁移了 `workspace.json` 与日志文件，用户覆盖文件当时留在项目根。原因：它们被备份/恢复按工作区打包，且语义上随工作区走——迁到 app_data_dir 会打断备份/恢复闭环。后续已收进工作区 `.user-config/`（`mirror_config.json`、`version_overrides.json`、`sites.json`），仍然不进 app_data_dir。
 
 **实现方式**：`app_data_dir` 由 setup 注入一次后存入 `OnceLock`，而不是把 `AppHandle` 透传进 20 余处命令——后者会让所有命令签名膨胀，与"简单"原则冲突。未注入时回退旧逻辑，保证单元测试可用。
 
@@ -128,7 +128,7 @@
 
 ### A5.【P2】应用数据文件清单没有单一事实来源 `[已完成]`
 
-当前磁盘写入物散布：项目根（.env、docker-compose.yml、services/、data/、logs/、.user_mirror_config.json、.user_version_overrides.json）、exe 目录（workspace.json、php-stack.log）。建议在 `doc/architecture/ARCHITECTURE.md` 增加一张"应用写入了什么、在哪、谁负责"的表，并作为 A1 重构的验收依据。
+当前磁盘写入物散布：项目根（.env、docker-compose.yml、services/、data/、logs/、.user-config/）、exe 目录已不再作为配置落点。`workspace.json` 与 `php-stack.log` 在 app_data_dir。写入清单以 `docs/architecture/ARCHITECTURE.md` 为准。
 
 ### A6.【P2】死代码与占位实现 `[已完成]`
 
@@ -198,7 +198,7 @@
 
 ### E1.【P1】版本清单嵌入二进制，新增版本必须重新发版 `[已完成]`
 
-`version_manifest.rs:44` 用 `include_str!` 把 `services/version_manifest.json` 编译进二进制。PHP 8.5 / MySQL 9.x 发布时，用户必须升级整个应用才能选新版本。而项目已有的 `.user_version_overrides.json` 机制只覆盖"改镜像 tag"，覆盖不了"新增条目"。
+`version_manifest.rs:44` 用 `include_str!` 把 `services/version_manifest.json` 编译进二进制。PHP 8.5 / MySQL 9.x 发布时，用户必须升级整个应用才能选新版本。而项目已有的 `.user-config/version_overrides.json` 机制只覆盖"改镜像 tag"，覆盖不了"新增条目"。
 
 **建议**：启动时按 `app_data_dir/services/version_manifest.json`（若存在）→ 内置 fallback 的顺序加载，用户可下载新清单文件覆盖。**不**要做远程自动拉取（保持简单，避免新增网络依赖面）。约 30 行 + 文档。
 

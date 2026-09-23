@@ -40,7 +40,7 @@
 **设计理念**: 默认配置由开发者维护（安全性），高级用户可自定义（灵活性）。
 
 **实现策略**:
-- `.user_version_overrides.json` 中按 manifest ID 覆盖 `image_tag`
+- `.user-config/version_overrides.json` 中按 manifest ID 覆盖 `image_tag`
 - `get_merged_entry()` 合并逻辑：用户覆盖仅替换 `image_tag`（和可选 `description`），其他字段保持 manifest 默认值
 - 支持保存/删除/重置操作
 
@@ -57,7 +57,7 @@
 ```
 
 **优先级顺序**:
-1. `.user_version_overrides.json` 用户覆盖配置（最高）
+1. `.user-config/version_overrides.json` 用户覆盖配置（最高）
 2. `version_manifest.json` 默认清单
 3. Dockerfile 中的硬编码默认值（兜底）
 
@@ -164,7 +164,7 @@ for attempt in 1..=10 {
 
 **数据流**:
 ```
-用户配置 (.user_version_overrides.json)
+用户配置 (.user-config/version_overrides.json)
     → config_generator.rs 获取 entry.image_tag
     → 写入 .env: PHP82_VERSION=php:8.2-fpm-alpine
     → docker-compose.yml: PHP_BASE_IMAGE="${PHP82_VERSION}"

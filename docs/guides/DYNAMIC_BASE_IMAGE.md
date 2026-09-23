@@ -2,14 +2,14 @@
 
 ## 概述
 
-PHP-Stack v0.1.0 引入了**动态基础镜像切换**功能，允许用户通过修改 `.env` 文件或 `.user_version_overrides.json` 来自定义 PHP 容器的基础镜像标签。
+PHP-Stack v0.1.0 引入了**动态基础镜像切换**功能，允许用户通过修改 `.env` 文件或 `.user-config/version_overrides.json` 来自定义 PHP 容器的基础镜像标签。
 
 ## 工作原理
 
 ### 1. 数据流向
 
 ```
-用户配置 → .env / .user_version_overrides.json
+用户配置 → .env / .user-config/version_overrides.json
     ↓
 config_generator.rs 读取完整镜像标签（如 php:8.2-fpm-alpine）
     ↓
@@ -138,7 +138,7 @@ WORKDIR /www
 5. 点击 **应用配置**
 
 系统会自动：
-- 更新 `.user_version_overrides.json`
+- 更新 `.user-config/version_overrides.json`
 - 重新生成 `.env` 和 `docker-compose.yml`
 - 下次启动时使用新的基础镜像
 
@@ -160,9 +160,9 @@ docker compose down
 docker compose up -d --build
 ```
 
-### 方法 3：使用 `.user_version_overrides.json`
+### 方法 3：使用 `.user-config/version_overrides.json`
 
-创建或编辑 `.user_version_overrides.json`：
+创建或编辑 `.user-config/version_overrides.json`：
 
 ```json
 {

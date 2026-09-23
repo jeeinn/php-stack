@@ -3,6 +3,7 @@ use crate::docker::manager::DockerManager;
 use crate::engine::config_extractor::{ConfigExtractor, ExtractOutcome, ImageStatus};
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
 use crate::engine::site_manager;
+use crate::engine::user_config;
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 
 /// 单个镜像拉取结果（前端"待拉取"确认弹窗使用）
@@ -372,7 +373,7 @@ pub async fn apply_env_config(
     );
 
     // 检查用户覆盖配置
-    let overrides_path = project_root.join(".user_version_overrides.json");
+    let overrides_path = user_config::path(&project_root, user_config::VERSION_OVERRIDES);
     if overrides_path.exists() {
         ui_log!(
             app_handle,

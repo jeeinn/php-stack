@@ -96,6 +96,8 @@ pub fn run() {
             // 备份
             commands::create_backup,
             commands::convert_to_relative_path,
+            commands::normalize_mount_path,
+            commands::relative_public_dir,
             // 恢复
             commands::preview_restore,
             commands::verify_backup,

@@ -3,6 +3,7 @@ import type {
   BackupOptions,
   RestorePreview,
   RestoreResult,
+  SitePathOverride,
 } from '../types/env-config'
 
 export function previewRestore(zipPath: string): Promise<RestorePreview> {
@@ -13,8 +14,11 @@ export function verifyBackup(zipPath: string): Promise<boolean> {
   return invokeCommand<boolean>('verify_backup', { zipPath })
 }
 
-export function executeRestore(zipPath: string): Promise<RestoreResult> {
-  return invokeCommand<RestoreResult>('execute_restore', { zipPath })
+export function executeRestore(
+  zipPath: string,
+  pathOverrides: SitePathOverride[],
+): Promise<RestoreResult> {
+  return invokeCommand<RestoreResult>('execute_restore', { zipPath, pathOverrides })
 }
 
 export function createBackup(
@@ -32,4 +36,12 @@ export function convertToRelativePath(
     absolutePath,
     isDirectory,
   })
+}
+
+export function normalizeMountPath(absolutePath: string): Promise<string> {
+  return invokeCommand<string>('normalize_mount_path', { absolutePath })
+}
+
+export function relativePublicDir(mountPath: string, publicPath: string): Promise<string> {
+  return invokeCommand<string>('relative_public_dir', { mountPath, publicPath })
 }

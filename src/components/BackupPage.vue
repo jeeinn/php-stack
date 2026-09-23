@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
-import type { BackupOptions, BackupProgress } from '../types/env-config';
-import { createBackup, convertToRelativePath, normalizeError } from '../api';
+import type { BackupOptions, BackupProgress, SiteEntry } from '../types/env-config';
+import { createBackup, convertToRelativePath, loadExistingConfig, normalizeError } from '../api';
 import { showToast, addLogKey } from '../composables/useToast';
 
 const { t } = useI18n();
@@ -18,6 +18,18 @@ const options = ref<BackupOptions>({
 });
 
 const projectPatternsText = ref('');
+const knownSites = ref<SiteEntry[]>([]);
+const selectedSiteIds = ref<string[]>([]);
+
+onMounted(async () => {
+  try {
+    const config = await loadExistingConfig();
+    knownSites.value = config?.sites ?? [];
+    selectedSiteIds.value = [];
+  } catch (e) {
+    console.error('[Backup] failed to load sites:', e);
+  }
+});
 
 async function selectProjectFolder() {
   const selected = await open({
@@ -109,6 +121,7 @@ async function handleBackup() {
       project_patterns: options.value.include_projects
         ? projectPatternsText.value.split('\n').map(l => l.trim()).filter(Boolean)
         : [],
+      site_ids: options.value.include_projects ? [...selectedSiteIds.value] : [],
     };
 
     await createBackup(savePath, backupOptions);
@@ -171,6 +184,18 @@ async function handleBackup() {
                 <p class="text-[10px] text-slate-500 dark:text-slate-500 mt-1">
                   {{ $t('backup.options.patternsHint') }}
                 </p>
+                <div v-if="knownSites.length > 0" class="mt-3 space-y-2">
+                  <div class="text-xs text-slate-600 dark:text-slate-400">{{ $t('backup.options.sites') }}</div>
+                  <label
+                    v-for="site in knownSites"
+                    :key="site.id"
+                    class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                  >
+                    <input type="checkbox" :value="site.id" v-model="selectedSiteIds" class="accent-blue-500" />
+                    <span>{{ $t('backup.options.siteItem', { name: site.server_name || site.id, path: site.public_dir ? `${site.host_path} / ${site.public_dir}` : site.host_path }) }}</span>
+                  </label>
+                  <p class="text-[10px] text-slate-500">{{ $t('backup.options.outsideHint') }}</p>
+                </div>
               </div>
             </transition>
           </div>

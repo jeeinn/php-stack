@@ -14,9 +14,12 @@ import {
   openServiceConfig,
   startEnvironment,
   normalizeError,
+  normalizeMountPath,
+  relativePublicDir,
 } from '../api';
 import { open } from '@tauri-apps/plugin-shell';
-import type { ServiceEntry, EnvConfig, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
+import { open as openDirectoryDialog } from '@tauri-apps/plugin-dialog';
+import type { ServiceEntry, EnvConfig, SiteEntry, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 import CustomSelect from './CustomSelect.vue';
@@ -117,6 +120,7 @@ const redisServices = ref<ServiceEntry[]>([]);
 const nginxServices = ref<ServiceEntry[]>([]);
 
 const sourceDir = ref('./www');
+const sites = ref<SiteEntry[]>([]);
 const timezone = ref('Asia/Shanghai');
 const customTimezone = ref('');
 const showCustomTimezoneInput = ref(false);
@@ -133,7 +137,6 @@ const hasEnvFile = ref(false);  // .env 文件是否存在
 
 // Nginx 配置提示状态
 const showNginxHint = ref(false);
-const phpContainerNames = ref<string[]>([]);
 const nginxServicesList = ref<Array<{ name: string; version: string; port?: number }>>([]); // 存储所有 Nginx 服务信息
 const showStartConfirm = ref(false);
 
@@ -325,7 +328,15 @@ async function loadExistingConfig() {
       redisServices.value = redisSvcs.length > 0 ? redisSvcs : [];
       nginxServices.value = nginxSvcs.length > 0 ? nginxSvcs : [];
       
-      sourceDir.value = config.source_dir;
+      sourceDir.value = repairHostPath(config.source_dir);
+      sites.value = (config.sites ?? []).map(site => ({
+        ...site,
+        host_path: repairHostPath(site.host_path),
+        public_dir: normalizePublicDir(site.public_dir),
+      }));
+      if (nginxSvcs.length > 0 && sites.value.length === 0) {
+        sites.value = [makeDefaultSite(config.source_dir || './www')];
+      }
       timezone.value = config.timezone;
       
       // Check if timezone is in common list
@@ -404,6 +415,150 @@ const portConflicts = computed(() => {
   return conflicts;
 });
 
+function serviceDirOf(versionId: string, versions: VersionInfo[]): string {
+  return versions.find(v => v.id === versionId)?.service_dir || versionId;
+}
+
+function repairHostPath(path: string): string {
+  const normalized = (path || '').replace(/\\/g, '/');
+  if (normalized.startsWith('./')) {
+    const rest = normalized.slice(2);
+    if (/^[A-Za-z]:/.test(rest) || rest.startsWith('/')) return rest;
+  }
+  return normalized;
+}
+
+function normalizePublicDir(raw: string | undefined): string {
+  let path = (raw || '').replace(/\\/g, '/').trim().replace(/^\/+|\/+$/g, '');
+  if (path.startsWith('./')) path = path.slice(2);
+  if (!path || path === '.') return '';
+  return path;
+}
+
+function makeDefaultSite(hostPath: string): SiteEntry {
+  const php = phpServices.value[0];
+  const nginx = nginxServices.value[0];
+  return {
+    id: 'main',
+    server_name: 'localhost',
+    host_path: hostPath || './www',
+    env_key: 'SOURCE_DIR',
+    container_path: '/www',
+    php_service: php ? serviceDirOf(php.version, phpVersions.value) : '',
+    nginx_service: nginx ? serviceDirOf(nginx.version, nginxVersions.value) : '',
+    public_dir: '',
+  };
+}
+
+function siteDerived(site: SiteEntry, index: number): Pick<SiteEntry, 'id' | 'env_key' | 'container_path' | 'host_path' | 'public_dir'> {
+  const id = site.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'main';
+  const slug = id.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'SITE';
+  return {
+    id,
+    host_path: repairHostPath(site.host_path),
+    public_dir: normalizePublicDir(site.public_dir),
+    env_key: index === 0 ? 'SOURCE_DIR' : `SITE_${slug}`,
+    container_path: index === 0 ? '/www' : `/sites/${id}`,
+  };
+}
+
+function nginxRootOf(site: SiteEntry, index: number): string {
+  const derived = siteDerived(site, index);
+  const base = (derived.container_path || '').replace(/\/$/, '');
+  return derived.public_dir ? `${base}/${derived.public_dir}` : base;
+}
+
+function normalizedSites(): SiteEntry[] {
+  return sites.value.map((site, index) => ({
+    ...site,
+    ...siteDerived(site, index),
+  }));
+}
+
+async function pickHostPath(current: string): Promise<string | null> {
+  const selected = await openDirectoryDialog({
+    directory: true,
+    multiple: false,
+    defaultPath: current && !current.startsWith('.') ? current : undefined,
+  });
+  if (!selected || Array.isArray(selected)) return null;
+  try {
+    return await normalizeMountPath(selected);
+  } catch (e) {
+    showToast(normalizeError(e), 'error');
+    return null;
+  }
+}
+
+async function browseSourceDir() {
+  const picked = await pickHostPath(sourceDir.value);
+  if (picked) sourceDir.value = picked;
+}
+
+async function browseSiteDir(index: number) {
+  const site = sites.value[index];
+  if (!site) return;
+  const picked = await pickHostPath(site.host_path);
+  if (picked) site.host_path = picked;
+}
+
+async function browsePublicDir(index: number) {
+  const site = sites.value[index];
+  if (!site) return;
+  if (!site.host_path.trim()) {
+    showToast(t('envConfig.sites.mountFirst'), 'error');
+    return;
+  }
+  const selected = await openDirectoryDialog({
+    directory: true,
+    multiple: false,
+    defaultPath: site.host_path.startsWith('.') ? undefined : site.host_path,
+  });
+  if (!selected || Array.isArray(selected)) return;
+  try {
+    site.public_dir = await relativePublicDir(site.host_path, selected);
+  } catch (e) {
+    showToast(normalizeError(e), 'error');
+  }
+}
+
+function addSite() {
+  const next = sites.value.length + 1;
+  const php = phpServices.value[0];
+  const nginx = nginxServices.value[0];
+  sites.value.push({
+    id: `site${next}`,
+    server_name: `site${next}.test`,
+    host_path: './www',
+    env_key: '',
+    container_path: '',
+    php_service: php ? serviceDirOf(php.version, phpVersions.value) : '',
+    nginx_service: nginx ? serviceDirOf(nginx.version, nginxVersions.value) : '',
+    public_dir: '',
+  });
+}
+
+function removeSite(index: number) {
+  if (sites.value.length <= 1) return;
+  sites.value.splice(index, 1);
+}
+
+const phpSiteOptions = computed(() =>
+  phpServices.value.map(service => {
+    const dir = serviceDirOf(service.version, phpVersions.value);
+    const info = phpVersions.value.find(v => v.id === service.version);
+    return { value: dir, label: info?.display_name || dir };
+  })
+);
+
+const nginxSiteOptions = computed(() =>
+  nginxServices.value.map(service => {
+    const dir = serviceDirOf(service.version, nginxVersions.value);
+    const info = nginxVersions.value.find(v => v.id === service.version);
+    return { value: dir, label: info?.display_name || dir };
+  })
+);
+
 // Build config
 function buildConfig(): EnvConfig {
   const services: ServiceEntry[] = [];
@@ -419,11 +574,13 @@ function buildConfig(): EnvConfig {
   nginxServices.value.forEach(s => {
     services.push({ ...s });
   });
+  const siteList = nginxServices.value.length > 0 ? normalizedSites() : [];
   return { 
     services, 
-    source_dir: sourceDir.value, 
+    source_dir: siteList[0]?.host_path || sourceDir.value, 
     timezone: timezone.value,
-    mysql_root_password: mysqlRootPassword.value === 'root' ? undefined : mysqlRootPassword.value
+    mysql_root_password: mysqlRootPassword.value === 'root' ? undefined : mysqlRootPassword.value,
+    sites: siteList,
   };
 }
 
@@ -514,11 +671,17 @@ function addNginxVersion() {
   nginxServices.value.push({
     service_type: 'Nginx',
     version: available[0].id,
-    host_port: 80 + nginxServices.value.length,
+    host_port: available[0].default_port || 80,
   });
+  if (sites.value.length === 0) {
+    sites.value = [makeDefaultSite(sourceDir.value || './www')];
+  }
 }
 
 function removeNginxVersion(index: number) {
+  if (nginxServices.value.length === 1 && sites.value[0]?.host_path) {
+    sourceDir.value = sites.value[0].host_path;
+  }
   nginxServices.value.splice(index, 1);
 }
 
@@ -762,13 +925,6 @@ async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
     const hasNginx = nginxServices.value.length > 0;
     
     if (hasPHP && hasNginx) {
-      // 获取所有 PHP 服务的容器地址（容器名:端口）— 直接使用 service_dir
-      phpContainerNames.value = phpServices.value.map(service => {
-        const versionInfo = phpVersions.value.find(v => v.id === service.version);
-        const serviceDir = versionInfo ? versionInfo.service_dir : service.version;
-        return `ps-${serviceDir}:9000`;
-      });
-      
       // 获取所有 Nginx 服务的信息 — 直接使用 service_dir
       nginxServicesList.value = nginxServices.value.map(service => {
         const versionInfo = nginxVersions.value.find(v => v.id === service.version);
@@ -881,73 +1037,19 @@ const goToMirrorSettings = () => {
     <!-- Nginx 配置提示 -->
     <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 ui-hint-box-solid rounded-xl">
       <div class="flex flex-col sm:flex-row items-start gap-3">
-        <div class="flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
         <div class="flex-1">
           <h3 class="text-base font-semibold text-blue-800 dark:text-blue-200 mb-2">{{ $t('envConfig.nginxHint.title') }}</h3>
           <p class="text-sm text-slate-700 dark:text-slate-300 mb-3">
             {{ $t('envConfig.nginxHint.description') }}
           </p>
-          
-          <div class="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 mb-3 border border-slate-200 dark:border-slate-700">
-            <p class="text-xs text-slate-400 mb-2">{{ $t('envConfig.nginxHint.phpAddresses') }}</p>
-            <div class="space-y-1">
-              <div v-for="(name, index) in phpContainerNames" :key="index" class="flex items-center gap-2">
-                <span class="text-xs text-slate-500 font-mono">{{ index + 1 }}.</span>
-                <code class="text-sm text-blue-600 dark:text-blue-400 font-mono">{{ name }}</code>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 多 Nginx 版本提示 -->
-          <div v-if="nginxServicesList.length > 1" class="ui-hint-box-solid rounded-lg p-3 mb-3">
-            <p class="text-xs text-blue-700 dark:text-blue-300 mb-2">{{ $t('envConfig.nginxHint.multiNginx') }}</p>
-            <div class="space-y-2">
-              <div v-for="(nginx, index) in nginxServicesList" :key="index" class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-slate-500 dark:text-slate-500 font-mono">{{ index + 1 }}.</span>
-                  <code class="text-sm text-blue-600 dark:text-blue-400 font-mono">{{ nginx.name }}</code>
-                  <span class="text-xs text-slate-500 dark:text-slate-500">({{ nginx.version }})</span>
-                  <span v-if="nginx.port" class="text-xs text-slate-500 dark:text-slate-500">- {{ $t('envConfig.nginxHint.port', { port: nginx.port }) }}</span>
-                </div>
-                <button
-                  @click="openNginxConfigDir(nginx.name)"
-                  class="sm:ml-auto px-3 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs transition border border-blue-600/30 whitespace-nowrap"
-                >
-                  {{ $t('envConfig.nginxHint.openConfigDir') }}
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div class="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-            <p><strong class="text-blue-600 dark:text-blue-400">{{ $t('envConfig.nginxHint.configSteps') }}</strong></p>
-            <ol class="list-decimal list-inside space-y-1 ml-2 text-slate-600 dark:text-slate-400">
-              <li v-if="nginxServicesList.length === 1">
-                {{ $t('envConfig.nginxHint.step1Single', { path: `services/${nginxServicesList[0].name}/conf.d/default.conf` }) }}
-              </li>
-              <li v-else>
-                {{ $t('envConfig.nginxHint.step1Multi') }}
-              </li>
-              <li>{{ $t('envConfig.nginxHint.step2', { directive: 'fastcgi_pass', default: 'php:9000' }) }}</li>
-              <li>{{ $t('envConfig.nginxHint.step3', { example: 'fastcgi_pass [container_address];', hint: 'ps-php85:9000' }) }}</li>
-              <li class="text-xs text-slate-500 dark:text-slate-500 mt-1">{{ $t('envConfig.nginxHint.step4') }}</li>
-            </ol>
-          </div>
-          
-          <div class="mt-4 flex flex-col sm:flex-row gap-2">
+          <div class="mt-2 flex flex-col sm:flex-row flex-wrap gap-2">
             <button
-              v-if="nginxServicesList.length === 1"
-              @click="openNginxConfigDir()"
-              class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 text-white"
+              v-for="nginx in nginxServicesList"
+              :key="nginx.name"
+              @click="openNginxConfigDir(nginx.name)"
+              class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition text-white"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
-              {{ $t('envConfig.nginxHint.openConfigDir') }}
+              {{ $t('envConfig.nginxHint.openConfigDir') }} ({{ nginx.name }})
             </button>
             <button
               @click="showNginxHint = false"
@@ -1166,6 +1268,57 @@ const goToMirrorSettings = () => {
         </div>
       </section>
 
+      <section v-if="nginxServices.length > 0" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.sites.title') }}</h2>
+          <button @click="addSite" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">{{ $t('envConfig.sites.add') }}</button>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">{{ $t('envConfig.sites.hint') }}</p>
+        <div v-for="(site, idx) in sites" :key="idx" class="mb-4 p-3 border border-slate-200 dark:border-slate-800 rounded-lg space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.id') }}</label>
+              <input v-model="site.id" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.serverName') }}</label>
+              <input v-model="site.server_name" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.php') }}</label>
+              <CustomSelect :modelValue="site.php_service" :options="phpSiteOptions" @change="(value) => site.php_service = String(value)" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.nginx') }}</label>
+              <CustomSelect :modelValue="site.nginx_service" :options="nginxSiteOptions" @change="(value) => site.nginx_service = String(value)" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.hostPath') }}</label>
+              <div class="flex gap-2">
+                <input v-model="site.host_path" type="text" placeholder="./www" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="button" @click="browseSiteDir(idx)" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.browse') }}</button>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.sites.hostPathHint') }}</p>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.publicDir') }}</label>
+              <div class="flex gap-2">
+                <input v-model="site.public_dir" type="text" placeholder="public" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                <button type="button" @click="browsePublicDir(idx)" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.browse') }}</button>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.sites.publicDirHint') }}</p>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-500 font-mono">{{ siteDerived(site, idx).env_key }} → {{ siteDerived(site, idx).container_path }} · {{ $t('envConfig.sites.nginxRoot', { root: nginxRootOf(site, idx) }) }}</p>
+          <div class="flex justify-end" v-if="sites.length > 1">
+            <button @click="removeSite(idx)" class="text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.sites.remove') }}</button>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-500">{{ $t('envConfig.sites.defaultNote') }}</p>
+      </section>
+
       <!-- General Settings -->
       <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('envConfig.general.title') }}</h2>
@@ -1178,9 +1331,13 @@ const goToMirrorSettings = () => {
               class="w-full bg-slate-100 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 cursor-not-allowed"
             />
           </div>
-          <div>
+          <div v-if="nginxServices.length === 0">
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.sourceDir') }}</label>
-            <input v-model="sourceDir" type="text" placeholder="./www" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+            <div class="flex gap-2">
+              <input v-model="sourceDir" type="text" placeholder="./www" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+              <button type="button" @click="browseSourceDir" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.general.browse') }}</button>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.general.sourceDirHint') }}</p>
           </div>
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.timezone') }}</label>

@@ -3,8 +3,8 @@ import { ref, computed, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
-import type { RestorePreview, RestoreProgress, RestoreResult } from '../types/env-config';
-import { previewRestore, verifyBackup, executeRestore, normalizeError } from '../api';
+import type { ManifestSite, RestorePreview, RestoreProgress, RestoreResult, SitePathOverride } from '../types/env-config';
+import { previewRestore, verifyBackup, executeRestore, normalizeMountPath, normalizeError } from '../api';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 
@@ -20,6 +20,7 @@ const loading = ref(false);
 const progress = ref<RestoreProgress | null>(null);
 // U2: 恢复结果明细（已恢复文件 / 错误列表 / 回滚包路径）
 const restoreResult = ref<RestoreResult | null>(null);
+const siteRemaps = ref<SitePathOverride[]>([]);
 
 /// 无任何文件恢复成功的失败视为「致命失败」（含引擎直接 Err 的结构化包装）
 const isFatalRestoreFailure = computed(() => {
@@ -59,8 +60,46 @@ function resetSteps() {
 const canRestore = computed(() => {
   if (!preview.value) return false;
   if (verified.value !== true) return false;
-  return true;
+  return !absoluteRemapPending.value;
 });
+
+const manifestSites = computed<ManifestSite[]>(() => preview.value?.manifest.sites ?? []);
+
+const absoluteRemapPending = computed(() =>
+  manifestSites.value.some(site => {
+    if (site.kind !== 'absolute') return false;
+    const remap = siteRemaps.value.find(item => item.env_key === site.env_key);
+    if (!remap) return true;
+    return !remap.skipped && !remap.host_path.trim();
+  })
+);
+
+function initSiteRemaps() {
+  siteRemaps.value = manifestSites.value.map(site => ({
+    env_key: site.env_key,
+    host_path: site.kind === 'absolute' ? '' : site.host_path,
+    skipped: false,
+  }));
+}
+
+function remapFor(envKey: string): SitePathOverride | undefined {
+  return siteRemaps.value.find(item => item.env_key === envKey);
+}
+
+async function browseRemap(envKey: string) {
+  const selected = await open({ directory: true, multiple: false });
+  if (!selected || Array.isArray(selected)) return;
+  try {
+    const path = await normalizeMountPath(selected);
+    const remap = remapFor(envKey);
+    if (remap) {
+      remap.host_path = path;
+      remap.skipped = false;
+    }
+  } catch (e) {
+    showToast(normalizeError(e), 'error');
+  }
+}
 
 const isStepCompleted = (step: RestoreStep) => completedSteps.value.has(step);
 const isStepActive = (step: RestoreStep) => currentStep.value === step;
@@ -110,6 +149,7 @@ async function handlePreview() {
   loading.value = true;
   try {
     preview.value = await previewRestore(zipPath.value);
+    initSiteRemaps();
     markStepCompleted('preview');
     showToast(t('restore.toast.previewDone'), 'success');
   } catch (e) {
@@ -158,7 +198,7 @@ async function handleRestore() {
 
   try {
     // 成功 / 部分失败 / 致命失败均返回 RestoreResult，明细进结果面板
-    const result = await executeRestore(zipPath.value);
+    const result = await executeRestore(zipPath.value, siteRemaps.value);
     restoreResult.value = result;
 
     if (result.success) {
@@ -340,6 +380,47 @@ function formatTimestamp(ts: string): string {
                 </div>
               </div>
 
+              <div
+                v-if="manifestSites.length > 0"
+                data-testid="site-remaps"
+                class="mb-4 p-3 border border-slate-200 dark:border-slate-700 rounded-lg space-y-3"
+              >
+                <div class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ $t('restore.preview.sites') }}</div>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{{ $t('restore.preview.sitesHint') }}</p>
+                <div v-for="site in manifestSites" :key="site.env_key" class="space-y-1">
+                  <div class="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    {{ site.server_name }} · {{ site.kind === 'absolute' ? $t('restore.preview.kindAbsolute') : $t('restore.preview.kindRelative') }}
+                  </div>
+                  <p v-if="site.public_dir" class="text-[11px] text-slate-500">
+                    {{ $t('restore.preview.publicDir', { dir: site.public_dir }) }}
+                  </p>
+                  <p v-if="site.kind === 'absolute'" class="text-[11px] text-slate-500">
+                    {{ $t('restore.preview.absoluteHint', { path: site.host_path, os: preview.manifest.os_info }) }}
+                  </p>
+                  <p v-else class="text-[11px] text-slate-500">{{ $t('restore.preview.relativeHint') }}</p>
+                  <div class="flex gap-2">
+                    <input
+                      :value="remapFor(site.env_key)?.host_path ?? ''"
+                      @input="(event) => { const remap = remapFor(site.env_key); if (remap) remap.host_path = (event.target as HTMLInputElement).value }"
+                      type="text"
+                      class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono"
+                    />
+                    <button type="button" @click="browseRemap(site.env_key)" class="shrink-0 px-3 py-2 text-xs ui-btn-soft rounded-lg">
+                      {{ $t('restore.preview.browse') }}
+                    </button>
+                  </div>
+                  <label v-if="site.kind === 'absolute'" class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                    <input
+                      type="checkbox"
+                      class="accent-blue-500"
+                      :checked="remapFor(site.env_key)?.skipped ?? false"
+                      @change="(event) => { const remap = remapFor(site.env_key); if (remap) remap.skipped = (event.target as HTMLInputElement).checked }"
+                    />
+                    {{ $t('restore.preview.skip') }}
+                  </label>
+                </div>
+              </div>
+
               <div v-if="preview.manifest.errors.length > 0" class="mb-4 p-3 ui-hint-box rounded-lg">
                 <div class="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">{{ $t('restore.preview.warnings') }}</div>
                 <div v-for="err in preview.manifest.errors" :key="err" class="text-xs text-blue-600 dark:text-blue-300">{{ err }}</div>
@@ -404,6 +485,7 @@ function formatTimestamp(ts: string): string {
               </button>
               <div v-if="!canRestore && !restoring" class="mt-3 text-xs text-center text-slate-500 dark:text-slate-500">
                 <span v-if="verified === false">{{ $t('restore.restoreAction.verifyFailed') }}</span>
+                <span v-else-if="absoluteRemapPending">{{ $t('restore.preview.required') }}</span>
               </div>
             </div>
 

@@ -61,6 +61,7 @@ pub fn verify_backup(zip_path: String) -> Result<bool, String> {
 #[tauri::command]
 pub async fn execute_restore(
     zip_path: String,
+    path_overrides: Vec<crate::engine::restore_engine::SitePathOverride>,
     app_handle: tauri::AppHandle,
 ) -> Result<RestoreResult, String> {
     let project_root = get_project_root()?;
@@ -68,18 +69,20 @@ pub async fn execute_restore(
     // R2: 恢复是逐文件覆盖的破坏性操作，开始前先打一份回滚包
     let rollback_path = create_rollback_bundle(&project_root).await;
 
-    let mut result = match RestoreEngine::restore(&zip_path, &project_root, Some(&app_handle)).await
-    {
-        Ok(r) => r,
-        // 致命错误也结构化返回：前端可渲染错误面板 + 回滚快捷入口，
-        // 不再把多行文案塞进 toast。
-        Err(e) => RestoreResult {
-            success: false,
-            restored_files: Vec::new(),
-            errors: vec![e],
-            rollback_path: None,
-        },
-    };
+    let mut result =
+        match RestoreEngine::restore(&zip_path, &project_root, Some(&app_handle), &path_overrides)
+            .await
+        {
+            Ok(r) => r,
+            // 致命错误也结构化返回：前端可渲染错误面板 + 回滚快捷入口，
+            // 不再把多行文案塞进 toast。
+            Err(e) => RestoreResult {
+                success: false,
+                restored_files: Vec::new(),
+                errors: vec![e],
+                rollback_path: None,
+            },
+        };
 
     result.rollback_path = rollback_path;
     Ok(result)
@@ -105,6 +108,7 @@ async fn create_rollback_bundle(project_root: &std::path::Path) -> Option<String
         include_projects: false,
         project_patterns: Vec::new(),
         include_logs: false,
+        site_ids: Vec::new(),
     };
 
     match BackupEngine::create_backup(&save_path.to_string_lossy(), options, project_root, None)
@@ -128,6 +132,26 @@ async fn create_rollback_bundle(project_root: &std::path::Path) -> Option<String
             None
         }
     }
+}
+
+/// 将用户点选的目录收成挂载路径：工作区内为 `./相对路径`，其他盘保留绝对路径。
+#[tauri::command]
+pub fn normalize_mount_path(absolute_path: String) -> Result<String, String> {
+    let project_root = get_project_root()?;
+    Ok(
+        crate::engine::site_manager::normalize_mount_against_workspace(
+            &absolute_path,
+            &project_root,
+        ),
+    )
+}
+
+/// 把点选的对外目录收成相对挂载目录的子路径。同一目录返回空字符串。
+#[tauri::command]
+pub fn relative_public_dir(mount_path: String, public_path: String) -> Result<String, String> {
+    let project_root = get_project_root()?;
+    let mount = crate::engine::site_manager::resolve_host_path(&project_root, &mount_path);
+    crate::engine::site_manager::public_subdir(&mount.to_string_lossy(), &public_path)
 }
 
 /// 将绝对路径转换为相对于项目根目录的路径

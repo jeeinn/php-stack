@@ -23,6 +23,7 @@ fn sample_config() -> EnvConfig {
         source_dir: "./www".to_string(),
         timezone: "Asia/Shanghai".to_string(),
         mysql_root_password: None,
+        sites: vec![],
     }
 }
 

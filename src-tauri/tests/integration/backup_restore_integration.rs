@@ -29,6 +29,7 @@ async fn test_backup_and_restore_workflow() {
         include_projects: false,
         project_patterns: vec![],
         include_logs: false,
+        site_ids: vec![],
     };
 
     let backup_result = BackupEngine::create_backup(
@@ -52,6 +53,7 @@ async fn test_backup_and_restore_workflow() {
         backup_path.to_str().unwrap(),
         &restore_workspace,
         None, // No app handle in tests
+        &[],
     )
     .await;
 
@@ -85,6 +87,7 @@ async fn test_backup_with_database_export() {
         include_projects: false,
         project_patterns: vec![],
         include_logs: false,
+        site_ids: vec![],
     };
 
     let backup_result = BackupEngine::create_backup(

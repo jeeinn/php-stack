@@ -6,6 +6,8 @@ use std::path::Path;
 
 use super::backup_engine::BackupEngine;
 use super::backup_manifest::{check_manifest_version, BackupManifest};
+use super::env_parser::EnvFile;
+use super::site_manager::{self, ManifestSite};
 
 /// 恢复预览信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +33,16 @@ pub struct RestoreProgress {
     pub percentage: u8,
 }
 
-/// 恢复结果
+/// 恢复时用户为每个站点指定的新宿主机路径。
+///
+/// `skipped` 为真表示明确留空，允许继续恢复，但不会把源码解到该路径。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SitePathOverride {
+    pub env_key: String,
+    pub host_path: String,
+    #[serde(default)]
+    pub skipped: bool,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoreResult {
     pub success: bool,
@@ -156,6 +167,111 @@ where
     conflicts
 }
 
+/// 旧备份没有 `sites` 时，用 `.env` 的 `SOURCE_DIR` 合成一条默认站。
+fn fill_missing_sites(manifest: &mut BackupManifest, env_text: Option<&str>) {
+    if !manifest.sites.is_empty() {
+        return;
+    }
+    let host = env_text
+        .and_then(|text| EnvFile::parse(text).ok())
+        .and_then(|env| {
+            env.get(site_manager::PRIMARY_ENV_KEY)
+                .map(|value| value.to_string())
+        })
+        .unwrap_or_else(|| "./www".to_string());
+    manifest.sites = vec![site_manager::synthetic_site(&host)];
+}
+
+fn read_entry_string<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    name: &str,
+) -> Option<String> {
+    let mut file = archive.by_name(name).ok()?;
+    let mut text = String::new();
+    file.read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
+fn ensure_absolute_paths_mapped(
+    sites: &[ManifestSite],
+    overrides: &[SitePathOverride],
+) -> Result<(), String> {
+    let missing: Vec<String> = sites
+        .iter()
+        .filter(|site| site.kind == site_manager::KIND_ABSOLUTE)
+        .filter(
+            |site| match overrides.iter().find(|item| item.env_key == site.env_key) {
+                Some(item) if item.skipped => false,
+                Some(item) if !item.host_path.trim().is_empty() => false,
+                _ => true,
+            },
+        )
+        .map(|site| format!("{} ({})", site.server_name, site.host_path))
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "absolute site paths must be remapped before restore: {}",
+            missing.join(", ")
+        ))
+    }
+}
+
+fn apply_path_overrides(project_root: &Path, overrides: &[SitePathOverride]) -> Result<(), String> {
+    if overrides.is_empty() {
+        return Ok(());
+    }
+    let path = project_root.join(".env");
+    if !path.exists() {
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("failed to read .env: {e}"))?;
+    let mut env = EnvFile::parse(&text).map_err(|e| format!("failed to parse .env: {e}"))?;
+    for item in overrides {
+        if item.skipped {
+            env.set(&item.env_key, "");
+        } else if !item.host_path.trim().is_empty() {
+            env.set(
+                &item.env_key,
+                &site_manager::normalize_host_path(&item.host_path),
+            );
+        }
+    }
+    std::fs::write(&path, env.format()).map_err(|e| format!("failed to write remapped .env: {e}"))
+}
+
+fn warn_missing_absolute_dirs(
+    sites: &[ManifestSite],
+    overrides: &[SitePathOverride],
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for site in sites
+        .iter()
+        .filter(|site| site.kind == site_manager::KIND_ABSOLUTE)
+    {
+        let Some(item) = overrides.iter().find(|item| item.env_key == site.env_key) else {
+            continue;
+        };
+        if item.skipped || item.host_path.trim().is_empty() {
+            warnings.push(format!(
+                "site {} path left empty; source files were not extracted",
+                site.id
+            ));
+            continue;
+        }
+        if site_manager::is_absolute_host_path(&item.host_path)
+            && !Path::new(&item.host_path).exists()
+        {
+            warnings.push(format!(
+                "site {} directory does not exist and was not created: {}",
+                site.id, item.host_path
+            ));
+        }
+    }
+    warnings
+}
+
 impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
@@ -169,8 +285,10 @@ impl RestoreEngine {
         validate_archive_entry_names(&mut archive)?;
 
         // Read manifest.json
-        let manifest = Self::read_manifest_from_archive(&mut archive)?;
+        let mut manifest = Self::read_manifest_from_archive(&mut archive)?;
         check_manifest_version(&manifest.version)?;
+        let env_text = read_entry_string(&mut archive, ".env");
+        fill_missing_sites(&mut manifest, env_text.as_deref());
 
         // Count total files in ZIP (excluding manifest.json itself)
         let file_count = (0..archive.len())
@@ -228,6 +346,7 @@ impl RestoreEngine {
         zip_path: &str,
         project_root: &Path,
         app_handle: Option<&tauri::AppHandle>,
+        path_overrides: &[SitePathOverride],
     ) -> Result<RestoreResult, String> {
         let mut restored_files: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
@@ -242,13 +361,22 @@ impl RestoreEngine {
 
         // Step 1: Read manifest
         Self::emit_progress(app_handle, "restore.progress.steps.parsing", 5);
-        let manifest = Self::read_manifest_from_archive(&mut archive)?;
+        let mut manifest = Self::read_manifest_from_archive(&mut archive)?;
         check_manifest_version(&manifest.version)?;
+        let env_text = read_entry_string(&mut archive, ".env");
+        fill_missing_sites(&mut manifest, env_text.as_deref());
+        ensure_absolute_paths_mapped(&manifest.sites, path_overrides)?;
 
         // Step 2: Extract .env
         Self::emit_progress(app_handle, "restore.progress.steps.envConfig", 15);
         match Self::restore_env_file(&mut archive, project_root) {
-            Ok(()) => restored_files.push(".env".to_string()),
+            Ok(()) => {
+                restored_files.push(".env".to_string());
+                if let Err(e) = apply_path_overrides(project_root, path_overrides) {
+                    errors.push(e);
+                }
+                errors.extend(warn_missing_absolute_dirs(&manifest.sites, path_overrides));
+            }
             Err(e) => errors.push(format!("failed to restore .env: {e}")),
         }
 
@@ -297,6 +425,15 @@ impl RestoreEngine {
             }
         }
 
+        // .user_sites.json - 站点定义（不含宿主机路径）
+        if let Ok(()) = Self::extract_file_to_path(
+            &mut archive,
+            site_manager::SITES_FILE_NAME,
+            &project_root.join(site_manager::SITES_FILE_NAME),
+        ) {
+            restored_files.push(site_manager::SITES_FILE_NAME.to_string());
+        }
+
         // Step 5: Extract vhosts/ to services/nginx/conf.d/
         Self::emit_progress(app_handle, "restore.progress.steps.vhost", 55);
         match Self::extract_prefix(
@@ -308,13 +445,21 @@ impl RestoreEngine {
             Err(e) => errors.push(format!("failed to restore vhosts/: {e}")),
         }
 
-        // Step 6: Extract projects/ to project_root (paths are already relative to project_root)
+        // Step 6: 工作区外站点解到用户新选的目录；其余 projects/ 仍解到工作区。
         Self::emit_progress(app_handle, "restore.progress.steps.projectFiles", 70);
-        if !manifest.options.project_patterns.is_empty() {
-            // 备份时已经将文件路径存储为相对于 project_root 的路径
-            // 例如："www/test/index.php" → ZIP 中为 "projects/www/test/index.php"
-            // 恢复时直接提取到 project_root 即可
-            match Self::extract_prefix(&mut archive, "projects/", project_root) {
+        let pack_projects =
+            !manifest.options.project_patterns.is_empty() || !manifest.options.site_ids.is_empty();
+        if pack_projects {
+            match Self::restore_external_site_files(&mut archive, &manifest.sites, path_overrides) {
+                Ok(files) => restored_files.extend(files),
+                Err(e) => errors.push(e),
+            }
+            match Self::extract_prefix_excluding(
+                &mut archive,
+                "projects/",
+                project_root,
+                &["projects/sites/"],
+            ) {
                 Ok(files) => restored_files.extend(files),
                 Err(e) => errors.push(format!("failed to restore project files: {e}")),
             }
@@ -431,6 +576,76 @@ impl RestoreEngine {
         }
 
         Ok(extracted)
+    }
+
+    /// 与 [`extract_prefix`] 相同，但跳过指定前缀（用于把 `projects/sites/` 留给站点重映射）。
+    fn extract_prefix_excluding<R: Read + std::io::Seek>(
+        archive: &mut zip::ZipArchive<R>,
+        prefix: &str,
+        target_dir: &Path,
+        exclude_prefixes: &[&str],
+    ) -> Result<Vec<String>, String> {
+        let mut extracted = Vec::new();
+        let matching_entries: Vec<(usize, String)> = (0..archive.len())
+            .filter_map(|i| {
+                let file = archive.by_index(i).ok()?;
+                let name = file.name().to_string();
+                if !name.starts_with(prefix) || name.len() <= prefix.len() || name.ends_with('/') {
+                    return None;
+                }
+                if exclude_prefixes.iter().any(|skip| name.starts_with(skip)) {
+                    return None;
+                }
+                Some((i, name))
+            })
+            .collect();
+
+        for (idx, name) in matching_entries {
+            let relative = &name[prefix.len()..];
+            let target_path = target_dir.join(relative);
+            let mut zip_file = archive
+                .by_index(idx)
+                .map_err(|e| format!("failed to read ZIP entry '{name}': {e}"))?;
+            let mut content = Vec::new();
+            zip_file
+                .read_to_end(&mut content)
+                .map_err(|e| format!("failed to read file content '{name}': {e}"))?;
+            if let Some(parent) = target_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("failed to create directory '{}': {}", parent.display(), e)
+                })?;
+            }
+            std::fs::write(&target_path, &content)
+                .map_err(|e| format!("failed to write file '{}': {}", target_path.display(), e))?;
+            extracted.push(name);
+        }
+        Ok(extracted)
+    }
+
+    fn restore_external_site_files<R: Read + std::io::Seek>(
+        archive: &mut zip::ZipArchive<R>,
+        sites: &[ManifestSite],
+        overrides: &[SitePathOverride],
+    ) -> Result<Vec<String>, String> {
+        let mut restored = Vec::new();
+        for site in sites
+            .iter()
+            .filter(|site| site.kind == site_manager::KIND_ABSOLUTE)
+        {
+            let Some(item) = overrides.iter().find(|item| item.env_key == site.env_key) else {
+                continue;
+            };
+            if item.skipped
+                || item.host_path.trim().is_empty()
+                || !Path::new(&item.host_path).is_dir()
+            {
+                continue;
+            }
+            let prefix = format!("{}/", site_manager::site_zip_prefix(site));
+            let files = Self::extract_prefix(archive, &prefix, Path::new(&item.host_path))?;
+            restored.extend(files);
+        }
+        Ok(restored)
     }
 
     /// Restore .env file from backup.
@@ -558,6 +773,7 @@ mod tests {
             malicious_zip.to_str().unwrap(),
             &restore_dir,
             None,
+            &[],
         ));
 
         assert!(result.is_err(), "含路径遍历条目的备份包必须被拒绝");
@@ -649,7 +865,7 @@ mod tests {
             FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
 
         // Add .env
-        let env_content = b"PHP82_VERSION=8.2.27\nMYSQL_HOST_PORT=3306\nSOURCE_DIR=/projects\n";
+        let env_content = b"PHP82_VERSION=8.2.27\nMYSQL_HOST_PORT=3306\nSOURCE_DIR=./www\n";
         zip.start_file(".env", zip_options).unwrap();
         zip.write_all(env_content).unwrap();
         let env_hash = BackupEngine::compute_sha256(env_content);
@@ -710,9 +926,11 @@ mod tests {
                 include_projects: false,
                 project_patterns: Vec::new(),
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             files,
             errors: Vec::new(),
+            sites: Vec::new(),
         };
 
         let manifest_json = manifest.serialize().expect("序列化 manifest 失败");
@@ -773,9 +991,11 @@ mod tests {
                 include_projects: true,
                 project_patterns: vec!["www/test/**".to_string(), "www/readme.md".to_string()],
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             files,
             errors: Vec::new(),
+            sites: Vec::new(),
         };
 
         let manifest_json = manifest.serialize().expect("序列化 manifest 失败");
@@ -837,9 +1057,11 @@ mod tests {
                 include_projects: false,
                 project_patterns: Vec::new(),
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             files: HashMap::new(),
             errors: Vec::new(),
+            sites: Vec::new(),
         };
 
         // 3306/6379/3307 视为占用；建议应跳过这些并互不重复
@@ -903,9 +1125,11 @@ mod tests {
                 include_projects: false,
                 project_patterns: Vec::new(),
                 include_logs: false,
+                site_ids: Vec::new(),
             },
             files,
             errors: Vec::new(),
+            sites: Vec::new(),
         };
 
         let manifest_json = manifest.serialize().expect("序列化 manifest 失败");
@@ -928,7 +1152,7 @@ mod tests {
         fs::create_dir_all(&restore_dir).expect("创建恢复目录失败");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None));
+        let result = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None, &[]));
 
         let restore_result = result.expect("恢复操作失败");
         assert!(
@@ -1014,7 +1238,7 @@ mod tests {
         fs::create_dir_all(&restore_dir).expect("创建恢复目录失败");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None));
+        let result = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None, &[]));
 
         let restore_result = result.expect("恢复操作失败");
         assert!(
@@ -1045,5 +1269,99 @@ mod tests {
             index_content.contains("Hello World"),
             "index.php should contain correct content"
         );
+    }
+
+    #[test]
+    fn absolute_site_requires_remap_and_extracts_outside_workspace() {
+        let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let backup_path = tmp_dir.path().join("sites.zip");
+        let file = fs::File::create(&backup_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let zip_options =
+            FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+
+        let env_content = b"SOURCE_DIR=./www\nSITE_SHOP=D:/old/shop\n";
+        zip.start_file(".env", zip_options).unwrap();
+        zip.write_all(env_content).unwrap();
+        let env_hash = BackupEngine::compute_sha256(env_content);
+
+        zip.start_file("docker-compose.yml", zip_options).unwrap();
+        zip.write_all(b"name: php-stack\nservices: {}\n").unwrap();
+        let compose_hash = BackupEngine::compute_sha256(b"name: php-stack\nservices: {}\n");
+
+        let index = b"<?php echo 'shop';\n";
+        zip.start_file("projects/sites/shop/index.php", zip_options)
+            .unwrap();
+        zip.write_all(index).unwrap();
+        let index_hash = BackupEngine::compute_sha256(index);
+
+        let mut files = HashMap::new();
+        files.insert(".env".to_string(), env_hash);
+        files.insert("docker-compose.yml".to_string(), compose_hash);
+        files.insert("projects/sites/shop/index.php".to_string(), index_hash);
+
+        let manifest = BackupManifest {
+            version: "1.0.0".to_string(),
+            timestamp: "2025-01-15T10:30:00+08:00".to_string(),
+            app_version: "0.1.0".to_string(),
+            os_info: "windows".to_string(),
+            services: Vec::new(),
+            options: BackupOptions {
+                include_projects: true,
+                project_patterns: Vec::new(),
+                include_logs: false,
+                site_ids: vec!["shop".to_string()],
+            },
+            files,
+            errors: Vec::new(),
+            sites: vec![crate::engine::site_manager::ManifestSite {
+                id: "shop".to_string(),
+                env_key: "SITE_SHOP".to_string(),
+                container_path: "/sites/shop".to_string(),
+                host_path: "D:/old/shop".to_string(),
+                kind: "absolute".to_string(),
+                server_name: "shop.test".to_string(),
+                public_dir: String::new(),
+            }],
+        };
+        let manifest_json = manifest.serialize().unwrap();
+        zip.start_file("manifest.json", zip_options).unwrap();
+        zip.write_all(manifest_json.as_bytes()).unwrap();
+        zip.finish().unwrap();
+
+        let zip_path = backup_path.to_str().unwrap().to_string();
+        let restore_dir = tmp_dir.path().join("workspace");
+        fs::create_dir_all(&restore_dir).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let blocked = rt.block_on(RestoreEngine::restore(&zip_path, &restore_dir, None, &[]));
+        let blocked = blocked.expect_err("未映射绝对路径时必须拒绝恢复");
+        assert!(
+            blocked.contains("absolute site paths"),
+            "实际错误: {blocked}"
+        );
+        assert!(!restore_dir.join(".env").exists(), "拒绝恢复时不应写入文件");
+
+        let new_root = tmp_dir.path().join("new-shop");
+        fs::create_dir_all(&new_root).unwrap();
+        let overrides = vec![SitePathOverride {
+            env_key: "SITE_SHOP".to_string(),
+            host_path: new_root.to_string_lossy().replace('\\', "/"),
+            skipped: false,
+        }];
+        let restored = rt
+            .block_on(RestoreEngine::restore(
+                &zip_path,
+                &restore_dir,
+                None,
+                &overrides,
+            ))
+            .expect("映射后应恢复成功");
+        assert!(restored.success, "errors: {:?}", restored.errors);
+        assert!(new_root.join("index.php").exists());
+        assert!(!restore_dir.join("sites").exists());
+        let env = fs::read_to_string(restore_dir.join(".env")).unwrap();
+        assert!(env.contains("SITE_SHOP="));
+        assert!(!env.contains("D:/old/shop"));
     }
 }

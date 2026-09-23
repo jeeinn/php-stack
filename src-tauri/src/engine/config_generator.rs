@@ -7,6 +7,7 @@ use zip::write::FileOptions;
 use super::config_extractor::{ConfigExtractor, ExtractOutcome};
 use super::env_parser::EnvFile;
 use super::mirror_config_manager::UserMirrorConfig;
+use super::site_manager::{self, SiteEntry};
 use super::user_override_manager::UserOverrideManager;
 use super::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::app_log;
@@ -33,6 +34,9 @@ pub struct EnvConfig {
     pub source_dir: String,
     pub timezone: String,
     pub mysql_root_password: Option<String>, // MySQL root密码（可选）
+    /// 启用 Nginx 时的站点清单。空列表保持单一 `SOURCE_DIR` → `/www` 挂载。
+    #[serde(default)]
+    pub sites: Vec<SiteEntry>,
 }
 
 pub struct ConfigGenerator;
@@ -133,7 +137,39 @@ impl ConfigGenerator {
             }
         }
 
+        let mut sites = config.sites.clone();
+        site_manager::normalize_sites(&mut sites);
+        if !sites.is_empty() {
+            let php_dirs = Self::service_dirs(config, &manifest, ServiceType::PHP);
+            let nginx_dirs = Self::service_dirs(config, &manifest, ServiceType::Nginx);
+            site_manager::validate_sites(&sites, &php_dirs, &nginx_dirs)?;
+        }
+
         Ok(())
+    }
+
+    fn service_dirs(
+        config: &EnvConfig,
+        manifest: &VersionManifest,
+        kind: ServiceType,
+    ) -> Vec<String> {
+        let vm_type = match kind {
+            ServiceType::PHP => VmServiceType::Php,
+            ServiceType::MySQL => VmServiceType::Mysql,
+            ServiceType::Redis => VmServiceType::Redis,
+            ServiceType::Nginx => VmServiceType::Nginx,
+        };
+        config
+            .services
+            .iter()
+            .filter(|service| service.service_type == kind)
+            .map(|service| {
+                manifest
+                    .get_entry(&vm_type, &service.version)
+                    .map(|entry| entry.service_dir.clone())
+                    .unwrap_or_else(|| service.version.clone())
+            })
+            .collect()
     }
 
     /// Generate .env file content from EnvConfig.
@@ -157,8 +193,20 @@ impl ConfigGenerator {
         let manifest = VersionManifest::new();
         let override_manager = UserOverrideManager::new(project_root);
 
-        // Set global variables
-        env.set("SOURCE_DIR", &config.source_dir);
+        // Set global variables. 有站点时宿主机路径以站点为准，并清掉已删除站点的 SITE_* 键。
+        let mut sites = config.sites.clone();
+        site_manager::normalize_sites(&mut sites);
+        if sites.is_empty() {
+            env.set(
+                "SOURCE_DIR",
+                &site_manager::normalize_host_path(&config.source_dir),
+            );
+        } else {
+            site_manager::remove_stale_site_keys(&mut env, project_root, &sites);
+            for site in &sites {
+                env.set(&site.env_key, &site.host_path);
+            }
+        }
         env.set("TZ", &config.timezone);
         env.set("DATA_DIR", "./data");
 
@@ -332,6 +380,8 @@ impl ConfigGenerator {
     /// We look up the manifest entry to get `service_dir` directly, eliminating all
     /// `version.replace('.', "")`, `split('.')`, and `split('-')` calculations.
     pub fn generate_compose(config: &EnvConfig) -> String {
+        let mut sites = config.sites.clone();
+        site_manager::normalize_sites(&mut sites);
         let manifest = VersionManifest::new();
         let mut lines: Vec<String> = Vec::new();
         // Note: 'version' attribute is obsolete in modern Docker Compose, omit it
@@ -391,7 +441,11 @@ impl ConfigGenerator {
                     lines.push("    expose:".to_string());
                     lines.push("      - 9000".to_string());
                     lines.push("    volumes:".to_string());
-                    lines.push("      - ${SOURCE_DIR}:/www/:rw".to_string());
+                    lines.extend(site_manager::source_volume_lines(
+                        &sites,
+                        site_manager::MountRole::Php,
+                        &service_dir,
+                    ));
                     lines.push(format!(
                         "      - ${{{env_prefix}_PHP_CONF_FILE}}:/usr/local/etc/php/php.ini"
                     ));
@@ -465,7 +519,11 @@ impl ConfigGenerator {
                     lines.push("    ports:".to_string());
                     lines.push(format!("      - \"${{{env_prefix}_HTTP_HOST_PORT}}:80\""));
                     lines.push("    volumes:".to_string());
-                    lines.push("      - ${SOURCE_DIR}:/www/:rw".to_string());
+                    lines.extend(site_manager::source_volume_lines(
+                        &sites,
+                        site_manager::MountRole::Nginx,
+                        &service_dir,
+                    ));
                     lines.push(format!(
                         "      - ${{{env_prefix}_CONF_FILE}}:/etc/nginx/nginx.conf"
                     ));
@@ -1192,6 +1250,11 @@ impl ConfigGenerator {
         // Create directory structure
         Self::generate_service_dirs(config, project_root)?;
 
+        let mut sites = config.sites.clone();
+        site_manager::normalize_sites(&mut sites);
+        site_manager::save_sites(project_root, &sites)?;
+        site_manager::sync_managed_confs(project_root, &sites)?;
+
         // Generate .npmrc file in workspace path if NPM mirror is configured
         let npm_mirror = env_file.get("NPM_MIRROR").unwrap_or("");
         if !npm_mirror.is_empty() && npm_mirror != "https://registry.npmjs.org" {
@@ -1250,6 +1313,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
+            sites: vec![],
         }
     }
 
@@ -1317,6 +1381,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
+            sites: vec![],
         };
         let result = ConfigGenerator::validate(&config);
         assert!(result.is_err());
@@ -1378,6 +1443,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
+            sites: vec![],
         };
 
         let env =
@@ -1412,6 +1478,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
+            sites: vec![],
         };
 
         let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());
@@ -1469,6 +1536,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
+            sites: vec![],
         };
 
         let compose = ConfigGenerator::generate_compose(&config);
@@ -1499,6 +1567,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: Some("mypassword123".to_string()),
+            sites: vec![],
         };
 
         let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());
@@ -1520,6 +1589,7 @@ mod tests {
             source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
+            sites: vec![],
         };
 
         let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());

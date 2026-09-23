@@ -2,6 +2,7 @@ use super::get_project_root;
 use crate::docker::manager::DockerManager;
 use crate::engine::config_extractor::{ConfigExtractor, ExtractOutcome, ImageStatus};
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
+use crate::engine::site_manager;
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 
 /// 单个镜像拉取结果（前端"待拉取"确认弹窗使用）
@@ -297,6 +298,7 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
         source_dir,
         timezone,
         mysql_root_password,
+        sites: site_manager::load_sites_with_hosts(&project_root, &env_file),
     }))
 }
 

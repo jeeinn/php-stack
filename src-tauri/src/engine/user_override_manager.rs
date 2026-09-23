@@ -39,8 +39,8 @@ impl UserOverrideManager {
     fn load_user_overrides(
         project_root: &Path,
     ) -> HashMap<ServiceType, HashMap<String, UserVersionOverride>> {
-        // 使用 project_root 作为配置文件存放位置（与 .env 同级）
-        let overrides_path = project_root.join(".user_version_overrides.json");
+        let overrides_path =
+            super::user_config::path(project_root, super::user_config::VERSION_OVERRIDES);
 
         if !overrides_path.exists() {
             app_log!(
@@ -168,8 +168,9 @@ impl UserOverrideManager {
             .or_default()
             .insert(id, override_config);
 
-        // 序列化并保存到文件（与 .env 同级目录）
-        let overrides_path = project_root.join(".user_version_overrides.json");
+        super::user_config::ensure_dir(project_root)?;
+        let overrides_path =
+            super::user_config::path(project_root, super::user_config::VERSION_OVERRIDES);
         let json = serde_json::to_string_pretty(&self.user_overrides)
             .map_err(|e| format!("serialize failed: {e}"))?;
 
@@ -189,8 +190,9 @@ impl UserOverrideManager {
             entries.remove(id);
         }
 
-        // 重新保存（与 .env 同级目录）
-        let overrides_path = project_root.join(".user_version_overrides.json");
+        super::user_config::ensure_dir(project_root)?;
+        let overrides_path =
+            super::user_config::path(project_root, super::user_config::VERSION_OVERRIDES);
         let json = serde_json::to_string_pretty(&self.user_overrides)
             .map_err(|e| format!("serialize failed: {e}"))?;
 
@@ -203,8 +205,8 @@ impl UserOverrideManager {
     pub fn reset_all_overrides(&mut self, project_root: &Path) -> Result<(), String> {
         self.user_overrides.clear();
 
-        // 删除配置文件（与 .env 同级目录）
-        let overrides_path = project_root.join(".user_version_overrides.json");
+        let overrides_path =
+            super::user_config::path(project_root, super::user_config::VERSION_OVERRIDES);
         if overrides_path.exists() {
             std::fs::remove_file(&overrides_path)
                 .map_err(|e| format!("failed to delete file: {e}"))?;

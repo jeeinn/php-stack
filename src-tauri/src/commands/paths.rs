@@ -11,7 +11,7 @@
 //! - `project_root()`：工作区目录（.env / services / 备份所在），语义不同，保持独立；
 //! - `log_file()`：日志文件路径，随 app_data_dir 走。
 //!
-//! 约定：**工作区内的文件（.env、docker-compose.yml、services/、备份包、.user_*.json）
+//! 约定：**工作区内的文件（.env、docker-compose.yml、services/、备份包、`.user-config/`）
 //! 一律原地不动**——它们本来就是"工作区"的一部分，且备份/恢复管道按项目根读写。
 //! 只有用户级配置与日志迁入 app_data_dir。
 

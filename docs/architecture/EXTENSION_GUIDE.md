@@ -107,9 +107,9 @@ cd src-tauri && cargo build
 5. 可选填写备注说明
 6. 点击"保存"
 
-### 方法 2: 手动编辑 `.user_version_overrides.json`
+### 方法 2: 手动编辑 `.user-config/version_overrides.json`
 
-在项目根目录（与 `.env` 同级）创建或编辑 `.user_version_overrides.json`：
+在工作区 `.user-config/` 目录创建或编辑 `version_overrides.json`：
 
 ```json
 {

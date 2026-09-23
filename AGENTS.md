@@ -207,7 +207,7 @@
 - 功能：持久化用户自定义镜像覆盖配置
 - 特性：
   - 按服务类型 + 版本 ID 保存/查询覆盖
-  - 配置持久化到 `.user_version_overrides.json`
+  - 配置持久化到 `.user-config/version_overrides.json`
 
 ### 10. 工作目录管理器（v0.3.0 新增）
 - 位置：`src-tauri/src/engine/workspace_manager.rs`

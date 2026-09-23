@@ -8,6 +8,7 @@ use super::backup_engine::BackupEngine;
 use super::backup_manifest::{check_manifest_version, BackupManifest};
 use super::env_parser::EnvFile;
 use super::site_manager::{self, ManifestSite};
+use super::user_config;
 
 /// 恢复预览信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -401,37 +402,19 @@ impl RestoreEngine {
         // Step 4.5: Restore user custom configuration files
         Self::emit_progress(app_handle, "restore.progress.steps.userConfig", 45);
 
-        // .user_mirror_config.json - User mirror source configuration
-        match Self::extract_file_to_path(
-            &mut archive,
-            ".user_mirror_config.json",
-            &project_root.join(".user_mirror_config.json"),
-        ) {
-            Ok(()) => restored_files.push(".user_mirror_config.json".to_string()),
-            Err(_) => {
-                // Not a critical error, file may not exist in backup
+        for file_name in [
+            user_config::MIRROR_CONFIG,
+            user_config::VERSION_OVERRIDES,
+            user_config::SITES,
+        ] {
+            let zip_name = user_config::relative(file_name);
+            if let Ok(()) = Self::extract_file_to_path(
+                &mut archive,
+                &zip_name,
+                &user_config::path(project_root, file_name),
+            ) {
+                restored_files.push(zip_name);
             }
-        }
-
-        // .user_version_overrides.json - User version override configuration
-        match Self::extract_file_to_path(
-            &mut archive,
-            ".user_version_overrides.json",
-            &project_root.join(".user_version_overrides.json"),
-        ) {
-            Ok(()) => restored_files.push(".user_version_overrides.json".to_string()),
-            Err(_) => {
-                // Not a critical error, file may not exist in backup
-            }
-        }
-
-        // .user_sites.json - 站点定义（不含宿主机路径）
-        if let Ok(()) = Self::extract_file_to_path(
-            &mut archive,
-            site_manager::SITES_FILE_NAME,
-            &project_root.join(site_manager::SITES_FILE_NAME),
-        ) {
-            restored_files.push(site_manager::SITES_FILE_NAME.to_string());
         }
 
         // Step 5: Extract vhosts/ to services/nginx/conf.d/
@@ -691,6 +674,7 @@ mod tests {
     use super::*;
     use crate::engine::backup_engine::BackupEngine;
     use crate::engine::backup_manifest::{BackupManifest, BackupOptions, ManifestService};
+    use crate::engine::user_config;
     use std::collections::HashMap;
     use std::fs;
     use std::io::Write;
@@ -886,14 +870,14 @@ mod tests {
         // Add user custom configuration files
         let user_mirror_config_content =
             b"{\"apt\":{\"source\":\"http://mirrors.aliyun.com/debian/\",\"enabled\":true}}";
-        zip.start_file(".user_mirror_config.json", zip_options)
-            .unwrap();
+        let mirror_entry = user_config::relative(user_config::MIRROR_CONFIG);
+        zip.start_file(&mirror_entry, zip_options).unwrap();
         zip.write_all(user_mirror_config_content).unwrap();
         let user_mirror_hash = BackupEngine::compute_sha256(user_mirror_config_content);
 
+        let overrides_entry = user_config::relative(user_config::VERSION_OVERRIDES);
         let user_version_overrides_content = b"{\"php\":{\"8.2\":{\"tag\":\"8.2-custom\"}}}";
-        zip.start_file(".user_version_overrides.json", zip_options)
-            .unwrap();
+        zip.start_file(&overrides_entry, zip_options).unwrap();
         zip.write_all(user_version_overrides_content).unwrap();
         let user_version_hash = BackupEngine::compute_sha256(user_version_overrides_content);
 
@@ -902,11 +886,8 @@ mod tests {
         files.insert(".env".to_string(), env_hash);
         files.insert("docker-compose.yml".to_string(), compose_hash);
         files.insert("services/php82/php.ini".to_string(), php_ini_hash);
-        files.insert(".user_mirror_config.json".to_string(), user_mirror_hash);
-        files.insert(
-            ".user_version_overrides.json".to_string(),
-            user_version_hash,
-        );
+        files.insert(mirror_entry, user_mirror_hash);
+        files.insert(overrides_entry, user_version_hash);
 
         let mut ports = HashMap::new();
         ports.insert(3306, 3306);
@@ -1018,7 +999,7 @@ mod tests {
         assert_eq!(preview.manifest.services.len(), 1);
         assert_eq!(preview.manifest.services[0].name, "mysql");
 
-        // Verify file count (5 files: .env, docker-compose.yml, services/php82/php.ini, .user_mirror_config.json, .user_version_overrides.json)
+        // Verify file count (5 files: .env, docker-compose.yml, services/php82/php.ini, mirror_config.json, version_overrides.json)
         assert_eq!(
             preview.file_count, 5,
             "Should have 5 files (excluding manifest.json), got {}",
@@ -1189,30 +1170,28 @@ mod tests {
             "php.ini should contain memory_limit"
         );
 
-        // Verify .user_mirror_config.json was restored
-        let user_mirror_path = restore_dir.join(".user_mirror_config.json");
+        let user_mirror_path = user_config::path(&restore_dir, user_config::MIRROR_CONFIG);
         assert!(
             user_mirror_path.exists(),
-            ".user_mirror_config.json should be restored"
+            ".user-config/mirror_config.json should be restored"
         );
         let user_mirror_content =
-            fs::read_to_string(&user_mirror_path).expect("读取 .user_mirror_config.json 失败");
+            fs::read_to_string(&user_mirror_path).expect("读取 mirror_config.json 失败");
         assert!(
             user_mirror_content.contains("mirrors.aliyun.com"),
-            ".user_mirror_config.json should contain mirror source"
+            "mirror_config.json should contain mirror source"
         );
 
-        // Verify .user_version_overrides.json was restored
-        let user_version_path = restore_dir.join(".user_version_overrides.json");
+        let user_version_path = user_config::path(&restore_dir, user_config::VERSION_OVERRIDES);
         assert!(
             user_version_path.exists(),
-            ".user_version_overrides.json should be restored"
+            ".user-config/version_overrides.json should be restored"
         );
         let user_version_content =
-            fs::read_to_string(&user_version_path).expect("读取 .user_version_overrides.json 失败");
+            fs::read_to_string(&user_version_path).expect("读取 version_overrides.json 失败");
         assert!(
             user_version_content.contains("8.2-custom"),
-            ".user_version_overrides.json should contain custom version tag"
+            "version_overrides.json should contain custom version tag"
         );
 
         // Verify restored_files list

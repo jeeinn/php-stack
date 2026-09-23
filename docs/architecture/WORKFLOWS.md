@@ -109,7 +109,7 @@ sequenceDiagram
 
 **备份文件格式**：
 - **命名规则**: `config_backup_YYYYMMDD_HHMMSS.zip`
-- **包含内容**: `.env`、`docker-compose.yml`、`services/`、`.user_mirror_config.json`、`.user_version_overrides.json`
+- **包含内容**: `.env`、`docker-compose.yml`、`services/`、`.user-config/mirror_config.json`、`.user-config/version_overrides.json`
 
 **v0.2.0 变更**：
 - `apply()` 始终生成全新 `.env`，不再读取现有 `.env` 进行合并
@@ -134,7 +134,7 @@ sequenceDiagram
     CG->>VM: new()
     VM->>VM: 加载 version_manifest.json
     CG->>UOM: new(project_root)
-    UOM->>UOM: 加载 .user_version_overrides.json
+    UOM->>UOM: 加载 .user-config/version_overrides.json
     CG->>UOM: get_merged_entry(&ServiceType::Mysql, "mysql84")
     UOM-->>CG: VersionEntry { image_tag: "mysql:8.4", service_dir: "mysql84", ... }
     CG->>CG: env_prefix = "MYSQL84" (service_dir.to_uppercase())
@@ -215,7 +215,7 @@ sequenceDiagram
     CMD->>VM: new()
     VM->>VM: 加载 version_manifest.json
     CMD->>UOM: new(project_root)
-    UOM->>UOM: 加载 .user_version_overrides.json
+    UOM->>UOM: 加载 .user-config/version_overrides.json
     CMD->>VM: get_available_entries(service_type)
     VM-->>CMD: Vec<(&String, &VersionEntry)>（按版本号降序）
     CMD->>CMD: 合并 has_user_override 标记
@@ -273,8 +273,9 @@ graph LR
 - `.env` — 环境变量配置
 - `docker-compose.yml` — Compose 配置
 - `services/` — 服务配置目录
-- `.user_mirror_config.json` — 用户镜像源配置（如存在）
-- `.user_version_overrides.json` — 用户版本覆盖配置（如存在）
+- `.user-config/mirror_config.json` — 用户镜像源配置（如存在）
+- `.user-config/version_overrides.json` — 用户版本覆盖配置（如存在）
+- `.user-config/sites.json` — 站点定义（如存在，不含宿主机绝对路径）
 - `database/` — 数据库导出（可选）
 - `projects/` — 项目文件（可选，glob 模式匹配）
 

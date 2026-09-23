@@ -1,7 +1,7 @@
 //! 用户自定义镜像源配置管理器
 //!
 //! 类似于 UserOverrideManager，管理用户对镜像源的自定义配置。
-//! 配置文件：.user_mirror_config.json
+//! 配置文件：`.user-config/mirror_config.json`
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -35,7 +35,7 @@ pub struct UserMirrorConfig {
 impl UserMirrorConfig {
     /// 从文件加载用户配置
     pub fn load(project_root: &Path) -> Result<Self, String> {
-        let config_path = project_root.join(".user_mirror_config.json");
+        let config_path = super::user_config::path(project_root, super::user_config::MIRROR_CONFIG);
 
         if !config_path.exists() {
             return Ok(Self::default());
@@ -50,7 +50,8 @@ impl UserMirrorConfig {
 
     /// 保存用户配置到文件
     pub fn save(&self, project_root: &Path) -> Result<(), String> {
-        let config_path = project_root.join(".user_mirror_config.json");
+        super::user_config::ensure_dir(project_root)?;
+        let config_path = super::user_config::path(project_root, super::user_config::MIRROR_CONFIG);
 
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| format!("failed to serialize user mirror config: {e}"))?;

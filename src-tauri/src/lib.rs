@@ -95,6 +95,8 @@ pub fn run() {
             commands::reset_all_mirror_overrides,
             // 备份
             commands::create_backup,
+            commands::get_backup_options,
+            commands::save_backup_options,
             commands::convert_to_relative_path,
             commands::normalize_mount_path,
             commands::relative_public_dir,

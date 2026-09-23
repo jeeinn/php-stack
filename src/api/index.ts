@@ -10,6 +10,8 @@ export {
   verifyBackup,
   executeRestore,
   createBackup,
+  getBackupOptions,
+  saveBackupOptions,
   convertToRelativePath,
   normalizeMountPath,
   relativePublicDir,

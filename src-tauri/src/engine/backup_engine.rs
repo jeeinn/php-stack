@@ -18,6 +18,63 @@ pub struct BackupProgress {
 
 pub struct BackupEngine;
 
+/// Pattern 必须相对站点根：禁止 `..`、绝对路径与盘符。
+fn is_safe_site_relative_pattern(pattern: &str) -> bool {
+    let p = pattern.trim().replace('\\', "/");
+    if p.is_empty() || p.starts_with('/') {
+        return false;
+    }
+    let bytes = p.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return false;
+    }
+    !p.split('/').any(|seg| seg == "..")
+}
+
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    let Ok(path) = path.canonicalize() else {
+        return false;
+    };
+    let Ok(root) = root.canonicalize() else {
+        return false;
+    };
+    path.starts_with(&root)
+}
+
+/// 计算相对站点根的路径（保留子目录）。失败则返回 Err，禁止扁平成文件名。
+fn site_relative_path(path: &Path, site_root: &Path) -> Result<String, String> {
+    let canon_path = path
+        .canonicalize()
+        .map_err(|e| format!("canonicalize {}: {e}", path.display()))?;
+    let canon_root = site_root
+        .canonicalize()
+        .map_err(|e| format!("canonicalize {}: {e}", site_root.display()))?;
+    let rel = canon_path.strip_prefix(&canon_root).map_err(|_| {
+        format!(
+            "path {} is not under site root {}",
+            path.display(),
+            site_root.display()
+        )
+    })?;
+    let normalized = rel.to_string_lossy().replace('\\', "/");
+    if normalized.is_empty() || normalized == "." {
+        return Err(format!("empty relative path for {}", path.display()));
+    }
+    Ok(normalized)
+}
+
+/// 无路径分隔符的 pattern（如 `*.local.php`、`.env`）自动加 `**/`，以便匹配子目录。
+fn expand_site_glob_pattern(pattern: &str) -> String {
+    let mut normalized = pattern.trim().replace('\\', "/");
+    if normalized.ends_with("/**") {
+        normalized.push_str("/*");
+    }
+    if !normalized.contains('/') {
+        normalized = format!("**/{normalized}");
+    }
+    normalized
+}
+
 impl BackupEngine {
     /// Execute complete backup flow.
     /// `app_handle` is `Option` to allow testing without Tauri runtime.
@@ -75,115 +132,16 @@ impl BackupEngine {
 
         manifest.sites = crate::engine::site_manager::collect_manifest_sites(project_root);
 
-        // Step 4: Optional — Project files (50%)
-        if options.include_projects && !options.project_patterns.is_empty() {
-            Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 60);
-            for pattern in &options.project_patterns {
-                // 将相对路径模式转换为绝对路径模式
-                let mut normalized_pattern = pattern.clone();
-
-                // 如果模式以 /** 结尾，添加 /* 以匹配文件
-                // 例如："www/AAA/**" -> "www/AAA/**/*"
-                if normalized_pattern.ends_with("/**") {
-                    normalized_pattern.push_str("/*");
-                }
-
-                let abs_pattern = if std::path::Path::new(&normalized_pattern).is_absolute() {
-                    normalized_pattern
-                } else {
-                    project_root
-                        .join(&normalized_pattern)
-                        .to_string_lossy()
-                        .replace('\\', "/")
-                };
-
-                // 记录尝试的模式（用于调试）
-                app_log!(
-                    debug,
-                    "engine::backup",
-                    "Trying glob: {} -> {}",
-                    pattern,
-                    abs_pattern
-                );
-
-                match glob(&abs_pattern) {
-                    Ok(entries) => {
-                        let mut matched_count = 0;
-                        for entry in entries {
-                            match entry {
-                                Ok(path) if path.is_file() => {
-                                    matched_count += 1;
-                                    // 计算相对于项目根目录的路径
-                                    let relative_path = pathdiff::diff_paths(&path, project_root)
-                                        .map(|p| p.to_string_lossy().replace('\\', "/"))
-                                        .unwrap_or_else(|| path.display().to_string());
-                                    let zip_path = format!("projects/{relative_path}");
-                                    app_log!(debug, "engine::backup", "Adding file: {}", zip_path);
-                                    // 流式写入：单个大文件不再整体进内存
-                                    if let Err(e) = Self::add_file_to_zip(
-                                        &mut zip,
-                                        &zip_path,
-                                        &path,
-                                        &mut manifest,
-                                    ) {
-                                        manifest.errors.push(format!(
-                                            "failed to pack project file {}: {}",
-                                            path.display(),
-                                            e
-                                        ));
-                                    }
-                                }
-                                Ok(path) => {
-                                    // 跳过目录
-                                    app_log!(debug, "engine::backup", "Skipping dir: {:?}", path);
-                                }
-                                Err(e) => {
-                                    manifest.errors.push(format!("Glob match error: {e}"));
-                                    app_log!(warn, "engine::backup", "Glob match error: {}", e);
-                                }
-                            }
-                        }
-                        app_log!(
-                            info,
-                            "engine::backup",
-                            "Pattern '{}' matched {} file(s)",
-                            pattern,
-                            matched_count
-                        );
-                    }
-                    Err(e) => {
-                        let error_msg = format!("Invalid glob '{pattern}': {e}");
-                        manifest.errors.push(error_msg.clone());
-                        app_log!(error, "engine::backup", "{}", error_msg);
-                    }
-                }
-            }
-        }
-
-        // 按站点打包源码。工作区外目录写入 projects/sites/{id}/，避免把盘符写进 ZIP 条目名。
+        // Step 4: 按所选站点打包本地文件（patterns 相对站点根，或整树）
         if options.include_projects && !options.site_ids.is_empty() {
-            Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 70);
-            for site in manifest.sites.clone() {
-                if !options.site_ids.iter().any(|id| id == &site.id) {
-                    continue;
-                }
-                let host =
-                    crate::engine::site_manager::resolve_host_path(project_root, &site.host_path);
-                if !host.is_dir() {
-                    manifest.errors.push(format!(
-                        "site {} source directory does not exist: {}",
-                        site.id,
-                        host.display()
-                    ));
-                    continue;
-                }
-                let prefix = crate::engine::site_manager::site_zip_prefix(&site);
-                if let Err(e) = Self::add_dir_to_zip(&mut zip, &host, &prefix, &mut manifest) {
-                    manifest
-                        .errors
-                        .push(format!("failed to pack site {} files: {e}", site.id));
-                }
-            }
+            Self::emit_progress(app_handle, "backup.progress.steps.projectFiles", 60);
+            Self::pack_selected_site_files(
+                &mut zip,
+                &options,
+                project_root,
+                &manifest.sites.clone(),
+                &mut manifest,
+            )?;
         }
 
         // Step 5: Optional — Recent logs (70%)
@@ -211,6 +169,126 @@ impl BackupEngine {
             .map_err(|e| format!("failed to finalize ZIP file: {e}"))?;
 
         Self::emit_progress(app_handle, "backup.progress.steps.done", 100);
+        Ok(())
+    }
+
+    /// 在各已选站点的 `host_path` 下按 pattern（或整树）收集文件。
+    fn pack_selected_site_files(
+        zip: &mut zip::ZipWriter<fs::File>,
+        options: &BackupOptions,
+        project_root: &Path,
+        sites: &[crate::engine::site_manager::ManifestSite],
+        manifest: &mut BackupManifest,
+    ) -> Result<(), String> {
+        for site in sites {
+            if !options.site_ids.iter().any(|id| id == &site.id) {
+                continue;
+            }
+            let host =
+                crate::engine::site_manager::resolve_host_path(project_root, &site.host_path);
+            if !host.is_dir() {
+                manifest.errors.push(format!(
+                    "site {} source directory does not exist: {}",
+                    site.id,
+                    host.display()
+                ));
+                continue;
+            }
+            let prefix = crate::engine::site_manager::site_zip_prefix(site);
+
+            if options.pack_full_tree {
+                if let Err(e) = Self::add_dir_to_zip(zip, &host, &prefix, manifest) {
+                    manifest
+                        .errors
+                        .push(format!("failed to pack site {} files: {e}", site.id));
+                }
+                continue;
+            }
+
+            for pattern in &options.project_patterns {
+                if !is_safe_site_relative_pattern(pattern) {
+                    manifest.errors.push(format!(
+                        "site {} rejected unsafe pattern (path escape): {pattern}",
+                        site.id
+                    ));
+                    continue;
+                }
+                let normalized = expand_site_glob_pattern(pattern);
+                let abs_pattern = host
+                    .join(&normalized)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+
+                app_log!(
+                    debug,
+                    "engine::backup",
+                    "Site {} glob: {} -> {}",
+                    site.id,
+                    pattern,
+                    abs_pattern
+                );
+
+                match glob(&abs_pattern) {
+                    Ok(entries) => {
+                        let mut matched_count = 0;
+                        for entry in entries {
+                            match entry {
+                                Ok(path) if path.is_file() => {
+                                    // 拒绝 glob 解析后仍逃出站点根的路径
+                                    if !path_is_under(&path, &host) {
+                                        manifest.errors.push(format!(
+                                            "site {} matched path escaped site root: {}",
+                                            site.id,
+                                            path.display()
+                                        ));
+                                        continue;
+                                    }
+                                    let relative = match site_relative_path(&path, &host) {
+                                        Ok(rel) => rel,
+                                        Err(e) => {
+                                            manifest.errors.push(format!(
+                                                "site {} failed to keep relative path: {e}",
+                                                site.id
+                                            ));
+                                            continue;
+                                        }
+                                    };
+                                    matched_count += 1;
+                                    // 必须保留站点内目录结构，例如 cmp/APP/Config/Config.local.php
+                                    let zip_path = format!("{prefix}/{relative}");
+                                    if let Err(e) =
+                                        Self::add_file_to_zip(zip, &zip_path, &path, manifest)
+                                    {
+                                        manifest.errors.push(format!(
+                                            "failed to pack site {} file {}: {e}",
+                                            site.id,
+                                            path.display()
+                                        ));
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(e) => {
+                                    manifest.errors.push(format!("Glob match error: {e}"));
+                                }
+                            }
+                        }
+                        app_log!(
+                            info,
+                            "engine::backup",
+                            "Site {} pattern '{}' matched {} file(s)",
+                            site.id,
+                            pattern,
+                            matched_count
+                        );
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Invalid glob '{pattern}': {e}");
+                        manifest.errors.push(error_msg.clone());
+                        app_log!(error, "engine::backup", "{}", error_msg);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -327,8 +405,14 @@ mod tests {
 
         // 约 300KB，跨越 5 个 64KB 分块
         let content: Vec<u8> = (0..300 * 1024).map(|i| (i % 251) as u8).collect();
-        let big_file = project_root.join("big.bin");
-        fs::write(&big_file, &content).expect("写入大文件失败");
+        let www = project_root.join("www");
+        fs::create_dir_all(&www).expect("创建 www 失败");
+        fs::write(www.join("big.bin"), &content).expect("写入大文件失败");
+        fs::write(
+            project_root.join(".env"),
+            "SOURCE_DIR=./www\n",
+        )
+        .expect("写入 .env 失败");
 
         let services_dir = project_root.join("services");
         fs::create_dir_all(&services_dir).expect("创建 services 失败");
@@ -342,7 +426,8 @@ mod tests {
                 include_projects: true,
                 project_patterns: vec!["big.bin".to_string()],
                 include_logs: false,
-                site_ids: Vec::new(),
+                site_ids: vec!["main".to_string()],
+                pack_full_tree: false,
             },
             project_root,
             None,
@@ -363,7 +448,7 @@ mod tests {
 
         let expected = BackupEngine::compute_sha256(&content);
         assert_eq!(
-            manifest.files.get("projects/big.bin"),
+            manifest.files.get("projects/www/big.bin"),
             Some(&expected),
             "流式写入的哈希与全量读取不一致"
         );
@@ -376,7 +461,7 @@ mod tests {
         // 内容本身也必须完整（哈希对但内容丢字节的情况要排除）
         let mut zipped = Vec::new();
         {
-            let mut entry = archive.by_name("projects/big.bin").unwrap();
+            let mut entry = archive.by_name("projects/www/big.bin").unwrap();
             entry.read_to_end(&mut zipped).unwrap();
         }
         assert_eq!(zipped.len(), content.len(), "ZIP 内文件大小不符");
@@ -452,6 +537,7 @@ mod tests {
             project_patterns: Vec::new(),
             include_logs: false,
             site_ids: Vec::new(),
+            pack_full_tree: false,
         };
 
         // Run backup synchronously (no Tauri runtime needed)
@@ -554,6 +640,7 @@ mod tests {
             project_patterns: Vec::new(),
             include_logs: false,
             site_ids: vec!["shop".to_string()],
+            pack_full_tree: true,
         };
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -593,5 +680,112 @@ mod tests {
         let manifest: BackupManifest = serde_json::from_str(&json).unwrap();
         assert_eq!(manifest.sites[0].kind, "absolute");
         assert_eq!(manifest.sites[0].id, "shop");
+    }
+
+    #[test]
+    fn packs_site_relative_patterns_only() {
+        let workspace = tempfile::tempdir().unwrap();
+        let www = workspace.path().join("www");
+        fs::create_dir_all(&www).unwrap();
+        fs::write(www.join(".env"), b"APP=1\n").unwrap();
+        fs::write(www.join("index.php"), b"<?php\n").unwrap();
+        fs::write(www.join("local.config.php"), b"<?php return [];\n").unwrap();
+        fs::write(workspace.path().join(".env"), "SOURCE_DIR=./www\n").unwrap();
+
+        let backup_path = workspace.path().join("backup.zip");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(BackupEngine::create_backup(
+            backup_path.to_str().unwrap(),
+            BackupOptions {
+                include_projects: true,
+                project_patterns: vec![".env".into(), "local.config.php".into()],
+                include_logs: false,
+                site_ids: vec!["main".into()],
+                pack_full_tree: false,
+            },
+            workspace.path(),
+            None,
+        ))
+        .expect("备份应成功");
+
+        let file = fs::File::open(&backup_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let names: Vec<String> = (0..archive.len())
+            .map(|i| archive.by_index(i).unwrap().name().to_string())
+            .collect();
+        assert!(names.iter().any(|n| n == "projects/www/.env"));
+        assert!(names.iter().any(|n| n == "projects/www/local.config.php"));
+        assert!(
+            !names.iter().any(|n| n == "projects/www/index.php"),
+            "未匹配的源码不应打进包: {names:?}"
+        );
+    }
+
+    #[test]
+    fn packs_nested_local_config_preserving_directories() {
+        let workspace = tempfile::tempdir().unwrap();
+        let www = workspace.path().join("www");
+        let nested = www.join("cmp/APP/Config");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("Config.local.php"), b"<?php return [];\n").unwrap();
+        fs::write(www.join("index.php"), b"<?php\n").unwrap();
+        fs::write(workspace.path().join(".env"), "SOURCE_DIR=./www\n").unwrap();
+
+        let backup_path = workspace.path().join("backup.zip");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(BackupEngine::create_backup(
+            backup_path.to_str().unwrap(),
+            BackupOptions {
+                include_projects: true,
+                // 无斜杠：应自动按 **/Config.local.php 递归匹配，且 ZIP 保留目录
+                project_patterns: vec!["Config.local.php".into(), "*.local.php".into()],
+                include_logs: false,
+                site_ids: vec!["main".into()],
+                pack_full_tree: false,
+            },
+            workspace.path(),
+            None,
+        ))
+        .expect("备份应成功");
+
+        let file = fs::File::open(&backup_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let names: Vec<String> = (0..archive.len())
+            .map(|i| archive.by_index(i).unwrap().name().to_string())
+            .collect();
+        assert!(
+            names
+                .iter()
+                .any(|n| n == "projects/www/cmp/APP/Config/Config.local.php"),
+            "应保留完整相对路径，实际: {names:?}"
+        );
+        assert!(
+            !names
+                .iter()
+                .any(|n| n == "projects/www/Config.local.php"),
+            "不应扁平成仅文件名: {names:?}"
+        );
+        assert!(!names.iter().any(|n| n == "projects/www/index.php"));
+    }
+
+    #[test]
+    fn rejects_path_escape_patterns() {
+        assert!(!is_safe_site_relative_pattern("../.env"));
+        assert!(!is_safe_site_relative_pattern("/etc/passwd"));
+        assert!(!is_safe_site_relative_pattern("C:/Windows/win.ini"));
+        assert!(is_safe_site_relative_pattern(".env"));
+        assert!(is_safe_site_relative_pattern("config/*.local.php"));
+        assert_eq!(expand_site_glob_pattern("*.local.php"), "**/*.local.php");
+        assert_eq!(
+            expand_site_glob_pattern("cmp/APP/Config/Config.local.php"),
+            "cmp/APP/Config/Config.local.php"
+        );
+        assert_eq!(expand_site_glob_pattern("Config.local.php"), "**/Config.local.php");
     }
 }

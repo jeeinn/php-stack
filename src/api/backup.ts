@@ -28,6 +28,14 @@ export function createBackup(
   return invokeCommand<void>('create_backup', { savePath, options })
 }
 
+export function getBackupOptions(): Promise<BackupOptions> {
+  return invokeCommand<BackupOptions>('get_backup_options')
+}
+
+export function saveBackupOptions(options: BackupOptions): Promise<void> {
+  return invokeCommand<void>('save_backup_options', { options })
+}
+
 export function convertToRelativePath(
   absolutePath: string,
   isDirectory: boolean,

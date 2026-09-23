@@ -74,12 +74,27 @@ const absoluteRemapPending = computed(() =>
   })
 );
 
+function suggestedWwwPath(siteId: string): string {
+  const id = siteId.replace(/[^a-zA-Z0-9_-]/g, '') || 'main';
+  return `./www/${id}`;
+}
+
 function initSiteRemaps() {
   siteRemaps.value = manifestSites.value.map(site => ({
     env_key: site.env_key,
-    host_path: site.kind === 'absolute' ? '' : site.host_path,
+    host_path: site.kind === 'absolute' ? suggestedWwwPath(site.id) : site.host_path,
     skipped: false,
   }));
+}
+
+function moveAllAbsoluteIntoWww() {
+  for (const site of manifestSites.value) {
+    if (site.kind !== 'absolute') continue;
+    const remap = remapFor(site.env_key);
+    if (!remap) continue;
+    remap.host_path = suggestedWwwPath(site.id);
+    remap.skipped = false;
+  }
 }
 
 function remapFor(envKey: string): SitePathOverride | undefined {
@@ -387,6 +402,14 @@ function formatTimestamp(ts: string): string {
               >
                 <div class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ $t('restore.preview.sites') }}</div>
                 <p class="text-xs text-slate-500 dark:text-slate-400">{{ $t('restore.preview.sitesHint') }}</p>
+                <button
+                  v-if="manifestSites.some(s => s.kind === 'absolute')"
+                  type="button"
+                  class="text-xs px-2 py-1 ui-btn-soft rounded"
+                  @click="moveAllAbsoluteIntoWww"
+                >
+                  {{ $t('restore.preview.moveAllIntoWww') }}
+                </button>
                 <div v-for="site in manifestSites" :key="site.env_key" class="space-y-1">
                   <div class="text-xs font-medium text-slate-700 dark:text-slate-300">
                     {{ site.server_name }} · {{ site.kind === 'absolute' ? $t('restore.preview.kindAbsolute') : $t('restore.preview.kindRelative') }}
@@ -395,7 +418,7 @@ function formatTimestamp(ts: string): string {
                     {{ $t('restore.preview.publicDir', { dir: site.public_dir }) }}
                   </p>
                   <p v-if="site.kind === 'absolute'" class="text-[11px] text-slate-500">
-                    {{ $t('restore.preview.absoluteHint', { path: site.host_path, os: preview.manifest.os_info }) }}
+                    {{ $t('restore.preview.absoluteHint', { path: site.host_path, os: preview.manifest.os_info, suggested: suggestedWwwPath(site.id) }) }}
                   </p>
                   <p v-else class="text-[11px] text-slate-500">{{ $t('restore.preview.relativeHint') }}</p>
                   <div class="flex gap-2">

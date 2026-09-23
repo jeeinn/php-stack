@@ -9,6 +9,8 @@ pub const DIR_NAME: &str = ".user-config";
 pub const MIRROR_CONFIG: &str = "mirror_config.json";
 pub const VERSION_OVERRIDES: &str = "version_overrides.json";
 pub const SITES: &str = "sites.json";
+/// 备份页 UI 偏好（不打进环境 ZIP）
+pub const BACKUP: &str = "backup.json";
 
 pub fn dir(project_root: &Path) -> PathBuf {
     project_root.join(DIR_NAME)
@@ -51,7 +53,11 @@ mod tests {
             relative(VERSION_OVERRIDES),
             ".user-config/version_overrides.json"
         );
-        assert_eq!(relative(SITES), ".user-config/sites.json");
+        assert_eq!(
+            relative(SITES),
+            ".user-config/sites.json"
+        );
+        assert_eq!(relative(BACKUP), ".user-config/backup.json");
         assert!(!relative(MIRROR_CONFIG).contains('\\'));
     }
 

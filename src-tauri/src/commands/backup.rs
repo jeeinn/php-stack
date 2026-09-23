@@ -1,11 +1,26 @@
 use crate::app_log;
 use crate::engine::backup_engine::BackupEngine;
 use crate::engine::backup_manifest::BackupOptions;
+use crate::engine::backup_options_store;
 use crate::engine::restore_engine::{RestoreEngine, RestorePreview, RestoreResult};
 
 use super::get_project_root;
 
 // ==================== 备份命令 ====================
+
+/// 读取已保存的备份选项（`.user-config/backup.json`）
+#[tauri::command]
+pub fn get_backup_options() -> Result<BackupOptions, String> {
+    let project_root = get_project_root()?;
+    backup_options_store::load(&project_root)
+}
+
+/// 保存备份选项到 `.user-config/backup.json`（不打进环境 ZIP）
+#[tauri::command]
+pub fn save_backup_options(options: BackupOptions) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    backup_options_store::save(&project_root, &options)
+}
 
 /// 创建环境备份
 #[tauri::command]
@@ -104,12 +119,7 @@ async fn create_rollback_bundle(project_root: &std::path::Path) -> Option<String
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let save_path = project_root.join(format!(".restore_rollback_{timestamp}.zip"));
-    let options = BackupOptions {
-        include_projects: false,
-        project_patterns: Vec::new(),
-        include_logs: false,
-        site_ids: Vec::new(),
-    };
+    let options = BackupOptions::default();
 
     match BackupEngine::create_backup(&save_path.to_string_lossy(), options, project_root, None)
         .await

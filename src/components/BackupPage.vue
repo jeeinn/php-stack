@@ -1,84 +1,89 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { save, open } from '@tauri-apps/plugin-dialog';
+import { save } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import type { BackupOptions, BackupProgress, SiteEntry } from '../types/env-config';
-import { createBackup, convertToRelativePath, loadExistingConfig, normalizeError } from '../api';
-import { showToast, addLogKey } from '../composables/useToast';
+import {
+  createBackup,
+  getBackupOptions,
+  saveBackupOptions,
+  loadExistingConfig,
+  normalizeError,
+} from '../api';
+import { showToast } from '../composables/useToast';
 
 const { t } = useI18n();
 
+const DEFAULT_PATTERNS = [
+  '.env',
+  '.env.*',
+  '*.local.php',
+  '*.local.yml',
+];
+
 const options = ref<BackupOptions>({
-  // include_database: false,
-  // include_vhosts: false,
   include_projects: false,
-  project_patterns: [],
+  project_patterns: [...DEFAULT_PATTERNS],
   include_logs: false,
+  pack_full_tree: false,
 });
 
-const projectPatternsText = ref('');
+const projectPatternsText = ref(DEFAULT_PATTERNS.join('\n'));
 const knownSites = ref<SiteEntry[]>([]);
 const selectedSiteIds = ref<string[]>([]);
+const hydrated = ref(false);
+
+function buildPersistedOptions(): BackupOptions {
+  return {
+    include_projects: options.value.include_projects,
+    include_logs: options.value.include_logs,
+    pack_full_tree: !!options.value.pack_full_tree,
+    project_patterns: projectPatternsText.value
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean),
+    site_ids: [...selectedSiteIds.value],
+  };
+}
+
+async function persistOptions() {
+  if (!hydrated.value) return;
+  try {
+    await saveBackupOptions(buildPersistedOptions());
+  } catch (e) {
+    console.error('[Backup] failed to save options:', e);
+  }
+}
 
 onMounted(async () => {
   try {
-    const config = await loadExistingConfig();
+    const [config, saved] = await Promise.all([
+      loadExistingConfig(),
+      getBackupOptions(),
+    ]);
     knownSites.value = config?.sites ?? [];
-    selectedSiteIds.value = [];
+
+    options.value = {
+      include_projects: saved.include_projects,
+      include_logs: saved.include_logs,
+      pack_full_tree: !!saved.pack_full_tree,
+      project_patterns: saved.project_patterns?.length
+        ? saved.project_patterns
+        : [...DEFAULT_PATTERNS],
+      site_ids: saved.site_ids ?? [],
+    };
+    projectPatternsText.value = (options.value.project_patterns ?? DEFAULT_PATTERNS).join('\n');
+
+    const knownIds = new Set(knownSites.value.map((s) => s.id));
+    selectedSiteIds.value = (saved.site_ids ?? []).filter((id) => knownIds.has(id));
   } catch (e) {
-    console.error('[Backup] failed to load sites:', e);
+    console.error('[Backup] failed to load options/sites:', e);
+  } finally {
+    hydrated.value = true;
   }
 });
 
-async function selectProjectFolder() {
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    defaultPath: './',
-  });
-  if (selected) {
-    try {
-      const relativePath = await convertToRelativePath(selected as string, true);
-      appendPattern(relativePath);
-    } catch (e) {
-      handlePathError(normalizeError(e));
-    }
-  }
-}
-
-async function selectProjectFile() {
-  const selected = await open({
-    directory: false,
-    multiple: false,
-    defaultPath: './',
-  });
-  if (selected) {
-    try {
-      const relativePath = await convertToRelativePath(selected as string, false);
-      appendPattern(relativePath);
-    } catch (e) {
-      handlePathError(normalizeError(e));
-    }
-  }
-}
-
-function handlePathError(errorMsg: string) {
-  console.error('[Backup] Path conversion failed:', errorMsg);
-  addLogKey('backup.toast.pathError', { error: errorMsg }, 'error');
-  showToast(errorMsg, 'error');
-}
-
-function appendPattern(pattern: string) {
-  const current = projectPatternsText.value.trim();
-  if (current) {
-    if (!current.split('\n').includes(pattern)) {
-      projectPatternsText.value = `${current}\n${pattern}`;
-    }
-  } else {
-    projectPatternsText.value = pattern;
-  }
-}
 const backing = ref(false);
 const progress = ref<BackupProgress | null>(null);
 
@@ -92,10 +97,13 @@ async function setupListener() {
 setupListener();
 
 onUnmounted(() => {
+  void persistOptions();
   if (unlisten) unlisten();
 });
 
 async function handleBackup() {
+  await persistOptions();
+
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -104,7 +112,7 @@ async function handleBackup() {
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
   const timestamp = `${year}${month}${day}-${hours}${minutes}${seconds}`;
-  
+
   const savePath = await save({
     filters: [{ name: 'PHP-Stack Backup', extensions: ['zip'] }],
     defaultPath: `php-stack-backup-${timestamp}.zip`,
@@ -116,12 +124,14 @@ async function handleBackup() {
   progress.value = { step: 'common.loading', percentage: 0 };
 
   try {
+    const persisted = buildPersistedOptions();
     const backupOptions: BackupOptions = {
-      ...options.value,
-      project_patterns: options.value.include_projects
-        ? projectPatternsText.value.split('\n').map(l => l.trim()).filter(Boolean)
+      ...persisted,
+      project_patterns: options.value.include_projects && !options.value.pack_full_tree
+        ? persisted.project_patterns
         : [],
       site_ids: options.value.include_projects ? [...selectedSiteIds.value] : [],
+      pack_full_tree: options.value.include_projects && !!options.value.pack_full_tree,
     };
 
     await createBackup(savePath, backupOptions);
@@ -158,33 +168,8 @@ async function handleBackup() {
               <span>{{ $t('backup.options.includeProjects') }}</span>
             </label>
             <transition name="fade">
-              <div v-if="options.include_projects" class="mt-3 ml-7">
-                <div class="flex items-center justify-between mb-1">
-                  <label class="block text-xs text-slate-600 dark:text-slate-400">{{ $t('backup.options.patterns') }}</label>
-                  <div class="flex gap-2">
-                    <button 
-                      @click="selectProjectFolder"
-                      class="text-xs px-2 py-1 ui-btn-soft rounded transition"
-                    >
-                      {{ $t('backup.options.selectFolder') }}
-                    </button>
-                    <button 
-                      @click="selectProjectFile"
-                      class="text-xs px-2 py-1 ui-btn-soft rounded transition"
-                    >
-                      {{ $t('backup.options.selectFile') }}
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  v-model="projectPatternsText"
-                  :placeholder="$t('backup.options.patternsPlaceholder')"
-                  class="w-full h-24 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-900 dark:text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
-                ></textarea>
-                <p class="text-[10px] text-slate-500 dark:text-slate-500 mt-1">
-                  {{ $t('backup.options.patternsHint') }}
-                </p>
-                <div v-if="knownSites.length > 0" class="mt-3 space-y-2">
+              <div v-if="options.include_projects" class="mt-3 ml-7 space-y-3">
+                <div v-if="knownSites.length > 0" class="space-y-2">
                   <div class="text-xs text-slate-600 dark:text-slate-400">{{ $t('backup.options.sites') }}</div>
                   <label
                     v-for="site in knownSites"
@@ -195,6 +180,27 @@ async function handleBackup() {
                     <span>{{ $t('backup.options.siteItem', { name: site.server_name || site.id, path: site.public_dir ? `${site.host_path} / ${site.public_dir}` : site.host_path }) }}</span>
                   </label>
                   <p class="text-[10px] text-slate-500">{{ $t('backup.options.outsideHint') }}</p>
+                </div>
+                <p v-else class="text-xs text-slate-500">{{ $t('backup.options.noSites') }}</p>
+
+                <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input type="checkbox" v-model="options.pack_full_tree" class="accent-blue-500" />
+                  <div class="flex flex-col">
+                    <span>{{ $t('backup.options.packFullTree') }}</span>
+                    <span class="text-xs text-slate-500">{{ $t('backup.options.packFullTreeHint') }}</span>
+                  </div>
+                </label>
+
+                <div v-if="!options.pack_full_tree">
+                  <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('backup.options.patterns') }}</label>
+                  <textarea
+                    v-model="projectPatternsText"
+                    :placeholder="$t('backup.options.patternsPlaceholder')"
+                    class="w-full h-24 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-900 dark:text-blue-300 focus:ring-1 focus:ring-blue-500 outline-none"
+                  ></textarea>
+                  <p class="text-[10px] text-slate-500 dark:text-slate-500 mt-1">
+                    {{ $t('backup.options.patternsHint') }}
+                  </p>
                 </div>
               </div>
             </transition>

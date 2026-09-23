@@ -30,6 +30,7 @@ async fn test_backup_and_restore_workflow() {
         project_patterns: vec![],
         include_logs: false,
         site_ids: vec![],
+        pack_full_tree: false,
     };
 
     let backup_result = BackupEngine::create_backup(
@@ -88,6 +89,7 @@ async fn test_backup_with_database_export() {
         project_patterns: vec![],
         include_logs: false,
         site_ids: vec![],
+        pack_full_tree: false,
     };
 
     let backup_result = BackupEngine::create_backup(

@@ -244,6 +244,7 @@ fn apply_path_overrides(project_root: &Path, overrides: &[SitePathOverride]) -> 
 
 fn warn_missing_absolute_dirs(
     sites: &[ManifestSite],
+    project_root: &Path,
     overrides: &[SitePathOverride],
 ) -> Vec<String> {
     let mut warnings = Vec::new();
@@ -261,13 +262,15 @@ fn warn_missing_absolute_dirs(
             ));
             continue;
         }
-        if site_manager::is_absolute_host_path(&item.host_path)
-            && !Path::new(&item.host_path).exists()
-        {
-            warnings.push(format!(
-                "site {} directory does not exist and was not created: {}",
-                site.id, item.host_path
-            ));
+        let dest = site_manager::resolve_host_path(project_root, &item.host_path);
+        if !dest.exists() {
+            if let Err(e) = std::fs::create_dir_all(&dest) {
+                warnings.push(format!(
+                    "site {} failed to create directory {}: {e}",
+                    site.id,
+                    dest.display()
+                ));
+            }
         }
     }
     warnings
@@ -376,7 +379,11 @@ impl RestoreEngine {
                 if let Err(e) = apply_path_overrides(project_root, path_overrides) {
                     errors.push(e);
                 }
-                errors.extend(warn_missing_absolute_dirs(&manifest.sites, path_overrides));
+                errors.extend(warn_missing_absolute_dirs(
+                    &manifest.sites,
+                    project_root,
+                    path_overrides,
+                ));
             }
             Err(e) => errors.push(format!("failed to restore .env: {e}")),
         }
@@ -430,10 +437,17 @@ impl RestoreEngine {
 
         // Step 6: 工作区外站点解到用户新选的目录；其余 projects/ 仍解到工作区。
         Self::emit_progress(app_handle, "restore.progress.steps.projectFiles", 70);
-        let pack_projects =
-            !manifest.options.project_patterns.is_empty() || !manifest.options.site_ids.is_empty();
+        let pack_projects = manifest.options.include_projects
+            && (!manifest.options.site_ids.is_empty()
+                || !manifest.options.project_patterns.is_empty()
+                || manifest.options.pack_full_tree);
         if pack_projects {
-            match Self::restore_external_site_files(&mut archive, &manifest.sites, path_overrides) {
+            match Self::restore_external_site_files(
+                &mut archive,
+                project_root,
+                &manifest.sites,
+                path_overrides,
+            ) {
                 Ok(files) => restored_files.extend(files),
                 Err(e) => errors.push(e),
             }
@@ -607,6 +621,7 @@ impl RestoreEngine {
 
     fn restore_external_site_files<R: Read + std::io::Seek>(
         archive: &mut zip::ZipArchive<R>,
+        project_root: &Path,
         sites: &[ManifestSite],
         overrides: &[SitePathOverride],
     ) -> Result<Vec<String>, String> {
@@ -618,14 +633,19 @@ impl RestoreEngine {
             let Some(item) = overrides.iter().find(|item| item.env_key == site.env_key) else {
                 continue;
             };
-            if item.skipped
-                || item.host_path.trim().is_empty()
-                || !Path::new(&item.host_path).is_dir()
-            {
+            if item.skipped || item.host_path.trim().is_empty() {
                 continue;
             }
+            let dest = site_manager::resolve_host_path(project_root, &item.host_path);
+            if let Err(e) = std::fs::create_dir_all(&dest) {
+                return Err(format!(
+                    "failed to create site {} directory {}: {e}",
+                    site.id,
+                    dest.display()
+                ));
+            }
             let prefix = format!("{}/", site_manager::site_zip_prefix(site));
-            let files = Self::extract_prefix(archive, &prefix, Path::new(&item.host_path))?;
+            let files = Self::extract_prefix(archive, &prefix, &dest)?;
             restored.extend(files);
         }
         Ok(restored)
@@ -908,6 +928,7 @@ mod tests {
                 project_patterns: Vec::new(),
                 include_logs: false,
                 site_ids: Vec::new(),
+                pack_full_tree: false,
             },
             files,
             errors: Vec::new(),
@@ -973,6 +994,7 @@ mod tests {
                 project_patterns: vec!["www/test/**".to_string(), "www/readme.md".to_string()],
                 include_logs: false,
                 site_ids: Vec::new(),
+                pack_full_tree: false,
             },
             files,
             errors: Vec::new(),
@@ -1039,6 +1061,7 @@ mod tests {
                 project_patterns: Vec::new(),
                 include_logs: false,
                 site_ids: Vec::new(),
+                pack_full_tree: false,
             },
             files: HashMap::new(),
             errors: Vec::new(),
@@ -1107,6 +1130,7 @@ mod tests {
                 project_patterns: Vec::new(),
                 include_logs: false,
                 site_ids: Vec::new(),
+                pack_full_tree: false,
             },
             files,
             errors: Vec::new(),
@@ -1290,6 +1314,7 @@ mod tests {
                 project_patterns: Vec::new(),
                 include_logs: false,
                 site_ids: vec!["shop".to_string()],
+                pack_full_tree: true,
             },
             files,
             errors: Vec::new(),

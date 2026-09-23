@@ -35,14 +35,29 @@ pub fn check_manifest_version(version: &str) -> Result<(), String> {
 }
 
 /// 备份选项
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct BackupOptions {
     pub include_projects: bool,
+    /// 相对**站点根**的 glob（如 `.env`、`local.config.php`），不是工作区根。
+    #[serde(default)]
     pub project_patterns: Vec<String>,
     pub include_logs: bool,
-    /// 勾选「包含项目文件」时，要打包源码的站点 id。空表示不按站点打包。
+    /// 勾选「包含项目本地文件」时要打包的站点 id。空则不打包站点文件。
     #[serde(default)]
     pub site_ids: Vec<String>,
+    /// 为真时忽略 patterns，打包所选站点的整棵目录树。
+    #[serde(default)]
+    pub pack_full_tree: bool,
+}
+
+/// 备份页「本地配置」默认匹配模式（相对站点根）。
+pub fn default_local_config_patterns() -> Vec<String> {
+    vec![
+        ".env".to_string(),
+        ".env.*".to_string(),
+        "*.local.php".to_string(),
+        "*.local.yml".to_string(),
+    ]
 }
 
 /// 服务信息
@@ -121,12 +136,7 @@ impl BackupManifest {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             os_info: std::env::consts::OS.to_string(),
             services: Vec::new(),
-            options: BackupOptions {
-                include_projects: false,
-                project_patterns: Vec::new(),
-                include_logs: false,
-                site_ids: Vec::new(),
-            },
+            options: BackupOptions::default(),
             files: HashMap::new(),
             errors: Vec::new(),
             sites: Vec::new(),
@@ -171,6 +181,7 @@ mod tests {
                 project_patterns: vec!["*.php".to_string(), "*.html".to_string()],
                 include_logs: false,
                 site_ids: Vec::new(),
+                pack_full_tree: false,
             },
             files,
             errors: vec!["mysqldump for db2 failed".to_string()],

@@ -225,7 +225,7 @@ onMounted(() => {
                   >
                     {{ version.image_tag }}
                   </code>
-                  <span v-if="version.has_user_override" class="ml-1 text-xs text-slate-500 dark:text-slate-400">({{ $t('mirror.status.custom') }})</span>
+                  <span v-if="version.has_user_override" class="ml-1 text-xs text-slate-500 dark:text-slate-400">{{ $t('mirror.status.custom') }}</span>
                 </td>
                 <td class="py-3 px-3">
                   <code class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs text-slate-700 dark:text-slate-300">{{ version.service_dir }}</code>

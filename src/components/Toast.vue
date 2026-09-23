@@ -3,15 +3,15 @@ import { getToasts, removeToast } from '../composables/useToast';
 
 const toasts = getToasts();
 
-// 获取样式类
+// 获取样式类。三类视觉：成功=绿、错误=红、其余=蓝。
+// 原 'warning' 分支与 'info' 返回完全相同的字符串（统一配色后 amber → blue），
+// 属于名不副实的死分支，已随 ToastType 一并移除，详见 useToast.ts 的注释。
 function getToastClass(type: string): string {
   switch (type) {
     case 'success':
       return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
     case 'error':
       return 'bg-rose-500/10 border-rose-500/20 text-rose-400';
-    case 'warning':
-      return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
     case 'info':
     default:
       return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
@@ -25,8 +25,6 @@ function getIcon(type: string): string {
       return '✓';
     case 'error':
       return 'E';
-    case 'warning':
-      return '⚠';
     case 'info':
     default:
       return 'ℹ';

@@ -9,21 +9,21 @@ function getIconConfig() {
     case 'danger':
       return {
         icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
-        color: 'bg-red-500/10 text-red-500',
-        buttonClass: 'bg-red-600 hover:bg-red-700'
+        color: 'bg-rose-500/10 text-rose-500',
+        buttonClass: 'ui-btn-danger'
       };
     case 'warning':
       return {
         icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
-        color: 'bg-yellow-500/10 text-yellow-500',
-        buttonClass: 'bg-yellow-600 hover:bg-yellow-700'
+        color: 'bg-blue-500/10 text-blue-500',
+        buttonClass: 'ui-btn-primary'
       };
     case 'info':
     default:
       return {
         icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
         color: 'bg-blue-500/10 text-blue-500',
-        buttonClass: 'bg-blue-600 hover:bg-blue-700'
+        buttonClass: 'ui-btn-primary'
       };
   }
 }
@@ -65,7 +65,7 @@ function getIconConfig() {
           <div class="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
             <button 
               @click="handleCancel" 
-              class="px-5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg font-medium transition text-slate-700 dark:text-slate-300"
+              class="px-5 py-2 ui-btn-secondary rounded-lg font-medium transition"
             >
               {{ state.options.cancelText }}
             </button>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open as openDirectoryDialog } from '@tauri-apps/plugin-dialog';
 import { recreateWorkspaceDir, setWorkspacePath, normalizeError } from '../api';
 
 export interface WorkspaceMissingInfo {
@@ -20,7 +19,6 @@ const emit = defineEmits<{
   dismissTemp: [];
 }>();
 
-const { t } = useI18n();
 const busy = ref(false);
 const errorMessage = ref('');
 
@@ -48,7 +46,7 @@ async function chooseNew() {
   busy.value = true;
   errorMessage.value = '';
   try {
-    const selected = await open({ directory: true, multiple: false });
+    const selected = await openDirectoryDialog({ directory: true, multiple: false });
     if (!selected) {
       busy.value = false;
       return;
@@ -101,7 +99,7 @@ function useTempFallback() {
           data-testid="workspace-missing-recreate"
           :disabled="busy"
           @click="recreate"
-          class="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium transition"
+          class="w-full ui-btn-primary px-4 py-2.5 disabled:opacity-50 rounded-lg font-medium transition"
         >
           {{ $t('workspace.missing.recreate') }}
         </button>
@@ -110,7 +108,7 @@ function useTempFallback() {
           data-testid="workspace-missing-choose"
           :disabled="busy"
           @click="chooseNew"
-          class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium transition"
+          class="w-full ui-btn-primary px-4 py-2.5 disabled:opacity-50 rounded-lg font-medium transition"
         >
           {{ $t('workspace.missing.chooseNew') }}
         </button>
@@ -119,7 +117,7 @@ function useTempFallback() {
           data-testid="workspace-missing-temp"
           :disabled="busy"
           @click="useTempFallback"
-          class="w-full px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 disabled:opacity-50 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
+          class="w-full ui-btn-secondary px-4 py-2.5 disabled:opacity-50 rounded-lg font-medium transition"
         >
           {{ $t('workspace.missing.tempFallback') }}
         </button>

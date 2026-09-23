@@ -129,11 +129,11 @@ const MYSQL56_SAMPLE = `{
               </ul>
             </div>
 
-            <div class="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3">
-              <p class="font-medium text-amber-900 dark:text-amber-200 mb-1 text-xs">
-                ⚠️ {{ $t('envConfig.versionHelp.step3Title') }}
+            <div class="rounded-lg ui-hint-box-solid p-3">
+              <p class="font-medium text-blue-800 dark:text-blue-200 mb-1 text-xs">
+                {{ $t('envConfig.versionHelp.step3Title') }}
               </p>
-              <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+              <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
                 {{ $t('envConfig.versionHelp.step3Desc') }}
               </p>
             </div>
@@ -148,7 +148,7 @@ const MYSQL56_SAMPLE = `{
           <p class="text-slate-600 dark:text-slate-400 mb-2 text-xs">{{ $t('envConfig.versionHelp.sampleDesc') }}</p>
           <pre class="text-[11px] bg-slate-100 dark:bg-black/40 p-3 rounded font-mono overflow-x-auto leading-relaxed">{{ MYSQL56_SAMPLE }}</pre>
           <p class="text-xs text-slate-500 dark:text-slate-500 mt-2">
-            💡 {{ $t('envConfig.versionHelp.sampleTip') }}
+            {{ $t('envConfig.versionHelp.sampleTip') }}
           </p>
         </section>
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { invoke } from '@tauri-apps/api/core'
 import SoftwareSettings from '../SoftwareSettings.vue'
 
 // Mock @tauri-apps/api/core
@@ -99,5 +100,23 @@ describe('SoftwareSettings', () => {
     await flushPromises()
     const codeElements = wrapper.findAll('code')
     expect(codeElements.length).toBeGreaterThanOrEqual(1)
+  })
+
+  // Feature: software-settings, Property: 「重置所有自定义」必须真实调用后端命令。
+  // 回归背景：局部函数 resetAllOverrides 与同名导入的 API 函数互相遮蔽，函数体内的
+  // await 实际调用的是它自己，形成无限异步循环，reset_all_overrides 永不执行。
+  it('确认后真实调用后端 reset_all_overrides', async () => {
+    const wrapper = mount(SoftwareSettings)
+    await flushPromises()
+
+    const resetButton = wrapper
+      .findAll('button')
+      .find(b => b.text().includes('重置所有自定义') || b.text().includes('Reset'))
+    expect(resetButton).toBeDefined()
+
+    await resetButton!.trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('reset_all_overrides')
   })
 })

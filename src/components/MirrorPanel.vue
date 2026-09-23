@@ -211,7 +211,7 @@ function openEditDialog(option: MirrorSourceOption) {
 // 保存编辑（更新已有选项）并自动应用配置
 async function saveEdit() {
   if (!editValue.value.trim()) {
-    showToast(t('mirror.toast.urlRequired'), 'warning');
+    showToast(t('mirror.toast.urlRequired'), 'info');
     return;
   }
   
@@ -243,7 +243,7 @@ async function saveEdit() {
 // 保存自定义镜像源并自动应用配置
 async function saveCustomMirror() {
   if (!editValue.value.trim()) {
-    showToast(t('mirror.toast.urlRequired'), 'warning');
+    showToast(t('mirror.toast.urlRequired'), 'info');
     return;
   }
   
@@ -388,7 +388,7 @@ onMounted(() => {
       <div class="flex gap-2 w-full sm:w-auto">
         <button
           @click="resetAllOverrides"
-          class="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition text-sm"
+          class="w-full sm:w-auto ui-btn-danger px-4 py-2 rounded-lg transition text-sm"
         >
           {{ $t('mirror.resetAll') }}
         </button>
@@ -417,7 +417,7 @@ onMounted(() => {
           ]"
         >
           {{ categoryLabels[category.category_id] || category.category_id }}
-          <span v-if="category.has_user_override" class="ml-1 text-xs text-yellow-300">✏️</span>
+          <span v-if="category.has_user_override" class="ml-1 text-xs opacity-70" :title="$t('mirror.overriddenBadge')">({{ $t('mirror.overriddenBadge') }})</span>
         </button>
       </div>
 
@@ -435,8 +435,8 @@ onMounted(() => {
       <div v-if="selectedCategory === 'docker_registry'" class="flex-1 overflow-auto min-h-0">
         <div class="space-y-3">
           <!-- 提示框 -->
-          <div class="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-            <p class="text-yellow-600 dark:text-yellow-400 text-sm font-medium">{{ $t('mirror.dockerRegistry.warning') }}</p>
+          <div class="p-4 ui-hint-box rounded-lg">
+            <p class="text-sm font-medium">{{ $t('mirror.dockerRegistry.warning') }}</p>
             <p class="text-slate-600 dark:text-slate-400 text-xs mt-1">{{ $t('mirror.dockerRegistry.hint') }}</p>
           </div>
 
@@ -516,7 +516,7 @@ onMounted(() => {
                   </span>
                   <span 
                     v-if="option.id === 'custom'" 
-                    class="ml-2 text-xs text-yellow-400"
+                    class="ml-2 text-xs text-slate-500 dark:text-slate-400"
                   >
                     {{ $t('mirror.status.custom') }}
                   </span>
@@ -558,7 +558,7 @@ onMounted(() => {
                           : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-white'
                       ]"
                       :disabled="!!getCurrentCategory()?.selected_id && getCurrentCategory()?.selected_id === option.id"
-                      title="选择此镜像源"
+                      :title="$t('mirror.tooltips.select')"
                     >
                       {{ $t('mirror.actions.select') }}
                     </button>
@@ -566,8 +566,8 @@ onMounted(() => {
                       v-if="option.value"
                       @click="testConnection(option)"
                       :disabled="isTesting(option)"
-                      class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                      title="测试连接"
+                      class="px-3 py-1.5 ui-btn-primary rounded text-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      :title="$t('mirror.tooltips.test')"
                     >
                       <span v-if="isTesting(option)" class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-white"></span>
                       <span>{{ isTesting(option) ? $t('mirror.actions.testing') : $t('mirror.actions.test') }}</span>
@@ -575,16 +575,16 @@ onMounted(() => {
                     <button
                       v-if="option.id === 'custom' || option.value"
                       @click="openEditDialog(option)"
-                      class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs transition"
-                      title="编辑"
+                      class="px-3 py-1.5 ui-btn-secondary rounded text-xs transition"
+                      :title="$t('mirror.tooltips.edit')"
                     >
                       {{ $t('mirror.actions.edit') }}
                     </button>
                     <button
                       v-if="option.id === 'custom'"
                       @click="removeCustomMirror"
-                      class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs transition"
-                      title="删除自定义"
+                      class="px-3 py-1.5 ui-btn-danger rounded text-xs transition"
+                      :title="$t('mirror.tooltips.deleteCustom')"
                     >
                       {{ $t('mirror.actions.delete') }}
                     </button>
@@ -600,9 +600,9 @@ onMounted(() => {
       <div class="mt-4 p-4 bg-white dark:bg-slate-800/50 rounded-lg text-sm text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
         <p>{{ $t('mirror.hints.title') }}</p>
         <ul class="list-disc list-inside mt-2 space-y-1">
-          <li>{{ $t('mirror.hints.autoApply') }}</li>
+          <li>{{ $t('mirror.hints.autoApply', { action: $t('mirror.actions.select') }) }}</li>
           <li>{{ $t('mirror.hints.customSaved') }}</li>
-          <li>{{ $t('mirror.hints.testConnection') }}</li>
+          <li>{{ $t('mirror.hints.testConnection', { action: $t('mirror.actions.test') }) }}</li>
         </ul>
       </div>
     </div>
@@ -640,21 +640,21 @@ onMounted(() => {
         <div class="flex gap-3 mt-6">
           <button
             @click="showEditDialog = false"
-            class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition"
+            class="flex-1 px-4 py-2 ui-btn-secondary rounded-lg transition"
           >
             {{ $t('common.cancel') }}
           </button>
           <button
             v-if="!isCustomEdit && editingOption?.id === 'custom'"
             @click="removeCustomMirror"
-            class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition"
+            class="px-4 py-2 ui-btn-danger rounded-lg transition"
           >
             {{ $t('common.delete') }}
           </button>
           <button
             @click="isCustomEdit ? saveCustomMirror() : saveEdit()"
             :disabled="!editValue.trim()"
-            class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition"
+            class="flex-1 px-4 py-2 ui-btn-primary disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg transition"
           >
             {{ isCustomEdit ? $t('common.save') : $t('common.update') }}
           </button>

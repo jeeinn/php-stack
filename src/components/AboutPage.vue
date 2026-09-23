@@ -218,7 +218,7 @@ const updatePercentLabel = computed(() =>
         <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium disabled:opacity-60"
+            class="px-4 py-2 text-sm ui-btn-primary rounded-lg font-medium disabled:opacity-60"
             data-testid="about-check-update"
             :disabled="updateStatus === 'checking' || updateStatus === 'downloading'"
             @click="checkForUpdate"
@@ -228,7 +228,7 @@ const updatePercentLabel = computed(() =>
           <button
             v-if="updateStatus === 'available'"
             type="button"
-            class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium"
+            class="px-4 py-2 text-sm ui-btn-primary rounded-lg font-medium"
             data-testid="about-install-update"
             @click="installUpdate"
           >
@@ -239,7 +239,7 @@ const updatePercentLabel = computed(() =>
           {{ $t('about.update.upToDate') }}
         </p>
         <div v-else-if="updateStatus === 'available' && foundUpdate" class="mt-3 text-sm" data-testid="about-update-available">
-          <p class="text-amber-600 dark:text-amber-400 font-medium">
+          <p class="text-blue-600 dark:text-blue-400 font-medium">
             {{ $t('about.update.available', { version: foundUpdate.version }) }}
           </p>
           <p v-if="foundUpdate.body" class="mt-2 text-xs text-slate-500 whitespace-pre-wrap">{{ foundUpdate.body }}</p>
@@ -250,7 +250,7 @@ const updatePercentLabel = computed(() =>
         <p v-else-if="updateStatus === 'error'" class="mt-3 text-sm text-rose-500" data-testid="about-update-error">
           {{ $t('about.update.failed', { error: updateError }) }}
         </p>
-        <p v-if="pendingUpdateVersion && updateStatus !== 'available'" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+        <p v-if="pendingUpdateVersion && updateStatus !== 'available'" class="mt-2 text-xs text-blue-600 dark:text-blue-400">
           {{ $t('about.update.available', { version: pendingUpdateVersion }) }}
         </p>
         <p class="mt-2 text-xs text-slate-500">{{ $t('about.update.devHint') }}</p>

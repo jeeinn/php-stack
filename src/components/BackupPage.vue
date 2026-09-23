@@ -151,13 +151,13 @@ async function handleBackup() {
                   <div class="flex gap-2">
                     <button 
                       @click="selectProjectFolder"
-                      class="text-xs px-2 py-1 bg-blue-600/20 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-600 hover:text-white transition"
+                      class="text-xs px-2 py-1 ui-btn-soft rounded transition"
                     >
                       {{ $t('backup.options.selectFolder') }}
                     </button>
                     <button 
                       @click="selectProjectFile"
-                      class="text-xs px-2 py-1 bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-600 hover:text-white transition"
+                      class="text-xs px-2 py-1 ui-btn-soft rounded transition"
                     >
                       {{ $t('backup.options.selectFile') }}
                     </button>

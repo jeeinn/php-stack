@@ -116,6 +116,8 @@ pub fn run() {
             commands::export_logs,
             commands::export_logs_to,
             commands::get_support_info,
+            // 前端错误上报（白屏兜底，见 public/boot-guard.js）
+            commands::log_frontend_error,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

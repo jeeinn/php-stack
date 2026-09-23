@@ -11,8 +11,8 @@ type TabType = 'backup' | 'restore';
 const activeTab = ref<TabType>('backup');
 
 const tabs = [
-  { id: 'backup' as TabType, labelKey: 'migration.tabs.backup', icon: '💾' },
-  { id: 'restore' as TabType, labelKey: 'migration.tabs.restore', icon: '⬇️' },
+  { id: 'backup' as TabType, labelKey: 'migration.tabs.backup' },
+  { id: 'restore' as TabType, labelKey: 'migration.tabs.restore' },
 ];
 </script>
 
@@ -36,7 +36,6 @@ const tabs = [
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100'
             ]"
           >
-            <span>{{ tab.icon }}</span>
             <span>{{ $t(tab.labelKey) }}</span>
           </button>
         </div>

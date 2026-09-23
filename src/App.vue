@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  checkDocker,
+  checkDocker as checkDockerApi,
   listContainers,
   startContainer,
   stopContainer,
@@ -64,7 +64,7 @@ const hasEnvFile = ref(false); // .env 文件是否存在
 const workspaceFallbackMsg = ref('');
 /// 配置路径不存在时弹出三选一对话框
 const showWorkspaceMissing = ref(false);
-const workspaceMissingInfo = ref<{ workspace_path: string; effective_path: string } | null>(null);
+const workspaceMissingInfo = ref<Pick<WorkspaceInfo, 'workspace_path' | 'effective_path'> | null>(null);
 /// 本会话已选「临时回退」则不再反复弹窗（横幅仍保留）
 const workspaceMissingDismissed = ref(false);
 
@@ -91,7 +91,7 @@ const canStop = computed(() => {
 
 const checkDocker = async () => {
   try {
-    await checkDocker();
+    await checkDockerApi();
     // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
     if (dockerError.value !== null) {
       addLogKey('dashboard.toast.dockerRestored');
@@ -145,18 +145,33 @@ const refreshContainers = async (silent = false) => {
   }
 };
 
+// 单容器操作进行中：容器名 -> 操作类型。用 Record 支持多容器并行操作互不干扰；
+// 操作完成后要等容器状态真实刷新（refreshContainers）才复位，避免状态与界面脱节。
+const busyContainers = ref<Record<string, 'start' | 'stop'>>({});
+const isContainerBusy = (name: string) => Boolean(busyContainers.value[name]);
+
 const startService = async (name: string) => {
+  if (busyContainers.value[name]) return; // 防御：正常路径按钮已 disabled
+  busyContainers.value = { ...busyContainers.value, [name]: 'start' };
   try {
     addLogKey('dashboard.toast.serviceStarting', { name });
     await startContainer(String(name));
     addLogKey('dashboard.toast.serviceStarted', { name });
     await refreshContainers(true);
   } catch (e) {
+    // 失败必须同时给 toast：实时日志只对主动排查的人可见，弹窗才是即时反馈
     addLogKey('dashboard.toast.serviceStartFailed', { error: e }, 'error');
+    showToast(t('dashboard.toast.serviceStartFailed', { error: normalizeError(e) }), 'error', 6000);
+  } finally {
+    const next = { ...busyContainers.value };
+    delete next[name];
+    busyContainers.value = next;
   }
 };
 
 const stopService = async (name: string) => {
+  if (busyContainers.value[name]) return;
+  busyContainers.value = { ...busyContainers.value, [name]: 'stop' };
   try {
     addLogKey('dashboard.toast.serviceStopping', { name });
     await stopContainer(String(name));
@@ -164,6 +179,11 @@ const stopService = async (name: string) => {
     await refreshContainers(true);
   } catch (e) {
     addLogKey('dashboard.toast.serviceStopFailed', { error: e }, 'error');
+    showToast(t('dashboard.toast.serviceStopFailed', { error: normalizeError(e) }), 'error', 6000);
+  } finally {
+    const next = { ...busyContainers.value };
+    delete next[name];
+    busyContainers.value = next;
   }
 };
 
@@ -356,7 +376,7 @@ async function onWorkspaceMissingResolved() {
 function onWorkspaceMissingTemp() {
   showWorkspaceMissing.value = false;
   workspaceMissingDismissed.value = true;
-  showToast(t('workspace.missing.tempToast'), 'warning');
+  showToast(t('workspace.missing.tempToast'), 'info');
 }
 
 function openWorkspaceMissingOrConfig() {
@@ -494,7 +514,7 @@ const scrollToBottom = async () => {
 // 与界面看到的内容对不上——面板只保留最近 UI_LOG_LIMIT 条）
 async function copyLogs() {
   if (logs.value.length === 0) {
-    showToast(t('dashboard.log.empty'), 'warning');
+    showToast(t('dashboard.log.empty'), 'info');
     return;
   }
   try {
@@ -624,7 +644,7 @@ async function exportLogs() {
       <div
         v-if="workspaceFallbackMsg"
         data-testid="workspace-fallback-banner"
-        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3 text-amber-700 dark:text-amber-400"
+        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 ui-hint-box rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3"
       >
         <div class="flex-1 min-w-0">
           <h3 class="font-bold text-sm sm:text-base mb-0.5">{{ $t('workspace.banner.title') }}</h3>
@@ -633,7 +653,7 @@ async function exportLogs() {
         <button
           type="button"
           @click="openWorkspaceMissingOrConfig"
-          class="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap"
+          class="flex-shrink-0 ui-btn-primary px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap"
         >
           {{ workspaceMissingInfo ? $t('workspace.banner.handle') : $t('workspace.banner.action') }}
         </button>
@@ -642,12 +662,12 @@ async function exportLogs() {
       <div
         v-if="pendingUpdateVersion"
         data-testid="update-available-banner"
-        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3 text-blue-700 dark:text-blue-300"
+        class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 ui-hint-box rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3"
       >
         <p class="flex-1 min-w-0 text-sm">{{ $t('about.update.banner', { version: pendingUpdateVersion }) }}</p>
         <button
           type="button"
-          class="flex-shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs sm:text-sm font-bold transition"
+          class="flex-shrink-0 ui-btn-primary px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition"
           @click="activeTab = 'about'"
         >
           {{ $t('about.update.bannerAction') }}
@@ -662,7 +682,7 @@ async function exportLogs() {
             <button 
               @click="() => refreshContainers()" 
               :disabled="loading"
-              class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition text-white"
+              class="w-full sm:w-auto ui-btn-emphasis disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition"
             >
               {{ loading ? $t('dashboard.refreshing') : $t('dashboard.refresh') }}
             </button>
@@ -670,28 +690,31 @@ async function exportLogs() {
               <button 
                 @click="handleStartEnvironment"
                 :disabled="!canStart || starting"
-                class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-white"
+                class="w-full sm:w-auto ui-btn-primary disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
                 :title="!hasEnvFile ? $t('dashboard.startTooltip.noEnv') : (!canStart ? $t('dashboard.startTooltip.hasRunning') : '')"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <svg v-if="operationType === 'start'" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 {{ operationType === 'start' ? $t('dashboard.startingEnv') : $t('dashboard.startEnv') }}
               </button>
               <button 
                 @click="handleRestartEnvironment"
                 :disabled="!canRestart || starting"
-                class="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-white"
+                class="w-full sm:w-auto ui-btn-emphasis disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
                 :title="!canRestart ? $t('dashboard.restartTooltip') : ''"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                <svg v-if="operationType === 'restart'" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                 {{ operationType === 'restart' ? $t('dashboard.restartingEnv') : $t('dashboard.restartEnv') }}
               </button>
               <button 
                 @click="handleStopEnvironment"
                 :disabled="!canStop || starting"
-                class="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-white"
+                class="w-full sm:w-auto ui-btn-danger disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2"
                 :title="!canStop ? $t('dashboard.stopTooltip') : ''"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                <svg v-if="operationType === 'stop'" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
                 {{ operationType === 'stop' ? $t('dashboard.stoppingEnv') : $t('dashboard.stopEnv') }}
               </button>
             </div>
@@ -699,34 +722,34 @@ async function exportLogs() {
         </header>
 
         <!-- Docker Error Alert -->
-        <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 dark:bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-4 text-rose-500 dark:text-rose-400">
+        <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-4 text-rose-600 dark:text-rose-400">
           <div class="p-3 bg-rose-500/20 rounded-full text-rose-500">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
           <div class="flex-1">
-            <h3 class="font-bold text-lg mb-1 text-rose-500">{{ $t('dashboard.dockerError.title') }}</h3>
+            <h3 class="font-bold text-lg mb-1 text-rose-600 dark:text-rose-400">{{ $t('dashboard.dockerError.title') }}</h3>
             <p class="text-sm opacity-90">{{ dockerError }}</p>
           </div>
           <button 
             @click="() => refreshContainers()"
-            class="px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-bold text-sm"
+            class="ui-btn-danger px-4 py-2 rounded-lg transition font-bold text-sm"
           >
             {{ $t('dashboard.dockerError.retry') }}
           </button>
         </div>
 
         <!-- No Env File Alert -->
-        <div v-if="!hasEnvFile" class="mb-8 p-6 bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-4 text-amber-600 dark:text-amber-400">
-          <div class="p-3 bg-amber-500/20 rounded-full text-amber-500">
+        <div v-if="!hasEnvFile" class="mb-8 p-6 ui-hint-box rounded-2xl flex items-center gap-4">
+          <div class="p-3 bg-blue-500/20 rounded-full text-blue-500">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
           <div class="flex-1">
-            <h3 class="font-bold text-lg mb-1 text-amber-500">{{ $t('dashboard.noEnvFile.title') }}</h3>
+            <h3 class="font-bold text-lg mb-1 text-blue-600 dark:text-blue-300">{{ $t('dashboard.noEnvFile.title') }}</h3>
             <p class="text-sm opacity-90">{{ $t('dashboard.noEnvFile.description') }}</p>
           </div>
           <button 
             @click="activeTab = 'env-config'"
-            class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-bold text-sm whitespace-nowrap"
+            class="ui-btn-primary px-4 py-2 rounded-lg transition font-bold text-sm whitespace-nowrap"
           >
             {{ $t('dashboard.noEnvFile.action') }}
           </button>
@@ -752,18 +775,22 @@ async function exportLogs() {
             </div>
             
             <div class="flex gap-2">
-              <button 
+              <button
                 v-if="!isContainerRunning(c.state)"
                 @click="startService(String(c.name))"
-                class="flex-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 rounded text-sm font-medium transition-all"
+                :disabled="isContainerBusy(String(c.name))"
+                class="flex-1 py-2 ui-btn-soft rounded text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
+                <svg v-if="isContainerBusy(String(c.name))" class="animate-spin shrink-0" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                 {{ $t('dashboard.container.start') }}
               </button>
-              <button 
+              <button
                 v-else
                 @click="stopService(String(c.name))"
-                class="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-600/30 rounded text-sm font-medium transition-all"
+                :disabled="isContainerBusy(String(c.name))"
+                class="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-600 dark:text-rose-400 hover:text-white border border-rose-600/30 rounded text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-rose-600/20 flex items-center justify-center gap-1.5"
               >
+                <svg v-if="isContainerBusy(String(c.name))" class="animate-spin shrink-0" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                 {{ $t('dashboard.container.stop') }}
               </button>
               <button 
@@ -778,7 +805,7 @@ async function exportLogs() {
           <!-- Empty State -->
           <div v-if="containers.length === 0 && !loading" class="col-span-full py-20 text-center bg-slate-100/50 dark:bg-slate-900/50 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-2xl">
             <div class="text-slate-500 dark:text-slate-500 mb-2">{{ t('dashboard.empty.title') }}</div>
-            <div class="text-slate-600 dark:text-slate-600 text-sm">{{ t('dashboard.empty.description') }}</div>
+            <div class="text-slate-600 dark:text-slate-600 text-sm">{{ t('dashboard.empty.description', { page: t('sidebar.envConfig') }) }}</div>
           </div>
         </div>
       </div>
@@ -812,35 +839,35 @@ async function exportLogs() {
           <div class="flex flex-wrap gap-2">
             <button 
               @click="copyLogs"
-              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               :title="$t('dashboard.log.copyTip')"
             >
-              📋 {{ $t('dashboard.log.copy') }}
+              {{ $t('dashboard.log.copy') }}
             </button>
             <button 
               @click="clearLogPanel"
-              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               :title="$t('dashboard.log.clearTip')"
             >
-              🗑️ {{ $t('dashboard.log.clear') }}
+              {{ $t('dashboard.log.clear') }}
             </button>
             <button 
               @click="exportLogs"
-              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               :title="$t('dashboard.log.exportTip')"
             >
-              💾 {{ $t('dashboard.log.export') }}
+              {{ $t('dashboard.log.export') }}
             </button>
             <button 
               @click="scrollToBottom"
-              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
               title=""
             >
               {{ $t('dashboard.log.bottom') }}
             </button>
             <button 
               @click="showLogs = !showLogs"
-              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors flex items-center gap-1"
+              class="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
             >
               {{ showLogs ? $t('dashboard.log.hide') : $t('dashboard.log.show') }}
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -873,7 +900,7 @@ async function exportLogs() {
           </div>
         </transition>
         <p v-if="showLogs" class="mt-1.5 text-[10px] sm:text-xs text-slate-500 dark:text-slate-500">
-          {{ $t('dashboard.log.panelHint', { limit: UI_LOG_LIMIT }) }}
+          {{ $t('dashboard.log.panelHint', { limit: UI_LOG_LIMIT, action: $t('dashboard.log.export') }) }}
         </p>
       </div>
     </div>
@@ -908,20 +935,20 @@ async function exportLogs() {
           <div class="flex gap-3">
             <button 
               @click="showStartConfirm = false"
-              class="flex-1 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
+              class="flex-1 px-4 py-2 ui-btn-secondary rounded-lg font-medium transition"
             >
               {{ $t('common.cancel') }}
             </button>
             <button 
               @click="goToMirrorSettings"
-              class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+              class="flex-1 ui-btn-primary px-4 py-2 rounded-lg font-medium transition"
             >
               {{ $t('dashboard.startConfirm.goMirror') }}
             </button>
           </div>
           <button 
             @click="confirmStart"
-            class="w-full px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-lg shadow-emerald-600/20"
+            class="w-full ui-btn-primary px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-blue-600/20"
           >
             {{ $t('dashboard.startConfirm.directStart') }}
           </button>
@@ -935,18 +962,18 @@ async function exportLogs() {
         <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">{{ $t('dashboard.restartConfirm.title') }}</h2>
         <p class="text-slate-600 dark:text-slate-400 mb-6">
           {{ $t('dashboard.restartConfirm.message', { warning: '' }) }}
-          <strong class="text-amber-400">{{ $t('dashboard.restartConfirm.warning') }}</strong>
+          <strong class="text-blue-600 dark:text-blue-400">{{ $t('dashboard.restartConfirm.warning') }}</strong>
         </p>
         <div class="space-y-4">
           <button 
             @click="showRestartConfirm = false"
-            class="w-full px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
+            class="w-full px-4 py-2 ui-btn-secondary rounded-lg font-medium transition"
           >
             {{ $t('common.cancel') }}
           </button>
           <button 
             @click="confirmRestart"
-            class="w-full px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold transition shadow-lg shadow-amber-600/20"
+            class="w-full ui-btn-emphasis px-6 py-2 rounded-lg font-bold transition shadow-lg shadow-slate-900/20"
           >
             {{ $t('dashboard.restartConfirm.action') }}
           </button>

@@ -82,11 +82,14 @@ export interface BackupOptions {
   // 数据库/vhost 备份暂缓：涉及跨平台备份恢复、本地库容量未知、备份进度不可控
   // include_database: boolean;
   include_projects: boolean;
+  /** 相对站点根的 glob（如 .env、local.config.php） */
   project_patterns: string[];
   // include_vhosts: boolean;
   include_logs: boolean;
-  /** 勾选包含项目文件时，要打包源码的站点 id */
+  /** 勾选包含项目本地文件时，要打包的站点 id */
   site_ids?: string[];
+  /** 为真时打包所选站点整棵目录树（忽略 patterns） */
+  pack_full_tree?: boolean;
 }
 
 export interface ManifestService {

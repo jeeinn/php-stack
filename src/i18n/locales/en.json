@@ -593,7 +593,7 @@
       "portConflictsHint": "These host ports are already in use. Restore still writes the original config; change ports in .env or stop the occupying process before starting. Suggested ports are for reference only:",
       "portConflictItem": "{service}: {port} → suggest {suggested}",
       "sites": "Site paths",
-      "sitesHint": "Relative paths follow the new workspace. Absolute paths default to ./www/{site id}; you can pick another folder or skip.",
+      "sitesHint": "Relative paths follow the new workspace. Absolute paths default to ./www/{'site id'}; you can pick another folder or skip.",
       "relativeHint": "Project files restore into the new workspace at the original relative location. Changing the path here only changes the container mount.",
       "absoluteHint": "Original path {path} ({os}). Suggested: {suggested}. You can choose another folder on this machine.",
       "moveAllIntoWww": "Move all into www",

@@ -593,7 +593,7 @@
       "portConflictsHint": "以下宿主机端口已被占用。恢复仍会写入原配置；启动环境前请改 .env 端口，或停止占用进程。建议端口仅供参考：",
       "portConflictItem": "{service}：{port} → 建议 {suggested}",
       "sites": "站点路径",
-      "sitesHint": "相对路径会跟着新的工作区走。绝对路径默认建议迁入 ./www/{站点 id}，也可另选目录或跳过。",
+      "sitesHint": "相对路径会跟着新的工作区走。绝对路径默认建议迁入 ./www/{'站点 id'}，也可另选目录或跳过。",
       "relativeHint": "项目文件会还原到新工作区里的原相对位置；这里修改的是容器挂载的目录。",
       "absoluteHint": "原路径 {path}（{os}）。默认建议 {suggested}，也可另选本机目录。",
       "moveAllIntoWww": "全部迁入 www",

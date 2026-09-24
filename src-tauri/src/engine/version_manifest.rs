@@ -383,10 +383,15 @@ mod tests {
         let recommended = manifest.get_recommended_entry(&ServiceType::Mysql);
         assert!(recommended.is_some());
 
-        // 应该是 mysql84（最新的非 EOL 版本）
+        // 推荐 = 按版本号降序后的第一个非 EOL（不硬编码 ID，避免 sync 增版后失败）
         let (id, entry) = recommended.unwrap();
-        assert_eq!(id, "mysql84");
         assert!(!entry.eol);
+        let expected = manifest
+            .get_available_entries(&ServiceType::Mysql)
+            .into_iter()
+            .find(|(_, e)| !e.eol)
+            .map(|(i, _)| i.as_str());
+        assert_eq!(Some(id.as_str()), expected);
     }
 
     #[test]
@@ -396,13 +401,18 @@ mod tests {
         let entries = manifest.get_available_entries(&ServiceType::Php);
         assert!(!entries.is_empty());
 
-        // 验证按版本号降序排列
-        let ids: Vec<&str> = entries.iter().map(|(id, _)| id.as_str()).collect();
-        assert_eq!(ids[0], "php85"); // 最新版本在前
-        assert_eq!(*ids.last().unwrap(), "php56"); // 最旧版本在后
-
-        // 验证包含所有 PHP 版本
-        assert_eq!(ids.len(), 8);
+        // 验证按版本号降序排列（不硬编码 ID，避免 sync 增版后失败）
+        let versions: Vec<_> = entries
+            .iter()
+            .map(|(id, _)| extract_version_numbers(id))
+            .collect();
+        for window in versions.windows(2) {
+            assert!(window[0] >= window[1], "PHP entries must be sorted descending");
+        }
+        assert!(
+            entries.iter().any(|(id, _)| id.as_str() == "php56"),
+            "expected php56 to remain in the manifest"
+        );
     }
 
     #[test]
@@ -410,11 +420,24 @@ mod tests {
         let manifest = VersionManifest::new();
 
         let entries = manifest.get_available_entries(&ServiceType::Nginx);
-        let ids: Vec<&str> = entries.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(!entries.is_empty());
 
-        // Nginx 版本应该按降序排列：128, 127, 126, 125, 124
-        assert_eq!(ids[0], "nginx128");
-        assert_eq!(*ids.last().unwrap(), "nginx124");
+        // Nginx 按 extract_version_numbers 降序（不硬编码最新 ID）
+        let versions: Vec<_> = entries
+            .iter()
+            .map(|(id, _)| extract_version_numbers(id))
+            .collect();
+        for window in versions.windows(2) {
+            assert!(
+                window[0] >= window[1],
+                "Nginx entries must be sorted descending"
+            );
+        }
+        assert_eq!(
+            *entries.last().unwrap().0,
+            "nginx124",
+            "oldest nginx in manifest should sort last"
+        );
     }
 
     #[test]

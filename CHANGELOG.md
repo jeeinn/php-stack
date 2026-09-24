@@ -55,6 +55,9 @@
 ### 📁 文档
 - 合并 `doc/` 与 `docs/` 为统一的 `docs/` 目录，更新 README、AGENTS、文档索引中的路径引用
 - 修订 AGENTS.md 与实际实现不符的描述（proptest 属性测试、恢复端口冲突检测、后端日志英文化），未实现项移入「待完善功能」
+- **文档体系精简**：删除 `docs/history/`（42 份归档）、`docs/guides/`、`docs/architecture/` 除 ARCHITECTURE 外的文档、`docs/README.md`（文档中心索引）与 `docs/IMPROVEMENT_REPORT.md`；`docs/` 仅保留 `ARCHITECTURE.md`（更新至 v0.3.1，吸收关键决策/核心流程/模板体系/日志系统）
+- 新增根目录 `DEV.md`（开发者贡献指南：环境准备、开发/测试命令、测试规范、扩展指南、版本同步工作流）
+- README.md、AGENTS.md 与精简后的文档体系对齐（清理被删文档引用，同步模块清单与待完善项状态）
 
 ---
 

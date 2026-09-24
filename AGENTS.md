@@ -15,24 +15,29 @@
     - `mirror.rs`: 处理 Docker 和 PHP 镜像源切换。
   - `engine/`: 核心业务引擎。
     - `env_parser.rs`: **.env 文件解析器与格式化器**（v0.1.0）
-    - `config_generator.rs`: **可视化配置生成器**（v0.1.0）
+    - `config_generator.rs`: **可视化配置生成器**（v0.1.0，含模板释放 resolve_template_dir/copy_template_file）
     - `mirror_manager.rs`: **统一镜像源管理器**（v0.1.0）
     - `backup_manifest.rs`: **备份清单数据模型**（v0.1.0）
     - `backup_engine.rs`: **增强备份引擎**（v0.1.0）
-    - `restore_engine.rs`: **恢复引擎**（v0.1.0）
+    - `restore_engine.rs`: **恢复引擎**（v0.1.0，zip-slip 防护/回滚包）
     - `version_manifest.rs`: **服务版本清单管理器**（v0.2.0）
-    - `user_override_manager.rs`: **用户版本覆盖管理器**（v0.2.0）
+    - `user_override_manager.rs`: **用户版本覆盖管理器**（v0.2.0，entry_kind: override/custom）
     - `mirror_config_manager.rs`: **用户镜像源配置管理器**（v0.2.0）
     - `workspace_manager.rs`: **工作目录管理器**（v0.3.0）
+    - `config_extractor.rs`: **运行时配置提取**（Phase 3，docker create+cp 提取默认配置）
     - `mirror_config.rs`: 镜像源配置（向后兼容）
+    - `site_manager.rs` / `user_config.rs` / `backup_options_store.rs`: 站点定义 / 用户配置 / 备份选项持久化
   - `commands/`: 暴露给前端的 `#[tauri::command]` 接口，按业务域拆分为子模块。
-    - `mod.rs`: 模块声明、`get_project_root()` 共享函数、re-export 所有命令。
+    - `mod.rs`: 模块声明、re-export 所有命令。
+    - `paths.rs`: 路径解析单一模块（project_root / app_config_dir / log_file）。
     - `docker.rs`: 容器 CRUD 操作（check_docker、list/start/stop/restart_container）。
     - `env_config.rs`: 环境配置生成、应用、启动/重启/停止环境。
     - `mirror.rs`: 镜像源预设管理、自定义配置、连接测试。
     - `backup.rs`: 备份创建、恢复预览/验证/执行、路径转换。
     - `workspace.rs`: 工作区管理、版本映射查询、用户覆盖、日志导出。
+    - `app.rs`: 应用信息与更新相关命令。
   - `lib.rs`: 插件注册与指令分发中心。
+  - `logging.rs` / `macros.rs`: 三层日志系统与 `app_log!` / `ui_log!` 宏。
 
 ## ✅ v0.1.0 已完成功能
 
@@ -103,7 +108,7 @@
 
 ### 5. 其他改进
 - 自定义下拉选择组件（CustomSelect），支持搜索过滤和键盘导航
-- 后端命令按业务域拆分为 5 个子模块
+- 后端命令按业务域拆分（docker/env_config/mirror/backup/workspace/app + paths）
 - GitHub Actions 多平台自动发布工作流
 - 环境启动逻辑重构，流式日志输出
 
@@ -133,7 +138,7 @@
    - **测试位置**: 与被测试代码同级目录下的 `__tests__/` 文件夹
    - **文件命名**: `{模块名}.spec.ts`
    - 运行测试：`npm run test` 或 `npm run test:run`
-   - 详细规范参见：[docs/guides/TESTING_GUIDE.md](docs/guides/TESTING_GUIDE.md)
+   - 详细规范参见：[DEV.md](DEV.md) 第 6 节「测试规范」
 
 ## 📋 关键模块逻辑
 
@@ -220,81 +225,31 @@
 
 ## 📚 文档规范
 
-### 文档分类与存放位置
+### 文档体系（精简）
 
-项目文档统一存放在 `docs/` 目录下，按以下规则分类：
+项目刻意**不设历史归档目录**，文档精简为 5 份常驻文件：
 
-#### 1. `docs/architecture/` - 架构设计文档
-- **用途**: 系统架构、设计决策、技术方案
-- **示例**: `ARCHITECTURE.md`
-- **何时使用**: 记录重要的架构决策和技术方案
+| 文档 | 位置 | 用途 |
+|------|------|------|
+| `README.md` | 根目录 | 项目介绍、用户快速开始 |
+| `DEV.md` | 根目录 | 开发者贡献指南（环境/命令/测试/扩展） |
+| `AGENTS.md` | 根目录 | AI Agent 协作规范（本文档） |
+| `CHANGELOG.md` | 根目录 | 变更记录（Keep a Changelog 格式） |
+| `ARCHITECTURE.md` | `docs/` | 系统架构、设计决策、核心流程 |
 
-#### 2. `docs/guides/` - 使用指南和教程
-- **用途**: 用户指南、开发指南、快速参考
-- **示例**: 
-  - `TESTING_GUIDE.md` - 测试指南
-  - `MIRROR_GUIDE.md` - 镜像源配置指南
-  - `QUICK_REFERENCE.md` - 快速参考
-- **何时使用**: 编写面向用户或开发者的操作指南
-
-#### 3. `docs/history/` - 历史记录和修复报告
-- **用途**: 开发日志、Bug 修复记录、历史决策
-- **命名格式**: `YYYY-MM-DD_标题.md`
-- **示例**: 
-  - `2026-04-25_DOCKER_COMPOSE_COMPATIBILITY_FIX.md`
-  - `2026-04-20_FIX_VERSION_KEY_MATCHING.md`
-- **何时使用**: 
-  - Bug 修复记录
-  - 功能实施历史
-  - 重要问题排查过程
-  - 每日开发日志
-
-#### 4. `docs/history/` - 历史记录和归档文档
-- **用途**: 功能实施总结、优化进度、测试结果、问题修复记录，更新文档时不需要更新此目录下的文档
-- **示例**: 
-  - `2026-04-17_IMPLEMENTATION_SUMMARY.md` - 实施总结
-  - `2026-04-23_TEST_RESULTS_REPORT.md` - 测试结果报告
-  - `2026-04-17_VERSION_SCOPE.md` - 版本范围定义
-  - `YYYY-MM-DD_*.md` - 按日期归档的历史文档
-- **何时使用**: 
-  - 功能完成后的实施总结
-  - 阶段性进度报告
-  - 测试和验证结果
-  - Bug 修复记录
-  - 所有需要归档的文档
-
-#### 5. `docs/README.md` - 文档索引
-- **用途**: 文档目录和导航
-- **维护**: 新增文档后更新此索引
-
-#### 6. 根目录文档
-- `README.md` - 项目介绍和快速开始
-- `CHANGELOG.md` - 版本变更日志
-- `AGENTS.md` - AI Agent 开发指南（本文档）
+**核心原则**:
+- 变更记录 → 更新 `CHANGELOG.md` 的 `[Unreleased]` 段
+- 架构级变更 → 更新 `docs/ARCHITECTURE.md`
+- 面向用户的变更 → 更新 `README.md`
+- 开发者流程（命令/测试/扩展）→ 更新 `DEV.md`
+- **过时内容直接删除**（git 历史可追溯），不保留 `docs/history/` 之类的归档目录
 
 ### 文档编写规范
 
-1. **命名规范**:
-   - 使用英文文件名
-   - 单词间用下划线分隔
-   - 历史文档使用日期前缀：`YYYY-MM-DD_标题.md`
-
-2. **内容结构**:
-   - 使用 Markdown 格式
-   - 包含清晰的标题层级
-   - 添加代码示例时使用语法高亮
-   - 重要信息使用引用块或列表
-
-3. **语言**:
-   - 技术文档使用中文
-   - 代码注释使用中文
-   - 变量名和函数名使用英文
-
-4. **更新原则**:
-   - 修改代码后及时更新相关文档
-   - Bug 修复后记录到 `docs/history/`
-   - 新功能完成后编写实施总结到 `docs/history/`（带日期前缀）
-   - 所有文档最终都归档到 `docs/history/`
+1. **命名**: 使用英文文件名，单词间用下划线分隔。
+2. **内容**: 使用 Markdown，清晰的标题层级，代码示例使用语法高亮。
+3. **语言**: 技术文档使用中文；代码注释使用中文；变量名和函数名使用英文。
+4. **更新**: 修改代码后及时更新相关文档，保持文档与实现一致（详见「Agent 任务接入建议」）。
 
 ## 🚀 Agent 任务接入建议
 
@@ -356,12 +311,12 @@
 - **优先级**: 低（当前版本可使用手动方式备份/恢复数据库）
 
 #### 关于页与自动更新
-- 侧边栏版本号进入关于页：支持信息（可复制）、日志等级、导出日志、项目地址、检查更新
-- 完整自动更新走 `tauri-plugin-updater` + GitHub `latest.json`；发布流水线需配置 `TAURI_SIGNING_PRIVATE_KEY`
+- 关于页（侧边栏版本号入口）已完成：支持信息可复制、日志等级、导出日志、项目地址、检查更新
+- 自动更新已完成（`tauri-plugin-updater` + GitHub Releases）；发布流水线需配置 `TAURI_SIGNING_PRIVATE_KEY` 签名密钥
 
 ### 开发建议
 1. **稳定优先**: v0.3.1 重点是稳定性和用户体验优化
 2. **Bug 修复**: 优先处理用户反馈的问题和边界情况
 3. **性能优化**: 大文件备份的流式处理、增量备份支持
-4. **文档完善**: 用户手册、常见问题、最佳实践指南
-5. **测试补全**: 继续补全前端组件测试与后端集成测试（当前分支 `optimize/tests-and-warnings` 进行中）
+4. **文档同步**: 变更进 CHANGELOG、架构进 ARCHITECTURE、过时直接删（见「文档规范」）
+5. **测试补全**: 继续补全前端组件测试与后端集成测试

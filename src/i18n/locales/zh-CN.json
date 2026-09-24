@@ -307,7 +307,7 @@
       "faq2A": "模板目录缺少该服务类型的关键文件（PHP 需 Dockerfile、MySQL 需 mysql.cnf 等）。程序会回退到默认目录，但效果可能不是你想要的。检查 service_dir 与目录名是否一致。",
       "faq3Q": "改了工作区下的 php.ini 但下次应用配置又恢复了？",
       "faq3A": "这是有意的：模板释放语义是「目标已存在则跳过」。你的修改不会被覆盖。若想恢复默认，删除该文件后重新应用即可。",
-      "docFooter": "完整文档：docs/guides/ADDING_SERVICE_VERSION.md"
+      "docFooter": "完整文档：DEV.md §7 版本清单与模板体系"
     },
     "pullConfirm": {
       "title": "镜像本地存在性确认",

@@ -307,7 +307,7 @@
       "faq2A": "The template directory is missing the key file for that service type (PHP requires Dockerfile, MySQL requires mysql.cnf, etc.). The program will fall back to the default directory, but the result may not be what you wanted. Verify service_dir matches the directory name.",
       "faq3Q": "I edited php.ini in the workspace, but it got reset on next apply?",
       "faq3A": "That's intentional: template release semantics skip writing if the target file already exists. Your edits are preserved, not overwritten. To restore defaults, delete the file and apply again.",
-      "docFooter": "Full doc: docs/guides/ADDING_SERVICE_VERSION.md"
+      "docFooter": "Full doc: DEV.md §7 Version manifest & template system"
     },
     "pullConfirm": {
       "title": "Confirm image presence",

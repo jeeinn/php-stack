@@ -19,13 +19,9 @@
 
 ## 📚 详细文档
 
-完整的技术文档已整理至 `docs/` 目录：
-
-- **[📖 文档中心](docs/README.md)** - 完整的文档索引和导航
-- **[🏗️ 系统架构](docs/architecture/ARCHITECTURE.md)** - 系统架构、工作流程、模块说明
-- **[💻 实现总结](docs/history/2026-04-17_IMPLEMENTATION_SUMMARY.md)** - v0.1.0 功能实现详情
-- **[📖 使用指南](docs/guides/MIRROR_GUIDE.md)** - 镜像源配置、快速参考
-- **[📜 历史记录](docs/history/)** - 问题修复、重构记录、开发日志
+- **[📖 开发者指南](DEV.md)** - 环境准备、常用开发/测试命令、贡献指南
+- **[🏗️ 系统架构](docs/ARCHITECTURE.md)** - 系统架构、设计决策、核心流程
+- **[🤖 AI Agent 指南](AGENTS.md)** - AI 协作开发规范
 
 ## 🛠️ 技术栈
 

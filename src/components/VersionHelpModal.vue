@@ -10,7 +10,7 @@
  * 5. 常见问题排查
  *
  * 设计：内容硬编码，不引入 markdown 渲染依赖。
- * 完整原文见 doc/guides/ADDING_SERVICE_VERSION.md。
+ * 完整原文见 DEV.md §7 版本清单与模板体系。
  */
 import { useI18n } from 'vue-i18n';
 

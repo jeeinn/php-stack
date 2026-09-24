@@ -19,13 +19,20 @@ import {
 } from '../api';
 import { open } from '@tauri-apps/plugin-shell';
 import { open as openDirectoryDialog } from '@tauri-apps/plugin-dialog';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import type { ServiceEntry, EnvConfig, SiteEntry, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 import CustomSelect from './CustomSelect.vue';
+import ConnectHostHint from './ConnectHostHint.vue';
 import VersionHelpModal from './VersionHelpModal.vue';
 import ImagePullConfirmModal from './ImagePullConfirmModal.vue';
 import { WORKSPACE_CHANGED_EVENT } from '../utils/workspaceEvents';
+import {
+  resolveConnectInfo,
+  formatConnectEndpoint,
+  type ConnectServiceKind,
+} from '../utils/connectHost';
 
 const { t } = useI18n();
 
@@ -130,9 +137,11 @@ const previewEnv = ref('');
 const previewCompose = ref('');
 const showPreviewModal = ref(false);
 
-// Nginx 配置提示状态
-const showNginxHint = ref(false);
-const nginxServicesList = ref<Array<{ name: string; version: string; port?: number }>>([]); // 存储所有 Nginx 服务信息
+// 应用成功后的连接主机名汇总（含可选 Nginx conf 入口）
+const showConnectionHint = ref(false);
+const connectionEndpoints = ref<string[]>([]);
+const connectionHasMulti = ref(false);
+const nginxServicesList = ref<Array<{ name: string; version: string; port?: number }>>([]);
 
 // ==================== Phase 3: 版本帮助 / 镜像探测 / 拉取确认 ====================
 
@@ -401,6 +410,51 @@ const portConflicts = computed(() => {
 
 function serviceDirOf(versionId: string, versions: VersionInfo[]): string {
   return versions.find(v => v.id === versionId)?.service_dir || versionId;
+}
+
+function connectInfoFor(
+  kind: ConnectServiceKind,
+  versionId: string,
+  versions: VersionInfo[],
+  count: number,
+) {
+  return resolveConnectInfo(serviceDirOf(versionId, versions), kind, count);
+}
+
+/** 同类服务的 service_dir 列表（多实例警告里展示） */
+function serviceDirsOf(services: ServiceEntry[], versions: VersionInfo[]): string {
+  return services.map(s => serviceDirOf(s.version, versions)).join(', ');
+}
+
+async function copyConnectHost(host: string) {
+  try {
+    await writeText(host);
+    showToast(t('envConfig.connectHost.copied'), 'success');
+  } catch {
+    showToast(t('envConfig.connectHost.copyFailed'), 'error');
+  }
+}
+
+function collectConnectionEndpoints(): { endpoints: string[]; hasMulti: boolean } {
+  const endpoints: string[] = [];
+  let hasMulti = false;
+  const push = (
+    kind: ConnectServiceKind,
+    services: ServiceEntry[],
+    versions: VersionInfo[],
+  ) => {
+    const count = services.length;
+    for (const s of services) {
+      const info = connectInfoFor(kind, s.version, versions, count);
+      endpoints.push(formatConnectEndpoint(info));
+      if (info.warnMulti) hasMulti = true;
+    }
+  };
+  push('php', phpServices.value, phpVersions.value);
+  push('mysql', mysqlServices.value, mysqlVersions.value);
+  push('redis', redisServices.value, redisVersions.value);
+  push('nginx', nginxServices.value, nginxVersions.value);
+  return { endpoints, hasMulti };
 }
 
 function repairHostPath(path: string): string {
@@ -896,7 +950,7 @@ function cancelPull() {
 /// 真正应用配置（在镜像确认/拉取完成后调用）
 async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
   applying.value = true;
-  showNginxHint.value = false;
+  showConnectionHint.value = false;
   try {
     const backedUpFiles = await applyEnvConfig(config, enableBackup);
     
@@ -913,26 +967,21 @@ async function doApplyCore(config: EnvConfig, enableBackup: boolean) {
     
     showToast(successMsg, 'success', 6000);
     showPreviewModal.value = false;
-    
-    // 检查是否同时启用了 PHP 和 Nginx
-    const hasPHP = phpServices.value.length > 0;
-    const hasNginx = nginxServices.value.length > 0;
-    
-    if (hasPHP && hasNginx) {
-      // 获取所有 Nginx 服务的信息 — 直接使用 service_dir
-      nginxServicesList.value = nginxServices.value.map(service => {
-        const versionInfo = nginxVersions.value.find(v => v.id === service.version);
-        const serviceDir = versionInfo ? versionInfo.service_dir : service.version;
-        const displayName = versionInfo ? versionInfo.display_name : service.version;
-        return {
-          name: serviceDir,
-          version: displayName,
-          port: service.host_port
-        };
-      });
-      
-      showNginxHint.value = true;
-    }
+
+    const { endpoints, hasMulti } = collectConnectionEndpoints();
+    connectionEndpoints.value = endpoints;
+    connectionHasMulti.value = hasMulti;
+    nginxServicesList.value = nginxServices.value.map(service => {
+      const versionInfo = nginxVersions.value.find(v => v.id === service.version);
+      const serviceDir = versionInfo ? versionInfo.service_dir : service.version;
+      const displayName = versionInfo ? versionInfo.display_name : service.version;
+      return {
+        name: serviceDir,
+        version: displayName,
+        port: service.host_port
+      };
+    });
+    showConnectionHint.value = endpoints.length > 0;
 
     // 「应用&启动」：配置写盘成功后再启动环境
     if (startAfterApply.value) {
@@ -1012,14 +1061,26 @@ async function openNginxConfigDir(serviceDir?: string) {
       </div>
     </div>
 
-    <!-- Nginx 配置提示 -->
-    <div v-if="showNginxHint" class="mb-4 p-4 sm:p-5 ui-hint-box-solid rounded-xl">
+    <!-- 应用成功后的连接主机名汇总 -->
+    <div v-if="showConnectionHint" class="mb-4 p-4 sm:p-5 ui-hint-box-solid rounded-xl">
       <div class="flex flex-col sm:flex-row items-start gap-3">
         <div class="flex-1">
-          <h3 class="text-base font-semibold text-blue-800 dark:text-blue-200 mb-2">{{ $t('envConfig.nginxHint.title') }}</h3>
+          <h3 class="text-base font-semibold text-blue-800 dark:text-blue-200 mb-2">
+            {{ connectionHasMulti ? $t('envConfig.connectionHint.titleMulti') : $t('envConfig.connectionHint.title') }}
+          </h3>
           <p class="text-sm text-slate-700 dark:text-slate-300 mb-3">
-            {{ $t('envConfig.nginxHint.description') }}
+            {{ connectionHasMulti ? $t('envConfig.connectionHint.descriptionMulti') : $t('envConfig.connectionHint.description') }}
           </p>
+          <ul class="mb-3 space-y-1 text-sm font-mono text-slate-800 dark:text-slate-200">
+            <li v-for="ep in connectionEndpoints" :key="ep" class="flex items-center gap-2">
+              <span>{{ ep }}</span>
+              <button
+                type="button"
+                class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                @click="copyConnectHost(ep.split(':')[0])"
+              >{{ $t('envConfig.connectHost.copy') }}</button>
+            </li>
+          </ul>
           <div class="mt-2 flex flex-col sm:flex-row flex-wrap gap-2">
             <button
               v-for="nginx in nginxServicesList"
@@ -1027,13 +1088,13 @@ async function openNginxConfigDir(serviceDir?: string) {
               @click="openNginxConfigDir(nginx.name)"
               class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition text-white"
             >
-              {{ $t('envConfig.nginxHint.openConfigDir') }} ({{ nginx.name }})
+              {{ $t('envConfig.connectionHint.openConfigDir') }} ({{ nginx.name }})
             </button>
             <button
-              @click="showNginxHint = false"
+              @click="showConnectionHint = false"
               class="w-full sm:w-auto ui-btn-secondary px-4 py-2 rounded-lg text-sm font-medium transition"
             >
-              {{ $t('envConfig.nginxHint.dismiss') }}
+              {{ $t('envConfig.connectionHint.dismiss') }}
             </button>
           </div>
         </div>
@@ -1061,6 +1122,12 @@ async function openNginxConfigDir(serviceDir?: string) {
           <button @click="addPhpVersion" class="text-sm px-3 py-1 ui-btn-soft rounded-lg transition">
             {{ $t('envConfig.addVersion') }}
           </button>
+        </div>
+        <div
+          v-if="phpServices.length > 1"
+          class="mb-3 p-3 ui-hint-box rounded-lg text-xs text-slate-700 dark:text-slate-300"
+        >
+          {{ $t('envConfig.connectHost.multiWarnPhp', { hosts: serviceDirsOf(phpServices, phpVersions) }) }}
         </div>
         <div v-for="(php, idx) in phpServices" :key="idx" class="mb-4 sm:mb-6 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-3">
@@ -1132,6 +1199,10 @@ async function openNginxConfigDir(serviceDir?: string) {
               </div>
             </div>
           </div>
+          <ConnectHostHint
+            :info="connectInfoFor('php', php.version, phpVersions, phpServices.length)"
+            @copy="copyConnectHost"
+          />
         </div>
       </section>
 
@@ -1142,6 +1213,12 @@ async function openNginxConfigDir(serviceDir?: string) {
           <button @click="addMysqlVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
+        </div>
+        <div
+          v-if="mysqlServices.length > 1"
+          class="mb-3 p-3 ui-hint-box rounded-lg text-xs text-slate-700 dark:text-slate-300"
+        >
+          {{ $t('envConfig.connectHost.multiWarn', { service: 'MySQL', short: 'mysql', hosts: serviceDirsOf(mysqlServices, mysqlVersions) }) }}
         </div>
         <div v-for="(mysql, idx) in mysqlServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
@@ -1161,6 +1238,10 @@ async function openNginxConfigDir(serviceDir?: string) {
             </div>
             <button v-if="mysqlServices.length > 1" @click="removeMysqlVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
+          <ConnectHostHint
+            :info="connectInfoFor('mysql', mysql.version, mysqlVersions, mysqlServices.length)"
+            @copy="copyConnectHost"
+          />
         </div>
         
         <!-- MySQL Root 密码配置 -->
@@ -1190,6 +1271,12 @@ async function openNginxConfigDir(serviceDir?: string) {
             {{ $t('envConfig.addVersion') }}
           </button>
         </div>
+        <div
+          v-if="redisServices.length > 1"
+          class="mb-3 p-3 ui-hint-box rounded-lg text-xs text-slate-700 dark:text-slate-300"
+        >
+          {{ $t('envConfig.connectHost.multiWarn', { service: 'Redis', short: 'redis', hosts: serviceDirsOf(redisServices, redisVersions) }) }}
+        </div>
         <div v-for="(redis, idx) in redisServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <div class="flex-1 w-full sm:w-auto">
@@ -1208,6 +1295,10 @@ async function openNginxConfigDir(serviceDir?: string) {
             </div>
             <button @click="removeRedisVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
+          <ConnectHostHint
+            :info="connectInfoFor('redis', redis.version, redisVersions, redisServices.length)"
+            @copy="copyConnectHost"
+          />
         </div>
         <div v-if="redisServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
           {{ $t('envConfig.redis.empty', { action: $t('envConfig.addVersion') }) }}
@@ -1221,6 +1312,12 @@ async function openNginxConfigDir(serviceDir?: string) {
           <button @click="addNginxVersion" class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition">
             {{ $t('envConfig.addVersion') }}
           </button>
+        </div>
+        <div
+          v-if="nginxServices.length > 1"
+          class="mb-3 p-3 ui-hint-box rounded-lg text-xs text-slate-700 dark:text-slate-300"
+        >
+          {{ $t('envConfig.connectHost.multiWarn', { service: 'Nginx', short: 'nginx', hosts: serviceDirsOf(nginxServices, nginxVersions) }) }}
         </div>
         <div v-for="(nginx, idx) in nginxServices" :key="idx" class="mb-3 sm:mb-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
@@ -1240,6 +1337,10 @@ async function openNginxConfigDir(serviceDir?: string) {
             </div>
             <button @click="removeNginxVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
+          <ConnectHostHint
+            :info="connectInfoFor('nginx', nginx.version, nginxVersions, nginxServices.length)"
+            @copy="copyConnectHost"
+          />
         </div>
         <div v-if="nginxServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
           {{ $t('envConfig.nginx.empty', { action: $t('envConfig.addVersion') }) }}

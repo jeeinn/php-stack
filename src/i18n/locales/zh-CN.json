@@ -210,10 +210,22 @@
       "sydney": "悉尼 (UTC+10/+11)",
       "utc": "协调世界时 (UTC)"
     },
-    "nginxHint": {
-      "title": "站点已写入 Nginx 配置",
-      "description": "每个站点的 root 与 PHP 转发已按清单生成。需要 SSL、重写或自定义 location 时，再打开 conf 目录手改；没有托管标记的文件不会被覆盖。",
-      "openConfigDir": "高级：打开配置目录",
+    "connectHost": {
+      "label": "容器内主机名",
+      "copy": "复制",
+      "copied": "已复制主机名",
+      "copyFailed": "复制失败",
+      "alsoAlias": "也可使用 {alias}",
+      "portHint": "容器内端口 {port}（宿主机端口仅供本机客户端）",
+      "multiWarn": "已启用多个 {service}，短名 {short} 不可用。请使用：{hosts}",
+      "multiWarnPhp": "已启用多个 PHP。Nginx 站点请分别选择对应的 PHP 服务；fastcgi_pass 请使用：{hosts}"
+    },
+    "connectionHint": {
+      "title": "配置已应用 — 容器内连接地址",
+      "titleMulti": "配置已应用 — 请注意多实例主机名",
+      "description": "应用与 Nginx 在容器网络内请使用下列主机名与容器内端口。单实例 MySQL/Redis/Nginx 同时支持短名（mysql / redis / nginx）。",
+      "descriptionMulti": "同类存在多个实例时，短名（mysql / redis / nginx）不可用。请按下列版本化主机名配置应用，避免连错实例。",
+      "openConfigDir": "高级：打开 Nginx 配置目录",
       "dismiss": "我知道了"
     },
     "sites": {

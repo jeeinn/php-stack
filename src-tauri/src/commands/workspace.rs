@@ -202,13 +202,7 @@ pub fn save_user_override(
         _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
-    manager.save_user_override(
-        &project_root,
-        vm_service_type,
-        id,
-        image_tag,
-        description,
-    )
+    manager.save_user_override(&project_root, vm_service_type, id, image_tag, description)
 }
 
 /// 新增完整自定义版本映射

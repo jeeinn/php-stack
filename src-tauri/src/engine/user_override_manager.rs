@@ -314,9 +314,7 @@ impl UserOverrideManager {
             }
         }
 
-        items.sort_by(|a, b| {
-            extract_version_numbers(&b.id).cmp(&extract_version_numbers(&a.id))
-        });
+        items.sort_by(|a, b| extract_version_numbers(&b.id).cmp(&extract_version_numbers(&a.id)));
         items
     }
 
@@ -361,7 +359,11 @@ impl UserOverrideManager {
             return self.persist(project_root);
         }
 
-        if self.default_manifest.get_entry(&service_type, &id).is_none() {
+        if self
+            .default_manifest
+            .get_entry(&service_type, &id)
+            .is_none()
+        {
             return Err(format!(
                 "version id '{id}' not in manifest; use add_custom_version instead"
             ));
@@ -397,7 +399,11 @@ impl UserOverrideManager {
                 "id must be alphanumeric (optional _/-), e.g. redis84 or php86".to_string(),
             );
         }
-        if self.default_manifest.get_entry(&service_type, &id).is_some() {
+        if self
+            .default_manifest
+            .get_entry(&service_type, &id)
+            .is_some()
+        {
             return Err(format!(
                 "id '{id}' already exists in manifest; edit it instead of adding"
             ));

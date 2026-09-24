@@ -389,6 +389,27 @@ impl ConfigGenerator {
         lines.push("name: php-stack".to_string());
         lines.push("services:".to_string());
 
+        // 单实例短主机名：应用常写死 host=redis / mysql / nginx。
+        // 仅在该类服务只有 1 个实例时挂短别名，避免多实例抢同一个 DNS 名。
+        let mysql_count = config
+            .services
+            .iter()
+            .filter(|s| matches!(s.service_type, ServiceType::MySQL))
+            .count();
+        let redis_count = config
+            .services
+            .iter()
+            .filter(|s| matches!(s.service_type, ServiceType::Redis))
+            .count();
+        let nginx_count = config
+            .services
+            .iter()
+            .filter(|s| matches!(s.service_type, ServiceType::Nginx))
+            .count();
+        let mut mysql_alias_assigned = false;
+        let mut redis_alias_assigned = false;
+        let mut nginx_alias_assigned = false;
+
         for service in &config.services {
             // service.version is now a manifest ID (e.g., "php82", "mysql80", "redis70", "nginx125")
             let id = &service.version;
@@ -459,8 +480,8 @@ impl ConfigGenerator {
                     // 这样改 .env 里的时区后只需 recreate，不必重建镜像。
                     lines.push("    environment:".to_string());
                     lines.push("      TZ: \"${TZ}\"".to_string());
-                    lines.push("    networks:".to_string());
-                    lines.push("      - php-stack-network".to_string());
+                    // PHP 服务名本身已是 php82 等，无需额外短别名
+                    Self::push_compose_network(&mut lines, &[]);
                     lines.push(String::new());
                 }
                 ServiceType::MySQL => {
@@ -484,8 +505,13 @@ impl ConfigGenerator {
                     lines.push("    environment:".to_string());
                     lines.push("      MYSQL_ROOT_PASSWORD: \"${MYSQL_ROOT_PASSWORD}\"".to_string());
                     lines.push("      TZ: \"${TZ}\"".to_string());
-                    lines.push("    networks:".to_string());
-                    lines.push("      - php-stack-network".to_string());
+                    let aliases = if mysql_count == 1 && !mysql_alias_assigned {
+                        mysql_alias_assigned = true;
+                        vec!["mysql"]
+                    } else {
+                        vec![]
+                    };
+                    Self::push_compose_network(&mut lines, &aliases);
                     lines.push(String::new());
                 }
                 ServiceType::Redis => {
@@ -506,8 +532,13 @@ impl ConfigGenerator {
                     );
                     lines.push("    environment:".to_string());
                     lines.push("      TZ: \"${TZ}\"".to_string());
-                    lines.push("    networks:".to_string());
-                    lines.push("      - php-stack-network".to_string());
+                    let aliases = if redis_count == 1 && !redis_alias_assigned {
+                        redis_alias_assigned = true;
+                        vec!["redis"]
+                    } else {
+                        vec![]
+                    };
+                    Self::push_compose_network(&mut lines, &aliases);
                     lines.push(String::new());
                 }
                 ServiceType::Nginx => {
@@ -542,8 +573,13 @@ impl ConfigGenerator {
                     // Nginx 官方镜像不会 bake TZ；必须运行时注入，否则 error/access 日志落 UTC
                     lines.push("    environment:".to_string());
                     lines.push("      TZ: \"${TZ}\"".to_string());
-                    lines.push("    networks:".to_string());
-                    lines.push("      - php-stack-network".to_string());
+                    let aliases = if nginx_count == 1 && !nginx_alias_assigned {
+                        nginx_alias_assigned = true;
+                        vec!["nginx"]
+                    } else {
+                        vec![]
+                    };
+                    Self::push_compose_network(&mut lines, &aliases);
                     lines.push(String::new());
                 }
             }
@@ -554,6 +590,20 @@ impl ConfigGenerator {
         lines.push("    driver: bridge".to_string());
 
         lines.join("\n")
+    }
+
+    /// 写入 compose 的 `networks` 段；有别名时用 map 形式挂 `aliases`（单实例短主机名）。
+    fn push_compose_network(lines: &mut Vec<String>, aliases: &[&str]) {
+        lines.push("    networks:".to_string());
+        if aliases.is_empty() {
+            lines.push("      - php-stack-network".to_string());
+            return;
+        }
+        lines.push("      php-stack-network:".to_string());
+        lines.push("        aliases:".to_string());
+        for alias in aliases {
+            lines.push(format!("          - {alias}"));
+        }
     }
 
     /// 获取服务模板目录（services/ 模板所在基础目录）的候选列表。
@@ -1546,9 +1596,60 @@ mod tests {
             "redis 应有 environment.TZ，实际段落:\n{redis_block}"
         );
 
+        // 单实例时挂短主机名别名，便于应用连 redis/mysql
+        assert!(
+            redis_block.contains("aliases:") && redis_block.contains("- redis"),
+            "单 Redis 应有 alias redis，实际段落:\n{redis_block}"
+        );
+        let mysql_block = compose
+            .split("mysql80:")
+            .nth(1)
+            .and_then(|s| s.split("\n  redis").next())
+            .unwrap_or("");
+        assert!(
+            mysql_block.contains("aliases:") && mysql_block.contains("- mysql"),
+            "单 MySQL 应有 alias mysql，实际段落:\n{mysql_block}"
+        );
+        assert!(
+            nginx_block.contains("aliases:") && nginx_block.contains("- nginx"),
+            "单 Nginx 应有 alias nginx，实际段落:\n{nginx_block}"
+        );
+
         // Should NOT contain hardcoded values for versions/ports
         assert!(!compose.contains("image: mysql:8.0"));
         assert!(!compose.contains("\"3306:3306\""));
+    }
+
+    #[test]
+    fn test_generate_compose_skips_short_alias_when_multi_redis() {
+        let config = EnvConfig {
+            services: vec![
+                ServiceEntry {
+                    service_type: ServiceType::Redis,
+                    version: "redis62".to_string(),
+                    host_port: 6379,
+                    extensions: None,
+                },
+                ServiceEntry {
+                    service_type: ServiceType::Redis,
+                    version: "redis70".to_string(),
+                    host_port: 6380,
+                    extensions: None,
+                },
+            ],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+        let compose = ConfigGenerator::generate_compose(&config, &std::env::temp_dir());
+        // 多 Redis 时不能抢同一个 DNS 名 redis
+        assert!(
+            !compose.contains("- redis\n") && !compose.contains("- redis\r\n"),
+            "多 Redis 时不应生成 alias redis，实际:\n{compose}"
+        );
+        assert!(compose.contains("  redis62:"));
+        assert!(compose.contains("  redis70:"));
     }
 
     #[test]

@@ -231,7 +231,8 @@ start_environment
 |---|---|
 | `version_manifest.json` → `service_dir` | 清单条目指向模板目录 |
 | `config_generator` | `env_prefix = service_dir.to_uppercase()` |
-| compose 服务名 / 容器名 | `ps-{service_dir}` |
+| compose 服务名 | `{service_dir}`（如 `redis62`）；容器名 `ps-{service_dir}` |
+| compose 网络别名 | 每类仅 1 个实例时额外挂短名 `redis` / `mysql` / `nginx`（多实例不加）；环境配置页展示推荐主机名 |
 | 目录映射 | `services/`、`data/`、`logs/` 三处同名 |
 | `resolve_template_dir` | 按 `service_dir` 查找模板，找不到回退默认目录 |
 

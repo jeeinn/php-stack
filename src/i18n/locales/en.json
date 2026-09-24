@@ -210,10 +210,22 @@
       "sydney": "Sydney (UTC+10/+11)",
       "utc": "Coordinated Universal Time (UTC)"
     },
-    "nginxHint": {
-      "title": "Site config written for Nginx",
-      "description": "Each site's root and PHP upstream were generated from the site list. Open the conf directory only for SSL, rewrites, or custom locations. Files without the managed marker are left untouched.",
-      "openConfigDir": "Advanced: open conf directory",
+    "connectHost": {
+      "label": "In-network hostname",
+      "copy": "Copy",
+      "copied": "Hostname copied",
+      "copyFailed": "Copy failed",
+      "alsoAlias": "Also available: {alias}",
+      "portHint": "Container port {port} (host port is only for local clients)",
+      "multiWarn": "Multiple {service} instances are enabled; short name {short} is unavailable. Use: {hosts}",
+      "multiWarnPhp": "Multiple PHP services are enabled. Pick the matching PHP per Nginx site; use these hostnames for fastcgi_pass: {hosts}"
+    },
+    "connectionHint": {
+      "title": "Config applied — in-network endpoints",
+      "titleMulti": "Config applied — check multi-instance hostnames",
+      "description": "From apps and Nginx inside the compose network, use the hostnames and container ports below. A single MySQL/Redis/Nginx also accepts the short name (mysql / redis / nginx).",
+      "descriptionMulti": "When several instances of the same service exist, short names (mysql / redis / nginx) are not available. Configure apps with the versioned hostnames below.",
+      "openConfigDir": "Advanced: open Nginx conf directory",
       "dismiss": "Got it"
     },
     "sites": {

@@ -1,5 +1,5 @@
 use crate::app_log;
-use crate::engine::user_override_manager::{UserOverrideManager, UserVersionOverride};
+use crate::engine::user_override_manager::UserOverrideManager;
 use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
 use crate::engine::workspace_manager::WorkspaceManager;
 
@@ -112,17 +112,15 @@ pub fn recreate_workspace_dir() -> Result<WorkspaceInfo, String> {
     get_workspace_info()?.ok_or_else(|| "failed to read workspace info after recreate".to_string())
 }
 
-/// 获取所有可用的版本映射配置
+/// 获取所有可用的版本映射配置（清单 + 用户自定义）
 #[tauri::command]
 pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     use std::collections::HashMap;
 
-    let manifest = VersionManifest::new();
     let project_root = get_project_root()?;
     let override_manager = UserOverrideManager::new(&project_root);
     let mut result = HashMap::new();
 
-    // 使用辅助函数处理每种服务类型
     let service_types = [
         ("php", VmServiceType::Php),
         ("mysql", VmServiceType::Mysql),
@@ -132,26 +130,18 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
 
     for (key, service_type) in &service_types {
         let mut versions = Vec::new();
-        let entries = manifest.get_available_entries(service_type);
-
-        for (id, entry) in entries {
-            // 使用合并后的配置（用户覆盖优先）
-            let merged_entry = override_manager
-                .get_merged_entry(service_type, id)
-                .unwrap_or_else(|| entry.clone());
-
-            let has_user_override = override_manager.has_user_override(service_type, id);
-
+        for item in override_manager.list_merged_entries(service_type) {
             versions.push(serde_json::json!({
-                "id": id,
-                "display_name": merged_entry.display_name,
-                "image_tag": merged_entry.image_tag,
-                "service_dir": merged_entry.service_dir,
-                "default_port": merged_entry.default_port,
-                "show_port": merged_entry.show_port,
-                "eol": merged_entry.eol,
-                "description": merged_entry.description,
-                "has_user_override": has_user_override
+                "id": item.id,
+                "display_name": item.entry.display_name,
+                "image_tag": item.entry.image_tag,
+                "service_dir": item.entry.service_dir,
+                "default_port": item.entry.default_port,
+                "show_port": item.entry.show_port,
+                "eol": item.entry.eol,
+                "description": item.entry.description,
+                "has_user_override": item.has_user_override,
+                "is_custom": item.is_custom,
             }));
         }
         result.insert(key.to_string(), serde_json::Value::Array(versions));
@@ -160,10 +150,11 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
     serde_json::to_value(result).map_err(|e| format!("serialize failed: {e}"))
 }
 
-/// 验证指定的版本是否存在
+/// 验证指定的版本是否存在（清单或自定义）
 #[tauri::command]
 pub fn validate_version(service_type: String, version: String) -> Result<bool, String> {
-    let manifest = VersionManifest::new();
+    let project_root = get_project_root()?;
+    let manager = UserOverrideManager::new(&project_root);
     let vm_service_type = match service_type.as_str() {
         "php" => VmServiceType::Php,
         "mysql" => VmServiceType::Mysql,
@@ -172,7 +163,7 @@ pub fn validate_version(service_type: String, version: String) -> Result<bool, S
         _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
-    Ok(manifest.is_id_valid(&vm_service_type, &version))
+    Ok(manager.is_id_valid(&vm_service_type, &version))
 }
 
 /// 获取推荐版本
@@ -192,7 +183,7 @@ pub fn get_recommended_version(service_type: String) -> Result<Option<String>, S
         .map(|(id, _)| id.to_string()))
 }
 
-/// 保存用户自定义版本覆盖
+/// 保存用户自定义版本覆盖（仅已有清单 ID）
 #[tauri::command]
 pub fn save_user_override(
     service_type: String,
@@ -211,12 +202,56 @@ pub fn save_user_override(
         _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
-    let override_config = UserVersionOverride {
+    manager.save_user_override(
+        &project_root,
+        vm_service_type,
+        id,
         image_tag,
         description,
+    )
+}
+
+/// 新增完整自定义版本映射
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn add_custom_version(
+    service_type: String,
+    id: String,
+    display_name: String,
+    image_tag: String,
+    service_dir: String,
+    default_port: u16,
+    show_port: bool,
+    eol: bool,
+    description: Option<String>,
+) -> Result<(), String> {
+    use crate::engine::version_manifest::VersionEntry;
+
+    let project_root = get_project_root()?;
+    let mut manager = UserOverrideManager::new(&project_root);
+
+    let vm_service_type = match service_type.as_str() {
+        "php" => VmServiceType::Php,
+        "mysql" => VmServiceType::Mysql,
+        "redis" => VmServiceType::Redis,
+        "nginx" => VmServiceType::Nginx,
+        _ => return Err(format!("unsupported service type: {service_type}")),
     };
 
-    manager.save_user_override(&project_root, vm_service_type, id, override_config)
+    manager.add_custom_version(
+        &project_root,
+        vm_service_type,
+        id,
+        VersionEntry {
+            display_name,
+            image_tag,
+            service_dir,
+            default_port,
+            show_port,
+            eol,
+            description,
+        },
+    )
 }
 
 /// 删除用户自定义版本覆盖

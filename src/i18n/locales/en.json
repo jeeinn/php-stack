@@ -406,6 +406,7 @@
     "editDialog": {
       "titleNew": "Add Custom Mirror",
       "titleEdit": "Edit Mirror",
+      "categoryLabel": "Mirror Category",
       "urlLabel": "Mirror URL",
       "urlRequired": "*",
       "urlPlaceholder": "e.g. https://registry.npmmirror.com",
@@ -446,6 +447,7 @@
   "software": {
     "subtitle": "Manage Docker image version mapping configuration",
     "resetAll": "Reset All Custom",
+    "addCustom": "Add Version",
     "table": {
       "name": "Version",
       "image": "Docker Image",
@@ -466,9 +468,28 @@
       "descLabel": "Description",
       "descPlaceholder": "Optional, describe the purpose of this custom tag"
     },
+    "addDialog": {
+      "title": "Add Version Mapping",
+      "categoryLabel": "Service Category",
+      "idLabel": "Version ID",
+      "idPlaceholder": "e.g. redis84 / php86",
+      "idHint": "Alphanumeric plus _/-; used in Env Config dropdown",
+      "displayNameLabel": "Display Name",
+      "displayNamePlaceholder": "e.g. Redis 8.4",
+      "imageLabel": "Docker Image",
+      "imagePlaceholder": "e.g. redis:8.4-alpine",
+      "serviceDirLabel": "Config Directory",
+      "serviceDirHint": "Prefer an existing template dir; a new name relies on image extract on apply",
+      "defaultPortLabel": "Default Port",
+      "showPortLabel": "Show port in Env Config",
+      "eolLabel": "Mark as EOL",
+      "descLabel": "Description",
+      "descPlaceholder": "Optional"
+    },
     "hints": {
       "title": "Tips:",
       "editCustom": "Click “{action}” to customize Docker image tags",
+      "addCustom": "Click “{action}” to add versions outside the catalog; they appear in Env Config",
       "reapply": "Changes take effect after re-applying environment config",
       "eolWarning": "EOL versions are no longer maintained, consider using active versions"
     },
@@ -482,6 +503,8 @@
       "loadFailed": "Failed to load version mappings: {error}",
       "saved": "Saved! Re-apply environment config to take effect.",
       "saveFailed": "Save failed: {error}",
+      "added": "Custom version added! Re-apply config to take effect.",
+      "addFailed": "Add failed: {error}",
       "deleted": "Restored to default config",
       "deleteFailed": "Delete failed: {error}",
       "resetDone": "All custom configs reset",

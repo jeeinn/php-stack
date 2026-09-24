@@ -96,41 +96,49 @@ cd src-tauri && cargo build
 
 ---
 
-## 2. 添加用户自定义标签
+## 2. 用户覆盖与自定义版本（L3）
 
-### 方法 1: 通过 UI（软件设置页面）
+与仓库侧 `sync-version-manifest`（L1）、运行时 `ConfigExtractor`（L2）正交：**用户数据只写在工作区 `.user-config/version_overrides.json`，不改内置/app_data 清单。**
 
-1. 打开"软件设置"页面
-2. 在版本列表中找到目标版本
-3. 点击"编辑"按钮
-4. 在 `image_tag` 输入框中输入完整镜像名（如 `php:8.2-fpm-alpine`）
-5. 可选填写备注说明
-6. 点击"保存"
+每条记录 **`entry_kind` 必填**（不做旧格式兼容；缺字段则整文件视为空）：
+
+| `entry_kind` | 来源 | 字段 | 语义 |
+|---|---|---|---|
+| `override` | 映射表「编辑」已有 ID | `image_tag` + 可选 `description` | 叠在清单基线上只换镜像 |
+| `custom` | 映射表「新增」 | 完整 VersionEntry 字段 | 独立条目，可出现在环境配置下拉 |
+
+### 方法 1: 通过 UI（软件版本映射）
+
+- **编辑**：改已有版本的 Docker 镜像标签  
+- **新增**：填写版本名 / ID / 镜像 / 配置目录 / 端口等；保存后映射表与环境配置下拉均可选用  
 
 ### 方法 2: 手动编辑 `.user-config/version_overrides.json`
-
-在工作区 `.user-config/` 目录创建或编辑 `version_overrides.json`：
 
 ```json
 {
   "php": {
     "php82": {
+      "entry_kind": "override",
       "image_tag": "php:8.2-fpm-alpine",
       "description": "使用 Alpine 版本减小体积"
     }
   },
-  "mysql": {
-    "mysql84": {
-      "image_tag": "registry.company.com/mysql:8.4-custom",
-      "description": "使用公司内部镜像"
+  "redis": {
+    "redis99": {
+      "entry_kind": "custom",
+      "display_name": "Redis 9.9",
+      "image_tag": "redis:9.9-alpine",
+      "service_dir": "redis82",
+      "default_port": 6379,
+      "show_port": true,
+      "eol": false,
+      "description": "自测版本"
     }
   }
 }
 ```
 
-**key 说明**: 外层 key 为服务类型（`php`/`mysql`/`redis`/`nginx`），内层 key 为 manifest ID（如 `php82`）。
-
-**覆盖规则**: 用户覆盖仅替换 `image_tag`（和可选的 `description`），其他字段（`display_name`、`service_dir`、`default_port`、`show_port`、`eol`）保持 manifest 默认值不变。
+**建议**：`custom` 的 `service_dir` 复用已有模板目录（与 sync 脚本一致）；新目录名在 apply 时走镜像 `docker create` 提取。
 
 ### 方法 3: 直接修改 `.env` 文件
 

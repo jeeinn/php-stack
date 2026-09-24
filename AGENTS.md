@@ -204,10 +204,12 @@
 
 ### 9. 用户版本覆盖管理器（v0.2.0 新增）
 - 位置：`src-tauri/src/engine/user_override_manager.rs`
-- 功能：持久化用户自定义镜像覆盖配置
+- 功能：工作区侧版本覆盖与完整自定义条目（与 sync 清单 / ConfigExtractor 分层）
 - 特性：
-  - 按服务类型 + 版本 ID 保存/查询覆盖
-  - 配置持久化到 `.user-config/version_overrides.json`
+  - `entry_kind: override` — 覆盖已有清单 ID 的 `image_tag`
+  - `entry_kind: custom` — 新增完整 VersionEntry，进入映射表与环境配置下拉
+  - 配置持久化到 `.user-config/version_overrides.json`（不做旧格式兼容）
+  - 与 L1 `sync-version-manifest`、L2 运行时 `docker create` 提取正交，互不改写
 
 ### 10. 工作目录管理器（v0.3.0 新增）
 - 位置：`src-tauri/src/engine/workspace_manager.rs`

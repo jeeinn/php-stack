@@ -124,6 +124,12 @@ const editingOption = ref<MirrorSourceOption | null>(null);
 const editValue = ref('');
 const editDescription = ref('');
 const isCustomEdit = ref(false);
+/** 新增弹窗中的目标类目（可与当前 Tab 不同） */
+const addCategory = ref('apt');
+
+const addableCategoryItems = computed(() =>
+  categoryTabItems.value.filter((item) => item.id !== 'docker_registry'),
+);
 
 // 加载镜像源列表
 async function loadMirrorList() {
@@ -205,6 +211,8 @@ function openCustomEdit() {
   isCustomEdit.value = true;
   editValue.value = '';
   editDescription.value = '';
+  addCategory.value =
+    selectedCategory.value === 'docker_registry' ? 'apt' : selectedCategory.value;
   showEditDialog.value = true;
 }
 
@@ -255,23 +263,30 @@ async function saveCustomMirror() {
     showToast(t('mirror.toast.urlRequired'), 'info');
     return;
   }
-  
+
+  const targetCategory = addCategory.value;
+  if (targetCategory === 'docker_registry') {
+    showToast(t('mirror.toast.saveFailed', { error: 'docker_registry' }), 'error');
+    return;
+  }
+
   loading.value = true;
-  
+
   try {
     // 1. 保存用户自定义配置
     await saveUserMirrorCategory(
-      selectedCategory.value,
+      targetCategory,
       editValue.value.trim(),
       editDescription.value || undefined,
     );
-    
+
     // 2. 立即应用到 .env 文件
-    await updateSingleMirror(selectedCategory.value, editValue.value.trim());
-    
+    await updateSingleMirror(targetCategory, editValue.value.trim());
+
     showToast(t('mirror.toast.customSaved'), 'success');
     showEditDialog.value = false;
-    
+    selectedCategory.value = targetCategory;
+
     // 重新加载数据
     await loadMirrorList();
   } catch (e) {
@@ -396,8 +411,14 @@ onMounted(() => {
       </div>
       <div class="flex gap-2 w-full sm:w-auto">
         <button
+          @click="openCustomEdit"
+          class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition text-sm"
+        >
+          {{ $t('mirror.addCustom') }}
+        </button>
+        <button
           @click="resetAllOverrides"
-          class="w-full sm:w-auto ui-btn-danger px-4 py-2 rounded-lg transition text-sm"
+          class="flex-1 sm:flex-none ui-btn-danger px-4 py-2 rounded-lg transition text-sm"
         >
           {{ $t('mirror.resetAll') }}
         </button>
@@ -415,16 +436,6 @@ onMounted(() => {
       <!-- Category Tabs -->
       <div class="mb-3 sm:mb-4 flex-shrink-0">
         <UiTabs v-model="selectedCategory" :items="categoryTabItems" size="sm" />
-      </div>
-
-      <!-- Add Custom Button (仅非 Docker Registry 显示) -->
-      <div v-if="selectedCategory !== 'docker_registry'" class="mb-3 flex-shrink-0">
-        <button
-          @click="openCustomEdit"
-          class="w-full sm:w-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm transition"
-        >
-          {{ $t('mirror.addCustom') }}
-        </button>
       </div>
 
       <!-- Docker Registry: 文档引导 -->
@@ -611,6 +622,20 @@ onMounted(() => {
         </h2>
         
         <div class="space-y-4">
+          <div v-if="isCustomEdit">
+            <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">
+              {{ $t('mirror.editDialog.categoryLabel') }} <span class="text-rose-500 dark:text-rose-400">*</span>
+            </label>
+            <select
+              v-model="addCategory"
+              class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option v-for="item in addableCategoryItems" :key="item.id" :value="item.id">
+                {{ item.label }}
+              </option>
+            </select>
+          </div>
+
           <div>
             <label class="block text-sm text-slate-600 dark:text-slate-400 mb-2">
               {{ $t('mirror.editDialog.urlLabel') }} <span class="text-rose-500 dark:text-rose-400">{{ $t('mirror.editDialog.urlRequired') }}</span>

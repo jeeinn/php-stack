@@ -380,10 +380,10 @@ impl ConfigGenerator {
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql80").
     /// We look up the manifest entry to get `service_dir` directly, eliminating all
     /// `version.replace('.', "")`, `split('.')`, and `split('-')` calculations.
-    pub fn generate_compose(config: &EnvConfig) -> String {
+    pub fn generate_compose(config: &EnvConfig, project_root: &Path) -> String {
         let mut sites = config.sites.clone();
         site_manager::normalize_sites(&mut sites);
-        let manifest = VersionManifest::new();
+        let override_manager = UserOverrideManager::new(project_root);
         let mut lines: Vec<String> = Vec::new();
         // Note: 'version' attribute is obsolete in modern Docker Compose, omit it
         lines.push("name: php-stack".to_string());
@@ -401,10 +401,10 @@ impl ConfigGenerator {
                 ServiceType::Nginx => VmServiceType::Nginx,
             };
 
-            // Get service_dir from manifest entry, falling back to the ID itself
-            let service_dir = manifest
-                .get_entry(&vm_service_type, id)
-                .map(|entry| entry.service_dir.clone())
+            // Get service_dir from merged entry (manifest + user custom/override)
+            let service_dir = override_manager
+                .get_merged_entry(&vm_service_type, id)
+                .map(|entry| entry.service_dir)
                 .unwrap_or_else(|| id.clone());
 
             // Derive env_prefix from service_dir (e.g., "php82" → "PHP82")
@@ -787,8 +787,8 @@ impl ConfigGenerator {
         std::fs::create_dir_all(root.join("logs"))
             .map_err(|e| format!("failed to create logs/ dir: {e}"))?;
 
-        // Create manifest once for service_dir lookups
-        let manifest = VersionManifest::new();
+        // Create override manager for merged lookups (manifest + custom)
+        let override_manager = UserOverrideManager::new(root);
 
         for service in &config.services {
             // service.version is now a manifest ID (e.g., "php82", "mysql80", "redis72", "nginx125")
@@ -802,17 +802,14 @@ impl ConfigGenerator {
                 ServiceType::Nginx => VmServiceType::Nginx,
             };
 
-            // Get service_dir from manifest entry, falling back to the ID itself
-            let service_dir_name = manifest
-                .get_entry(&vm_service_type, id)
-                .map(|entry| entry.service_dir.clone())
+            let merged = override_manager.get_merged_entry(&vm_service_type, id);
+            let service_dir_name = merged
+                .as_ref()
+                .map(|e| e.service_dir.clone())
                 .unwrap_or_else(|| id.clone());
-
-            // Get image_tag from manifest entry (Phase 3: needed for runtime config extraction)
-            // fallback to `{service}:{version}` if manifest entry missing (自定义条目)
-            let image_tag = manifest
-                .get_entry(&vm_service_type, id)
-                .map(|entry| entry.image_tag.clone())
+            let image_tag = merged
+                .as_ref()
+                .map(|e| e.image_tag.clone())
                 .unwrap_or_else(|| {
                     let svc_prefix = match &service.service_type {
                         ServiceType::PHP => "php",
@@ -1257,7 +1254,7 @@ impl ConfigGenerator {
             .map_err(|e| format!("failed to write .env file: {e}"))?;
 
         // Generate and write docker-compose.yml
-        let compose = Self::generate_compose(config);
+        let compose = Self::generate_compose(config, project_root);
         std::fs::write(project_root.join("docker-compose.yml"), compose)
             .map_err(|e| format!("failed to write docker-compose.yml: {e}"))?;
 
@@ -1512,7 +1509,7 @@ mod tests {
     #[test]
     fn test_generate_compose_uses_interpolation() {
         let config = make_basic_config();
-        let compose = ConfigGenerator::generate_compose(&config);
+        let compose = ConfigGenerator::generate_compose(&config, &std::env::temp_dir());
 
         // Should contain ${VAR} interpolation, not hardcoded values
         assert!(compose.contains("${MYSQL80_VERSION}"));
@@ -1577,7 +1574,7 @@ mod tests {
             sites: vec![],
         };
 
-        let compose = ConfigGenerator::generate_compose(&config);
+        let compose = ConfigGenerator::generate_compose(&config, &std::env::temp_dir());
 
         // Should have 2 PHP service definitions
         assert!(compose.contains("container_name: ps-php74"));

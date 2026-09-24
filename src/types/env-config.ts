@@ -29,6 +29,8 @@ export interface VersionInfo {
   eol: boolean;
   description?: string;
   has_user_override?: boolean;
+  /** 用户新增的完整自定义条目（非清单覆盖） */
+  is_custom?: boolean;
 }
 
 export interface EnvConfig {

@@ -7,13 +7,24 @@
 
 ## [Unreleased]
 
-### 待发布功能
-- 虚拟主机管理（Nginx 站点配置）
+### 待完善（未纳入本版）
+- 恢复时按建议端口自动改写 `.env` / compose（`port_overrides`）
+- 数据库 mysqldump 导出与恢复时 SQL 自动导入
+
+---
+
+## [0.4.0] - 2026-09-24
 
 ### ✨ 新增
-- 关于页（侧边栏版本号入口）：支持信息可复制、日志等级、导出日志、项目地址
-- 完整自动更新（检查 / 下载安装 / 重启），GitHub Releases 作为更新源
+- **Nginx 站点管理**：环境配置页可添加多站点（`server_name`、宿主机挂载、`public_dir`、绑定 PHP/Nginx 服务），生成托管 conf 与 compose 卷映射；元数据落盘 `.user-config/sites.json`
+- **跨机恢复路径重映射**：恢复预览支持按站点覆写宿主机路径，适配换机后的绝对路径差异
+- **自定义版本映射**：`entry_kind: override | custom`；映射表可「编辑」已有 ID 的镜像 tag，或「新增」完整版本条目并进入环境配置下拉（`.user-config/version_overrides.json`）
+- **用户配置收纳**：工作区侧用户文件统一到 `.user-config/`（`mirror_config.json` / `version_overrides.json` / `sites.json` / `backup.json`）
+- **备份选项持久化**：备份页选项写入 `.user-config/backup.json`；支持按站点相对路径打包本地配置文件（可选全树）
+- **关于页与自动更新**：侧边栏版本入口；信息可复制、日志等级过滤、导出日志、项目地址；`tauri-plugin-updater` + GitHub Releases（检查 / 下载安装 / 重启）
+- 运行时配置提取（Phase 3）：应用配置前可检测本地镜像、确认后拉取，并从官方镜像 `docker create + cp` 提取默认配置
 - 用户可见日志统一为带 info/warn/error 等级的英文短句，面板可按等级过滤
+- `UiTabs` 等通用 UI 组件；容器卡片启停 loading / toast；应用图标圆角矩形统一
 
 ### 🐛 修复
 - 一键停止改用 `docker compose stop`，保留容器并展示已停用状态
@@ -31,33 +42,35 @@
 - 修复日志面板「复制」按钮复制的是后端文件日志全文、与界面显示内容对不上的问题
 - 修复配置的工作区目录不存在时数据被静默写到默认目录的问题（改为先创建目录；创建失败才回退并在界面告警）
 - 修复镜像拉取命令为同步执行、下载大镜像时整个窗口「未响应」的问题（改为 async + spawn_blocking）
-- 修复 `envConfig` 语言节点下存在两个同名 `toast`、JSON 解析时后者静默覆盖前者，导致应用配置后的成功提示直接显示为裸 key（`envConfig.toast.applySuccess` / `backedUp`）的问题（合并节点，恢复被覆盖的 8 条文案）
-- 修复 Nginx 容器启动即崩溃、无限重启的问题：Dockerfile 末尾 `USER nginx` 使 master 进程无权限创建 `/var/cache/nginx/client_temp`、也无法 bind 80 端口（改为 root 运行 master，worker 仍为 `nginx`，PUID/PGID 映射不变）
-- 修复 PUID/PGID 用户映射在默认配置下从不生效的问题：判断条件写成「PUID/PGID 不等于 1000 才调整」，而默认值本身就是 1000，等于永远跳过（改为「与镜像内当前 UID/GID 不一致才调整」）
-- 修复 Nginx 镜像模板只支持 alpine 基础镜像的问题：原实现用 `deluser/adduser`，若把 `NGINX*_VERSION` 换成 debian 版（如 `nginx:1.28`）则构建直接失败；现在按基础镜像分发命令（alpine 用 `deluser/adduser`，debian 用 `groupmod/usermod`）。PHP 模板同样补齐 alpine 版兼容性
+- 修复 `envConfig` 语言节点下存在两个同名 `toast`、JSON 解析时后者静默覆盖前者，导致应用配置后的成功提示直接显示为裸 key 的问题
+- 修复 Nginx 容器启动即崩溃、无限重启的问题：Dockerfile 末尾 `USER nginx` 使 master 无权限（改为 root 运行 master，worker 仍为 `nginx`）
+- 修复 PUID/PGID 用户映射在默认配置下从不生效的问题
+- 修复 Nginx / PHP 镜像模板对 alpine / debian 基础镜像的用户映射命令不兼容问题
+- 修复生产包 CSP 缺 `unsafe-eval` 导致白屏；补充启动期错误兜底面板
+- 修复恢复 ZIP 条目名校验在 CI Linux 上的平台相关误判
+- 修复 clippy `unnecessary_sort_by`；清单单测不再硬编码「最新版本 ID」（避免 sync 增版后 CI 失败）
 
 ### 🔧 改进
 - 环境配置页 .env 解析主体抽为纯函数并以真断言测试覆盖
 - 配置生成集成测试替换为端到端断言（validate / .env / compose / 自定义变量保留）
 - 清理死代码：未注册使用的占位命令、无效占位测试、未使用的 proptest 依赖
-- 新增 CI 测试流水线（fmt / clippy / cargo test / 前端测试 / 构建）
+- 新增 CI 测试流水线（fmt / clippy / cargo test / 前端测试 / 构建）；Actions checkout / setup-node 升级到 v5
 - 补充 MIT LICENSE 文件，声明 Cargo `license` 字段
 - 恢复前自动生成回滚包（`.restore_rollback_<时间戳>.zip`），恢复出错可据此回退
 - 恢复结果由「成功/失败一句话」改为返回完整明细，前端展示已恢复文件列表、逐条错误与回滚包路径
-- 环境启动流程的 Docker 同步调用（`compose down`、`up` 等待、日志轮询）统一走 `spawn_blocking`，不再阻塞 async 执行线程
-- **容器状态改为前后端共享的枚举契约**（`running`/`exited`/...），替换此前 `format!("{:?}")` 产出 `"Some(RUNNING)"` 再由前端 `includes('running')` 猜测的脆弱做法
-- **路径解析收口为 `commands/paths.rs` 单一模块**；用户级配置 `workspace.json` 与日志迁至 Tauri 官方 `app_data_dir`，解决装进 `Program Files` 后无写权限的问题，首次启动自动从旧位置迁移
-- 日志面板新增「清空」与「导出」动作（导出走后端文件日志，落盘到用户指定位置）
-- 轮询间隔随 Docker 连续失败次数退避（5s → 15s → 30s），恢复后立即回到 5s
-- 容器状态灯改为仅运行中时脉冲，停止状态不再一直闪烁
-- 新增 `pnpm check:i18n` 检查脚本（`scripts/check-i18n-keys.mjs`）：扫描语言包同层级重复 key、中英 key 集合一致性、源码 `t()` 引用的 key 是否存在，并配 10 条单元测试防回归
+- 恢复预览端口冲突检测（展示建议端口；不自动改写配置）
+- 环境启动流程的 Docker 同步调用统一走 `spawn_blocking`，不再阻塞 async 执行线程
+- **容器状态改为前后端共享的枚举契约**（`running`/`exited`/...）
+- **路径解析收口为 `commands/paths.rs` 单一模块**；`workspace.json` 与日志迁至 Tauri `app_data_dir`，首次启动自动从旧位置迁移
+- 日志面板新增「清空」与「导出」；轮询间隔随 Docker 连续失败次数退避
+- 新增 `pnpm check:i18n` / `npm run check:i18n`（`scripts/check-i18n-keys.mjs`）
+- `sync-version-manifest`：新增条目 `service_dir` 与版本 ID 对齐；清单仅增不改不删
+- Nginx / Redis 注入时区环境变量；重启环境使用 `up -d --force-recreate` 以正确刷新卷
 
 ### 📁 文档
-- 合并 `doc/` 与 `docs/` 为统一的 `docs/` 目录，更新 README、AGENTS、文档索引中的路径引用
-- 修订 AGENTS.md 与实际实现不符的描述（proptest 属性测试、恢复端口冲突检测、后端日志英文化），未实现项移入「待完善功能」
-- **文档体系精简**：删除 `docs/history/`（42 份归档）、`docs/guides/`、`docs/architecture/` 除 ARCHITECTURE 外的文档、`docs/README.md`（文档中心索引）与 `docs/IMPROVEMENT_REPORT.md`；`docs/` 仅保留 `ARCHITECTURE.md`（更新至 v0.3.1，吸收关键决策/核心流程/模板体系/日志系统）
-- 新增根目录 `DEV.md`（开发者贡献指南：环境准备、开发/测试命令、测试规范、扩展指南、版本同步工作流）
-- README.md、AGENTS.md 与精简后的文档体系对齐（清理被删文档引用，同步模块清单与待完善项状态）
+- 合并 `doc/` 与 `docs/`，精简为五份常驻文档：`README.md` / `DEV.md` / `AGENTS.md` / `CHANGELOG.md` / `docs/ARCHITECTURE.md`
+- 删除 `docs/history/`、`docs/guides/`、旧 `docs/architecture/*` 索引与改进报告等过时归档（以 git 历史追溯）
+- 文档定位与功能描述对齐 v0.4.0（站点管理、自定义版本、`.user-config`、关于页/更新等）
 
 ---
 
@@ -118,12 +131,5 @@ PHP-Stack 首个内测版，包含三大核心模块：
 
 ### 🔧 基础设施
 - 统一日志系统（tracing），支持文件日志和一键导出
-- 全服务动态基础镜像切换，支持用户自定义覆盖
-- MySQL root 密码自定义配置
-- Windows 平台黑窗口问题修复
-- 71 个单元测试全部通过
-
----
-
-**维护者**: PHP-Stack Team
-**最后更新**: 2026-04-30
+- 服务模板与版本清单体系
+- 跨平台桌面应用（Windows / macOS / Linux）

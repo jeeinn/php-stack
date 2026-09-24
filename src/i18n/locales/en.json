@@ -131,7 +131,7 @@
   },
   "envConfig": {
     "title": "Environment Config",
-    "subtitle": "Visually configure .env and docker-compose.yml",
+    "subtitle": "Visually configure .env, docker-compose.yml, and Nginx site mounts",
     "preview": "Preview",
     "previewing": "Generating...",
     "apply": "Apply Config",
@@ -277,7 +277,7 @@
     "versionHelp": {
       "helpButton": "How to add a new version?",
       "title": "How to add a new service version",
-      "subtitle": "Modify the version manifest and template directory to support more versions — no code changes or recompilation needed.",
+      "subtitle": "Use Software Settings → Add Version for workspace custom entries (no rebuild). Developers can also edit the repo manifest/templates and rebuild.",
       "sectionNaming": "§1 Naming convention (don't change casually)",
       "namingDesc1": "Template directory names are uniformly {service}+{version} (with dots removed), and are used by the program in fixed derivations:",
       "namingDesc2": "Env-var prefix (e.g. {'{PREFIX}'}), Compose service name, container name (ps-{'{dir}'}), and the three directories (services/data/logs) all depend on this directory name. Changing one requires changing a chain.",

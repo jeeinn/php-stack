@@ -9,7 +9,7 @@
 
 ## 1. 项目概览
 
-PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可视化管理工具（当前 v0.3.1）。
+PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可视化管理工具（当前 v0.4.0）。
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
@@ -80,7 +80,7 @@ node scripts/sync-version-manifest.mjs --offline --apply   # 离线模式（复�
 npm run sync:dockerfile    # 同步 PHP Dockerfile 参数化模板
 ```
 
-> 同步工作流详见第 7 节。设计原则：**App 保持离线可用**，同步只发生在仓库侧（开发者本地或 CI），产物随版本发布。
+> 日常可用「软件设置 → 新增版本」写入工作区自定义条目（无需重编译）。开发者改仓库 `version_manifest.json` / 模板后须重新构建（`include_str!`）。同步工作流详见第 7 节。设计原则：**App 保持离线可用**，同步只发生在仓库侧（开发者本地或 CI），产物随版本发布。
 
 ## 4. 目录结构
 
@@ -88,7 +88,7 @@ npm run sync:dockerfile    # 同步 PHP Dockerfile 参数化模板
 php-stack/
 ├── src/                        # 前端
 │   ├── App.vue                 # 主框架（侧边栏、日志面板、容器状态）
-│   ├── components/             # 页面与通用组件（EnvConfigPage / MirrorPanel / BackupPage / RestorePage / SoftwareSettings / AboutPage / SettingsPage / CustomSelect / ...）
+│   ├── components/             # 页面与通用组件（EnvConfigPage / MirrorPanel / BackupPage / RestorePage / SoftwareSettings / AboutPage / SettingsPage / CustomSelect / UiTabs / ...）
 │   ├── composables/            # 状态与逻辑（useToast / useConfirmDialog / useDocker）
 │   ├── api/                    # 后端命令封装（client / envConfig / mirror / backup / workspace / docker）
 │   ├── types/                  # 与 Rust 结构体对应的 TypeScript 类型
@@ -96,7 +96,7 @@ php-stack/
 ├── src-tauri/
 │   ├── src/
 │   │   ├── commands/           # #[tauri::command] 入口，按业务域拆分（docker/env_config/mirror/backup/workspace/app + paths/mod）
-│   │   ├── engine/             # 核心业务引擎（config_generator / version_manifest / user_override_manager / backup_engine / restore_engine / config_extractor / ...）
+│   │   ├── engine/             # 核心业务引擎（config_generator / version_manifest / user_override_manager / site_manager / user_config / backup_* / restore_engine / config_extractor / ...）
 │   │   ├── docker/             # Docker 交互层（manager / mirror）
 │   │   ├── logging.rs          # 日志系统（文件轮转 + tracing）
 │   │   └── macros.rs           # app_log! / ui_log! 宏
@@ -203,7 +203,7 @@ npm run build
 2. **TDD**: 优先编写测试 → 实现 → 跑全量测试。
 3. **权限**: 新增 Tauri 插件调用时，更新 `src-tauri/capabilities/default.json`。
 4. **类型同步**: 修改 Rust 数据结构后同步 `src/types/`。
-5. **CHANGELOG**: 每个功能/修复提交同时更新 `CHANGELOG.md` 的 `[Unreleased]` 段（新增/修复/改进/文档分类）。
+5. **CHANGELOG**: 每个功能/修复提交同时更新 `CHANGELOG.md` 的 `[Unreleased]` 段（新增/修复/改进/文档分类）；发版时将内容移入对应版本小节并 bump `package.json` / `src-tauri/Cargo.toml` / `tauri.conf.json`。
 6. **CI 检查**: `cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test`、`npm run test:run`、`npm run build` 全绿（`.github/workflows/ci.yml` 自动执行）。
 7. **文档**: 架构级变更更新 `docs/ARCHITECTURE.md`；面向用户的变更更新 `README.md`；不再维护的旧文档**直接删除**（git 历史可追溯），不保留归档目录。
 

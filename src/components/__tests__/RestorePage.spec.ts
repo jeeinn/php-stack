@@ -10,7 +10,7 @@ vi.mock('@tauri-apps/api/core', () => ({
       return {
         manifest: {
           timestamp: '2026-04-30T10:00:00Z',
-          app_version: '0.3.1',
+          app_version: '0.4.0',
           os_info: 'Windows 11',
           services: [
             { name: 'ps-nginx', image: 'nginx', version: '1.27' },
@@ -104,7 +104,7 @@ describe('RestorePage', () => {
 const PREVIEW_PAYLOAD = {
   manifest: {
     timestamp: '2026-04-30T10:00:00Z',
-    app_version: '0.3.1',
+    app_version: '0.4.0',
     os_info: 'Windows 11',
     services: [{ name: 'ps-nginx', image: 'nginx', version: '1.27' }],
     files: { '.env': {}, 'docker-compose.yml': {} },

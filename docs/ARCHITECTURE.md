@@ -1,6 +1,6 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: v0.3.1
+> **版本**: v0.4.0
 > **最后更新**: 2026-09-24
 > **配套文档**: [README.md](../README.md)（用户视角）、[DEV.md](../DEV.md)（开发者指南）、[AGENTS.md](../AGENTS.md)（AI Agent 协作规范）
 
@@ -26,11 +26,13 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 
 **核心价值**：
 - 🎯 **可视化配置** — GUI 替代手动编辑 `.env` 和 `docker-compose.yml`
+- 🌐 **站点挂载** — 多站点 Nginx conf + PHP/Nginx 卷映射，支持跨机路径重映射
 - 🌐 **镜像源加速** — 统一管理 Docker/APT/Composer/NPM 镜像源
 - 💾 **环境备份恢复** — ZIP 打包 + SHA256 校验 + 恢复前自动回滚包
-- 🔧 **多版本管理** — PHP/MySQL/Redis/Nginx 多版本共存，版本清单驱动
+- 🔧 **多版本管理** — PHP/MySQL/Redis/Nginx 多版本共存；清单 + 用户 override/custom
 - 🌍 **国际化与主题** — 中/英双语、自动/明亮/暗黑三种模式
 - 🐳 **权限映射** — PUID/PGID 用户映射，解决挂载目录权限问题
+- 🔄 **关于与更新** — 日志等级/导出、GitHub Releases 自动更新
 
 **技术栈**：前端 Vue 3 + TypeScript + Tailwind CSS v4；后端 Rust (Tauri v2) + bollard；容器 Docker + Compose。
 
@@ -41,7 +43,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 │                        前端层 (Vue 3)                        │
 ├─────────────────────────────────────────────────────────────┤
 │  App.vue (主框架: 侧边栏/日志面板/容器状态)                   │
-│  ├── EnvConfigPage.vue     (环境配置 + 版本下拉)             │
+│  ├── EnvConfigPage.vue     (环境配置 + 多站点 + 版本下拉)   │
 │  ├── MirrorPanel.vue       (镜像源管理)                     │
 │  ├── BackupPage.vue        (环境备份)                       │
 │  ├── RestorePage.vue       (环境恢复向导)                   │
@@ -106,7 +108,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 
 | 组件 | 职责 |
 |------|------|
-| `EnvConfigPage.vue` | 服务版本选择、端口配置、PHP 扩展（多服务独立输入）、应用配置 |
+| `EnvConfigPage.vue` | 服务版本选择、端口配置、PHP 扩展、**多站点挂载**、应用配置 |
 | `SoftwareSettings.vue` | 版本映射表格、用户 Override 编辑（override/custom） |
 | `MirrorPanel.vue` | 镜像源预设、独立配置、连接测试 |
 | `BackupPage.vue` / `RestorePage.vue` | 备份选项与分步恢复向导（预览→校验→确认→明细结果） |
@@ -202,10 +204,10 @@ start_environment
 
 ### 5.3 备份与恢复
 
-**备份**：选择选项（数据库/项目文件/日志等）→ `BackupEngine.create_backup` → 打包 `.env`、`docker-compose.yml`、`services/`、`.user-config/` 配置 → 生成 `manifest.json` → SHA256 校验 → 流式写入 ZIP → 进度事件。
+**备份**：选择选项（项目本地配置 / 全树 / 日志 / 站点范围等，偏好持久化到 `.user-config/backup.json`）→ `BackupEngine.create_backup` → 打包 `.env`、`docker-compose.yml`、`services/`、`.user-config/`（不含 `backup.json` UI 偏好）→ 生成 `manifest.json`（含站点路径元数据）→ SHA256 校验 → 流式写入 ZIP → 进度事件。**不包含**数据库 mysqldump。
 
 **恢复**（分步向导）：
-1. 选择备份文件 → 2. 预览（manifest 解析 + 端口冲突检测）→ 3. SHA256 完整性校验 → 4. 确认恢复（自动生成回滚包 → 解压 .env / compose / services / 其他 → 返回明细结果）。
+1. 选择备份文件 → 2. 预览（manifest 解析 + 端口冲突检测 + **站点路径覆写**）→ 3. SHA256 完整性校验 → 4. 确认恢复（自动生成回滚包 → 解压 .env / compose / services / 其他 → 返回明细结果）。
 
 ## 6. 服务模板体系
 
@@ -277,7 +279,7 @@ start_environment
 |--------|------|----------|
 | `.env` / `docker-compose.yml` | **工作区**（`workspace.json` 配置路径） | `config_generator` / `env_config` |
 | `services/` / `data/` / `logs/` | 工作区 | `config_generator` / Docker 挂载 |
-| `.user-config/mirror_config.json` / `version_overrides.json` / `sites.json` | 工作区 | `mirror_config_manager` / `user_override_manager` / `site_manager` |
+| `.user-config/mirror_config.json` / `version_overrides.json` / `sites.json` / `backup.json` | 工作区 | `mirror_config_manager` / `user_override_manager` / `site_manager` / `backup_options_store` |
 | 备份 ZIP / `.restore_rollback_*.zip` | 用户选择路径 / 工作区 | `backup_engine` / `commands::backup` |
 | `workspace.json` | **app_data_dir** | `workspace_manager` |
 | `php-stack.log` | **app_data_dir** | `logging`（轮转） |

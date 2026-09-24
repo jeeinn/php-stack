@@ -407,7 +407,10 @@ mod tests {
             .map(|(id, _)| extract_version_numbers(id))
             .collect();
         for window in versions.windows(2) {
-            assert!(window[0] >= window[1], "PHP entries must be sorted descending");
+            assert!(
+                window[0] >= window[1],
+                "PHP entries must be sorted descending"
+            );
         }
         assert!(
             entries.iter().any(|(id, _)| id.as_str() == "php56"),

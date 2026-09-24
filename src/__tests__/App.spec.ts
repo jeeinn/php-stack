@@ -26,7 +26,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 vi.mock('@tauri-apps/api/app', () => ({
-  getVersion: vi.fn(async () => '0.3.1'),
+  getVersion: vi.fn(async () => '0.4.0'),
 }))
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({

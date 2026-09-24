@@ -314,7 +314,7 @@ impl UserOverrideManager {
             }
         }
 
-        items.sort_by(|a, b| extract_version_numbers(&b.id).cmp(&extract_version_numbers(&a.id)));
+        items.sort_by_key(|a| std::cmp::Reverse(extract_version_numbers(&a.id)));
         items
     }
 

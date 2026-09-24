@@ -29,6 +29,7 @@ import {
   redisStandardTag,
   nginxStandardTag,
   cycleToId,
+  serviceDirForNewEntry,
   buildExistingIdMap,
   exitCodeFor,
   REASON,
@@ -269,6 +270,21 @@ describe('cycleToId', () => {
     expect(cycleToId('php', '5.6')).toBe('php56');
     expect(cycleToId('mysql', '8.4')).toBe('mysql84');
     expect(cycleToId('redis', '8.2')).toBe('redis82');
+  });
+});
+
+describe('serviceDirForNewEntry', () => {
+  it('与 id 一致，不复用其它版本目录', () => {
+    expect(serviceDirForNewEntry('nginx131')).toBe('nginx131');
+    expect(serviceDirForNewEntry('redis84')).toBe('redis84');
+    expect(serviceDirForNewEntry('mysql97')).toBe('mysql97');
+  });
+
+  it('manifest 中近期同步条目的 service_dir 应等于 id', () => {
+    for (const id of ['mysql97', 'redis84', 'redis810', 'nginx130', 'nginx131']) {
+      const svc = id.replace(/\d+$/, '');
+      expect(manifest[svc][id].service_dir).toBe(id);
+    }
   });
 });
 

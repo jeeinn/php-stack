@@ -138,7 +138,7 @@ cd src-tauri && cargo build
 }
 ```
 
-**建议**：`custom` 的 `service_dir` 复用已有模板目录（与 sync 脚本一致）；新目录名在 apply 时走镜像 `docker create` 提取。
+**建议**：`custom` 的 `service_dir` 与版本 ID 一致（与 sync / 手工清单相同）；物理模板缺失时在 apply 阶段走 `resolve_template_dir` 回退或镜像 `docker create` 提取。
 
 ### 方法 3: 直接修改 `.env` 文件
 

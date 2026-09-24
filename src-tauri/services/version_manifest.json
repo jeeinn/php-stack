@@ -1,6 +1,6 @@
 {
   "_provenance": {
-    "updated_at": "2026-09-04",
+    "updated_at": "2026-09-24",
     "sources": {
       "versions": "docker-library/official-images → library/{php,mysql,redis,nginx}（唯一稳定的 tag 清单入口）",
       "eol": "endoflife.date/api/{php,mysql,redis,nginx}.json",
@@ -113,6 +113,14 @@
       "show_port": true,
       "eol": true,
       "description": "MySQL 5.7 (已停止维护)"
+    },
+    "mysql97": {
+      "display_name": "MYSQL 9.7",
+      "image_tag": "mysql:9.7",
+      "service_dir": "mysql97",
+      "default_port": 3306,
+      "show_port": true,
+      "eol": false
     }
   },
   "redis": {
@@ -151,6 +159,46 @@
       "show_port": true,
       "eol": true,
       "description": "Redis 6.2 (旧版本)"
+    },
+    "redis810": {
+      "display_name": "REDIS 8.10",
+      "image_tag": "redis:8.10-alpine",
+      "service_dir": "redis810",
+      "default_port": 6379,
+      "show_port": true,
+      "eol": false
+    },
+    "redis88": {
+      "display_name": "REDIS 8.8",
+      "image_tag": "redis:8.8-alpine",
+      "service_dir": "redis88",
+      "default_port": 6379,
+      "show_port": true,
+      "eol": false
+    },
+    "redis86": {
+      "display_name": "REDIS 8.6",
+      "image_tag": "redis:8.6-alpine",
+      "service_dir": "redis86",
+      "default_port": 6379,
+      "show_port": true,
+      "eol": false
+    },
+    "redis84": {
+      "display_name": "REDIS 8.4",
+      "image_tag": "redis:8.4-alpine",
+      "service_dir": "redis84",
+      "default_port": 6379,
+      "show_port": true,
+      "eol": false
+    },
+    "redis74": {
+      "display_name": "REDIS 7.4",
+      "image_tag": "redis:7.4-alpine",
+      "service_dir": "redis74",
+      "default_port": 6379,
+      "show_port": true,
+      "eol": false
     }
   },
   "nginx": {
@@ -198,6 +246,22 @@
       "show_port": true,
       "eol": true,
       "description": "Nginx 1.24 (已停止维护)"
+    },
+    "nginx131": {
+      "display_name": "NGINX 1.31",
+      "image_tag": "nginx:1.31-alpine",
+      "service_dir": "nginx131",
+      "default_port": 80,
+      "show_port": true,
+      "eol": false
+    },
+    "nginx130": {
+      "display_name": "NGINX 1.30",
+      "image_tag": "nginx:1.30-alpine",
+      "service_dir": "nginx130",
+      "default_port": 80,
+      "show_port": true,
+      "eol": false
     }
   }
 }

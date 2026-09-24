@@ -126,16 +126,12 @@ fn test_user_override_manager_save_and_load() {
     assert!(!has_override, "Should not have override initially");
 
     // Save an override
-    let override_config = app_lib::engine::user_override_manager::UserVersionOverride {
-        image_tag: "custom/php:8.2".to_string(),
-        description: Some("Custom PHP 8.2".to_string()),
-    };
-
     let save_result = manager.save_user_override(
         &project_root,
         app_lib::engine::version_manifest::ServiceType::Php,
         "php82".to_string(),
-        override_config,
+        "custom/php:8.2".to_string(),
+        Some("Custom PHP 8.2".to_string()),
     );
     assert!(save_result.is_ok(), "Save override should succeed");
 
@@ -165,17 +161,13 @@ fn test_user_override_manager_remove() {
     let mut manager = UserOverrideManager::new(&project_root);
 
     // Save an override
-    let override_config = app_lib::engine::user_override_manager::UserVersionOverride {
-        image_tag: "custom/php:8.2".to_string(),
-        description: None,
-    };
-
     manager
         .save_user_override(
             &project_root,
             app_lib::engine::version_manifest::ServiceType::Php,
             "php82".to_string(),
-            override_config,
+            "custom/php:8.2".to_string(),
+            None,
         )
         .unwrap();
 
@@ -203,22 +195,13 @@ fn test_user_override_manager_reset_all() {
     let mut manager = UserOverrideManager::new(&project_root);
 
     // Save multiple overrides
-    let override1 = app_lib::engine::user_override_manager::UserVersionOverride {
-        image_tag: "custom/php:8.2".to_string(),
-        description: None,
-    };
-
-    let override2 = app_lib::engine::user_override_manager::UserVersionOverride {
-        image_tag: "custom/mysql:8.0".to_string(),
-        description: None,
-    };
-
     manager
         .save_user_override(
             &project_root,
             app_lib::engine::version_manifest::ServiceType::Php,
             "php82".to_string(),
-            override1,
+            "custom/php:8.2".to_string(),
+            None,
         )
         .unwrap();
 
@@ -227,7 +210,8 @@ fn test_user_override_manager_reset_all() {
             &project_root,
             app_lib::engine::version_manifest::ServiceType::Mysql,
             "mysql80".to_string(),
-            override2,
+            "custom/mysql:8.0".to_string(),
+            None,
         )
         .unwrap();
 

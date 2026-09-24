@@ -45,6 +45,7 @@ export {
   checkServiceImagesPresence,
   pullServiceImages,
   saveUserOverride,
+  addCustomVersion,
   removeUserOverride,
   resetAllOverrides,
 } from './envConfig'

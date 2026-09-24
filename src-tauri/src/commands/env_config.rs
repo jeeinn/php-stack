@@ -315,7 +315,8 @@ pub fn generate_env_config(config: EnvConfig) -> Result<String, String> {
 #[tauri::command]
 pub fn preview_compose(config: EnvConfig) -> Result<String, String> {
     ConfigGenerator::validate(&config)?;
-    Ok(ConfigGenerator::generate_compose(&config))
+    let project_root = get_project_root()?;
+    Ok(ConfigGenerator::generate_compose(&config, &project_root))
 }
 
 /// 检查配置文件是否存在

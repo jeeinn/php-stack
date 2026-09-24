@@ -114,6 +114,7 @@ pub fn run() {
             commands::get_recommended_version,
             // 用户版本覆盖
             commands::save_user_override,
+            commands::add_custom_version,
             commands::remove_user_override,
             commands::reset_all_overrides,
             // 日志导出

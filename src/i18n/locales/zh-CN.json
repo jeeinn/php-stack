@@ -406,6 +406,7 @@
     "editDialog": {
       "titleNew": "新增自定义镜像源",
       "titleEdit": "编辑镜像源",
+      "categoryLabel": "镜像类目",
       "urlLabel": "镜像源地址",
       "urlRequired": "*",
       "urlPlaceholder": "例如: https://registry.npmmirror.com",
@@ -446,6 +447,7 @@
   "software": {
     "subtitle": "管理 Docker 镜像版本映射配置",
     "resetAll": "重置所有自定义",
+    "addCustom": "新增版本",
     "table": {
       "name": "版本名称",
       "image": "Docker 镜像",
@@ -466,9 +468,28 @@
       "descLabel": "备注说明",
       "descPlaceholder": "可选，描述这个自定义标签的用途"
     },
+    "addDialog": {
+      "title": "新增版本映射",
+      "categoryLabel": "服务类目",
+      "idLabel": "版本 ID",
+      "idPlaceholder": "例如: redis84 / php86",
+      "idHint": "仅字母数字及 _/-，将用于环境配置下拉",
+      "displayNameLabel": "版本名称",
+      "displayNamePlaceholder": "例如: Redis 8.4",
+      "imageLabel": "Docker 镜像",
+      "imagePlaceholder": "例如: redis:8.4-alpine",
+      "serviceDirLabel": "配置目录",
+      "serviceDirHint": "建议复用已有模板目录；新目录名将在应用配置时依赖镜像提取",
+      "defaultPortLabel": "默认端口",
+      "showPortLabel": "在环境配置中显示端口",
+      "eolLabel": "标记为 EOL",
+      "descLabel": "备注说明",
+      "descPlaceholder": "可选"
+    },
     "hints": {
       "title": "提示：",
       "editCustom": "点击“{action}”可以自定义 Docker 镜像标签",
+      "addCustom": "点击“{action}”可添加清单外的版本，保存后可在环境配置中选用",
       "reapply": "修改后需要重新应用环境配置才能生效",
       "eolWarning": "EOL 版本表示已停止维护，建议使用活跃版本"
     },
@@ -482,6 +503,8 @@
       "loadFailed": "加载版本映射失败: {error}",
       "saved": "保存成功！重新应用配置后生效。",
       "saveFailed": "保存失败: {error}",
+      "added": "已添加自定义版本！重新应用配置后生效。",
+      "addFailed": "新增失败: {error}",
       "deleted": "已恢复为默认配置",
       "deleteFailed": "删除失败: {error}",
       "resetDone": "已重置所有自定义配置",
@@ -570,7 +593,7 @@
       "portConflictsHint": "以下宿主机端口已被占用。恢复仍会写入原配置；启动环境前请改 .env 端口，或停止占用进程。建议端口仅供参考：",
       "portConflictItem": "{service}：{port} → 建议 {suggested}",
       "sites": "站点路径",
-      "sitesHint": "相对路径会跟着新的工作区走。绝对路径默认建议迁入 ./www/{站点 id}，也可另选目录或跳过。",
+      "sitesHint": "相对路径会跟着新的工作区走。绝对路径默认建议迁入 ./www/{'站点 id'}，也可另选目录或跳过。",
       "relativeHint": "项目文件会还原到新工作区里的原相对位置；这里修改的是容器挂载的目录。",
       "absoluteHint": "原路径 {path}（{os}）。默认建议 {suggested}，也可另选本机目录。",
       "moveAllIntoWww": "全部迁入 www",

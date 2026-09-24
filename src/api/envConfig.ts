@@ -59,6 +59,30 @@ export function saveUserOverride(
   })
 }
 
+export function addCustomVersion(params: {
+  serviceType: string
+  id: string
+  displayName: string
+  imageTag: string
+  serviceDir: string
+  defaultPort: number
+  showPort: boolean
+  eol: boolean
+  description?: string
+}): Promise<void> {
+  return invokeCommand<void>('add_custom_version', {
+    serviceType: params.serviceType,
+    id: params.id,
+    displayName: params.displayName,
+    imageTag: params.imageTag,
+    serviceDir: params.serviceDir,
+    defaultPort: params.defaultPort,
+    showPort: params.showPort,
+    eol: params.eol,
+    description: params.description,
+  })
+}
+
 export function removeUserOverride(
   serviceType: string,
   id: string,

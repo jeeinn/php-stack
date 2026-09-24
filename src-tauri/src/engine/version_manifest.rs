@@ -236,7 +236,7 @@ impl VersionManifest {
 }
 
 /// 从 ID 中提取版本数字用于排序（如 "php82" → (8, 2), "nginx128" → (1, 28)）
-fn extract_version_numbers(id: &str) -> (u32, u32, u32) {
+pub(crate) fn extract_version_numbers(id: &str) -> (u32, u32, u32) {
     // 去掉前缀字母，保留数字部分
     let digits: String = id.chars().skip_while(|c| c.is_alphabetic()).collect();
 

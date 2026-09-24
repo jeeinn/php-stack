@@ -72,7 +72,8 @@ fn test_generate_env_contains_expected_keys() {
 
 #[test]
 fn test_generate_compose_contains_services() {
-    let compose = ConfigGenerator::generate_compose(&sample_config());
+    let tmp = tempfile::tempdir().expect("创建临时目录失败");
+    let compose = ConfigGenerator::generate_compose(&sample_config(), tmp.path());
 
     assert!(
         compose.contains("php82"),

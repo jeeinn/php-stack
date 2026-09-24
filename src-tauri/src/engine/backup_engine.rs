@@ -214,10 +214,7 @@ impl BackupEngine {
                     continue;
                 }
                 let normalized = expand_site_glob_pattern(pattern);
-                let abs_pattern = host
-                    .join(&normalized)
-                    .to_string_lossy()
-                    .replace('\\', "/");
+                let abs_pattern = host.join(&normalized).to_string_lossy().replace('\\', "/");
 
                 app_log!(
                     debug,
@@ -408,11 +405,7 @@ mod tests {
         let www = project_root.join("www");
         fs::create_dir_all(&www).expect("创建 www 失败");
         fs::write(www.join("big.bin"), &content).expect("写入大文件失败");
-        fs::write(
-            project_root.join(".env"),
-            "SOURCE_DIR=./www\n",
-        )
-        .expect("写入 .env 失败");
+        fs::write(project_root.join(".env"), "SOURCE_DIR=./www\n").expect("写入 .env 失败");
 
         let services_dir = project_root.join("services");
         fs::create_dir_all(&services_dir).expect("创建 services 失败");
@@ -766,9 +759,7 @@ mod tests {
             "应保留完整相对路径，实际: {names:?}"
         );
         assert!(
-            !names
-                .iter()
-                .any(|n| n == "projects/www/Config.local.php"),
+            !names.iter().any(|n| n == "projects/www/Config.local.php"),
             "不应扁平成仅文件名: {names:?}"
         );
         assert!(!names.iter().any(|n| n == "projects/www/index.php"));
@@ -786,6 +777,9 @@ mod tests {
             expand_site_glob_pattern("cmp/APP/Config/Config.local.php"),
             "cmp/APP/Config/Config.local.php"
         );
-        assert_eq!(expand_site_glob_pattern("Config.local.php"), "**/Config.local.php");
+        assert_eq!(
+            expand_site_glob_pattern("Config.local.php"),
+            "**/Config.local.php"
+        );
     }
 }

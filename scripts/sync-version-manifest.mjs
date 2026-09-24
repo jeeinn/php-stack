@@ -21,7 +21,8 @@
  *
  * 设计红线（不可破坏）：
  *   1. 永不删除 manifest 里已有条目（用户手工维护的可能被覆盖）。
- *   2. 新增条目的 service_dir 默认复用 cycle 内已有目录，不自动建目录。
+ *   2. 新增条目的 service_dir 与 id 一致（如 redis84 → redis84），不复用其它版本目录；
+ *      物理模板缺失时由 config_generator.resolve_template_dir / 镜像提取兜底。
  *   3. eol=true 的版本仍出现在"建议新增"列表，但用 ⚠️ 标识（CI 提示人工确认）。
  *   4. 脚本不联网用户运行环境（用户离线场景下仍能用 --offline）。
  */
@@ -252,6 +253,14 @@ export function cycleToId(svc, cycle) {
   return `${svc}${major}${minor}`;
 }
 
+/**
+ * 新条目的 service_dir：与 id 一致，保证 env 前缀一一对应。
+ * 物理模板缺失由运行时 resolve_template_dir / 镜像提取兜底。
+ */
+export function serviceDirForNewEntry(id) {
+  return id;
+}
+
 /** manifest 现有条目 id → cycle 反查。 */
 export function buildExistingIdMap(manifest) {
   const map = {};
@@ -469,11 +478,9 @@ async function main() {
     console.log(`## 📝 Written to version_manifest.json\n`);
     for (const r of newUpstream) {
       const id = cycleToId(r.svc, r.cycle);
-      // service_dir：复用 cycle 内已有的；都没有则用 cycleToId 的结果
-      const existingDir = Object.keys(manifest[r.svc] || {}).find(
-        (k) => manifest[r.svc][k].service_dir
-      );
-      const serviceDir = existingDir ? manifest[r.svc][existingDir].service_dir : id;
+      // service_dir 与 id 对齐，保证 .env 前缀（NGINX131_* 等）一一对应；
+      // 不复用其它版本目录，避免 load_existing_config 把一条 env 解析成多行服务。
+      const serviceDir = serviceDirForNewEntry(id);
 
       manifest[r.svc] = manifest[r.svc] || {};
       manifest[r.svc][id] = {

@@ -53,10 +53,7 @@ mod tests {
             relative(VERSION_OVERRIDES),
             ".user-config/version_overrides.json"
         );
-        assert_eq!(
-            relative(SITES),
-            ".user-config/sites.json"
-        );
+        assert_eq!(relative(SITES), ".user-config/sites.json");
         assert_eq!(relative(BACKUP), ".user-config/backup.json");
         assert!(!relative(MIRROR_CONFIG).contains('\\'));
     }

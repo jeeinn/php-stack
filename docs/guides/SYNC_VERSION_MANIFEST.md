@@ -1,6 +1,6 @@
 # 版本清单同步工作流
 
-> **TL;DR**：本地/CI 跑 `npm run sync:manifest`，自动从上游拉版本元数据并写回 `version_manifest.json`；新条目会自动复用已有模板目录，不建新目录。
+> **TL;DR**：本地/CI 跑 `npm run sync:manifest`，自动从上游拉版本元数据并写回 `version_manifest.json`；新条目 `service_dir` 与版本 ID 一致。
 
 ## 为什么需要这个脚本
 
@@ -45,7 +45,7 @@ node scripts/sync-version-manifest.mjs --offline --apply
 
 ### 1. 上游新增版本（manifest 缺失）
 
-eol api 列了但 manifest 还没有的 cycle。**`--apply` 模式会自动写入**——新增条目的 `service_dir` 自动复用 cycle 内已有目录（如 `redis84` → `service_dir: "redis82"`），不新建目录。
+eol api 列了但 manifest 还没有的 cycle。**`--apply` 模式会自动写入**——新增条目的 `service_dir` 与版本 ID 一致（如 `redis84` → `service_dir: "redis84"`）。物理模板目录可不存在，apply 环境配置时由 `resolve_template_dir` / 镜像提取兜底。
 
 EOL 列里 `false` 表示仍在支持；`2029-12-31` 这种日期表示支持到期日；`⚠️ true` 表示上游已终止所有支持，写入会自动标 `eol: true`。
 
@@ -57,16 +57,18 @@ manifest 的 `image_tag` 用了 short form（如 `php:8.5-fpm`），上游已发
 
 manifest 里 `eol: false` 但 upstream 已 EOL 的条目。**`--apply` 模式不会自动改这条**——是否标 EOL 涉及业务判断（公司可能买商业支持）。
 
-## 新增条目的 service_dir 复用规则
+## 新增条目的 service_dir 规则
 
-这是项目的隐式约定（详见 [`docs/architecture/SERVICE_TEMPLATE_SOURCING.md`](../architecture/SERVICE_TEMPLATE_SOURCING.md)）：
+与手工维护条目一致：**`service_dir` = 版本 ID**（如 `nginx131` → `nginx131`），保证 `.env` 前缀与清单 ID 一一对应。
 
-> 加新版本 = 改一行 JSON + 复用已有模板目录，**不改代码**。
+> 不要把多个版本挂到同一个旧目录名上（例如 `nginx131` → `nginx128`）：`load_existing_config` 会按 `service_dir` 反查，导致一条 `NGINX128_*` 被解析成多行服务并触发假端口冲突。
 
-`scripts/sync-version-manifest.mjs` 严格遵循这条：
+物理模板（`services/{dir}/`）缺失时：
 
-- 如果 cycle 内已有任意条目（如 `redis62`、`redis72`、`redis82`），新条目（如 `redis84`、`redis810`）的 `service_dir` 自动复用其中第一个
-- 如果 cycle 是新增的全新服务（如用户加了 `mariadb`），则会失败（因为没有任何已有目录可参考），需要用户手工指定 `service_dir`
+- `config_generator.resolve_template_dir` 回退到同服务已有模板
+- 或 Phase 3 从镜像 `docker create` + `cp` 提取配置
+
+详见 [`docs/architecture/SERVICE_TEMPLATE_SOURCING.md`](../architecture/SERVICE_TEMPLATE_SOURCING.md)。
 
 ## 工作流（推荐）
 
@@ -112,7 +114,7 @@ jobs:
 ## 设计红线（不可破坏）
 
 1. **永不删除 manifest 已有条目**——用户手工维护的可能被覆盖，`--apply` 只增不改。
-2. **新增条目复用已有 `service_dir`**——不自动建目录（避开 `config_generator.rs` 的隐式约定）。
+2. **新增条目 `service_dir` 与 ID 一致**——不复用其它版本目录，避免 `.env` 反查歧义；模板缺失靠运行时 fallback / 镜像提取。
 3. **patch 升级不自动**——`--apply` 只处理新增；现有 image_tag 落后需人工确认。
 4. **EOL 标定不自动**——是否把 `eol` 翻 true 涉及商业判断，必须人工 review。
 5. **`--apply` 模式下 fetch 失败必须报错退出**——禁止写半截不一致的 manifest。

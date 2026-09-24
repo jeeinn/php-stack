@@ -1,5 +1,5 @@
-/** 容器内互连用的服务类型（与 UI 分区一致） */
-export type ConnectServiceKind = 'php' | 'mysql' | 'redis' | 'nginx'
+/** 容器内互连用的服务 kind（内置 + 自定义） */
+export type ConnectServiceKind = string
 
 export interface ConnectInfo {
   /** 推荐写入应用 / conf 的主机名 */
@@ -10,36 +10,31 @@ export interface ConnectInfo {
   containerPort: number
   /** 同类多实例：短名不可用，需用版本化主机名 */
   warnMulti: boolean
-  /** 单实例时可用的短名；PHP 无短名 */
+  /** 单实例时可用的短名；无短名时为 null（如 PHP） */
   shortName: string | null
 }
 
-const SHORT_NAMES: Record<Exclude<ConnectServiceKind, 'php'>, string> = {
-  mysql: 'mysql',
-  redis: 'redis',
-  nginx: 'nginx',
-}
-
-const CONTAINER_PORTS: Record<ConnectServiceKind, number> = {
-  php: 9000,
-  mysql: 3306,
-  redis: 6379,
-  nginx: 80,
+/** 来自服务目录的连接信息（container_port / short_name） */
+export interface CatalogConnect {
+  container_port: number
+  short_name?: string | null
 }
 
 /**
- * 根据 service_dir 与同类实例数，解析容器内推荐连接主机名。
- * 与 compose 生成逻辑一致：MySQL/Redis/Nginx 仅在 count===1 时挂短别名。
+ * 根据 service_dir、同类实例数与 catalog 连接信息，解析容器内推荐连接主机名。
+ * 有 short_name 且 count===1 时用短别名；否则用 service_dir。
  */
 export function resolveConnectInfo(
   serviceDir: string,
-  kind: ConnectServiceKind,
   count: number,
+  catalogConnect?: CatalogConnect,
 ): ConnectInfo {
-  const containerPort = CONTAINER_PORTS[kind]
+  const containerPort = catalogConnect?.container_port ?? 0
+  const shortName = catalogConnect?.short_name ?? null
   const warnMulti = count > 1
 
-  if (kind === 'php') {
+  // 无短名（如 PHP / 未配置 alias）：始终用 service_dir
+  if (!shortName) {
     return {
       primary: serviceDir,
       alsoAvailable: [],
@@ -49,7 +44,6 @@ export function resolveConnectInfo(
     }
   }
 
-  const shortName = SHORT_NAMES[kind]
   if (count === 1) {
     return {
       primary: shortName,

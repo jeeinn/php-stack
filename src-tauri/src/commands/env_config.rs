@@ -2,9 +2,11 @@ use super::get_project_root;
 use crate::docker::manager::DockerManager;
 use crate::engine::config_extractor::{ConfigExtractor, ExtractOutcome, ImageStatus};
 use crate::engine::config_generator::{ConfigGenerator, EnvConfig};
+use crate::engine::service_catalog::{GeneratorKind, ServiceCatalog};
 use crate::engine::site_manager;
 use crate::engine::user_config;
-use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
+use crate::engine::user_override_manager::UserOverrideManager;
+use crate::engine::version_manifest::{VersionEntry, VersionManifest};
 
 /// 单个镜像拉取结果（前端"待拉取"确认弹窗使用）
 #[derive(Debug, Clone, serde::Serialize)]
@@ -150,90 +152,108 @@ fn extract_service_name(line: &str, keyword: &str) -> Option<String> {
 /// 验证 EnvConfig（端口冲突检测等）
 #[tauri::command]
 pub fn validate_env_config(config: EnvConfig) -> Result<(), String> {
-    ConfigGenerator::validate(&config)
+    let project_root = get_project_root().ok();
+    ConfigGenerator::validate(&config, project_root.as_deref())
 }
 
 /// 从 .env 键解析服务列表（纯函数，便于单测）。
 ///
-/// 按 version_manifest 的 `service_dir` 生成 `{DIR}_VERSION` 去匹配，
+/// 按 version_manifest / 用户 custom 的 `service_dir` 生成 `{DIR}_VERSION` 去匹配，
 /// **不再**用 `key[3..]` / `key[5..]` / `key[6..]` 这类魔数切片反解前缀（A2）。
+///
+/// `override_manager` 为 `None` 时仅扫清单；有值时同时扫 custom 条目。
 fn parse_env_to_services(
     env_map: &std::collections::HashMap<String, String>,
     manifest: &VersionManifest,
+    override_manager: Option<&UserOverrideManager>,
+    project_root: &std::path::Path,
 ) -> Vec<crate::engine::config_generator::ServiceEntry> {
-    use crate::engine::config_generator::{ServiceEntry, ServiceType};
+    use crate::engine::config_generator::ServiceEntry;
+    use std::collections::{BTreeSet, HashSet};
 
+    let catalog = ServiceCatalog::merged(project_root);
     let mut services: Vec<ServiceEntry> = Vec::new();
+    let mut seen_kinds: HashSet<String> = HashSet::new();
 
-    collect_services_from_manifest(
-        &mut services,
-        env_map,
-        manifest,
-        VmServiceType::Php,
-        ServiceType::PHP,
-        PortKeyKind::HostPort,
-        true,
-    );
-    collect_services_from_manifest(
-        &mut services,
-        env_map,
-        manifest,
-        VmServiceType::Mysql,
-        ServiceType::MySQL,
-        PortKeyKind::HostPort,
-        false,
-    );
-    collect_services_from_manifest(
-        &mut services,
-        env_map,
-        manifest,
-        VmServiceType::Redis,
-        ServiceType::Redis,
-        PortKeyKind::HostPort,
-        false,
-    );
-    collect_services_from_manifest(
-        &mut services,
-        env_map,
-        manifest,
-        VmServiceType::Nginx,
-        ServiceType::Nginx,
-        PortKeyKind::HttpHostPort,
-        false,
-    );
+    for desc in catalog.list() {
+        seen_kinds.insert(desc.id.clone());
+        let with_extensions = desc.generator == GeneratorKind::Php;
+        collect_services_for_kind(
+            &mut services,
+            env_map,
+            manifest,
+            override_manager,
+            &desc.id,
+            &desc.host_port_env_suffix,
+            with_extensions,
+        );
+    }
+
+    // 清单或覆盖中出现、但不在 builtin catalog 的 kind（如仅有 custom 版本）
+    let mut extra_kinds: BTreeSet<String> = BTreeSet::new();
+    for k in manifest.service_kinds() {
+        if !seen_kinds.contains(&k) {
+            extra_kinds.insert(k);
+        }
+    }
+    if let Some(mgr) = override_manager {
+        for k in mgr.service_kinds() {
+            if !seen_kinds.contains(&k) {
+                extra_kinds.insert(k);
+            }
+        }
+    }
+    for kind in extra_kinds {
+        let port_suffix = catalog
+            .get(&kind)
+            .map(|d| d.host_port_env_suffix.as_str())
+            .unwrap_or("HOST_PORT");
+        collect_services_for_kind(
+            &mut services,
+            env_map,
+            manifest,
+            override_manager,
+            &kind,
+            port_suffix,
+            false,
+        );
+    }
 
     services
 }
 
-/// 端口环境变量后缀：PHP/MySQL/Redis 用 `_HOST_PORT`，Nginx 用 `_HTTP_HOST_PORT`
-enum PortKeyKind {
-    HostPort,
-    HttpHostPort,
-}
-
-fn collect_services_from_manifest(
+fn collect_services_for_kind(
     services: &mut Vec<crate::engine::config_generator::ServiceEntry>,
     env_map: &std::collections::HashMap<String, String>,
     manifest: &VersionManifest,
-    vm_type: VmServiceType,
-    service_type: crate::engine::config_generator::ServiceType,
-    port_kind: PortKeyKind,
+    override_manager: Option<&UserOverrideManager>,
+    kind: &str,
+    port_suffix: &str,
     with_extensions: bool,
 ) {
     use crate::engine::config_generator::ServiceEntry;
 
-    for (id, entry) in manifest.get_available_entries(&vm_type) {
+    let entries: Vec<(String, VersionEntry)> = if let Some(mgr) = override_manager {
+        mgr.list_merged_entries(kind)
+            .into_iter()
+            .map(|item| (item.id, item.entry))
+            .collect()
+    } else {
+        manifest
+            .get_available_entries(kind)
+            .into_iter()
+            .map(|(id, entry)| (id.clone(), entry.clone()))
+            .collect()
+    };
+
+    for (id, entry) in entries {
         let prefix = entry.service_dir.to_uppercase();
         let version_key = format!("{prefix}_VERSION");
         if !env_map.contains_key(&version_key) {
             continue;
         }
 
-        let port_key = match port_kind {
-            PortKeyKind::HostPort => format!("{prefix}_HOST_PORT"),
-            PortKeyKind::HttpHostPort => format!("{prefix}_HTTP_HOST_PORT"),
-        };
-
+        let port_key = format!("{prefix}_{port_suffix}");
         let host_port = env_map
             .get(&port_key)
             .and_then(|p| p.parse::<u16>().ok())
@@ -248,8 +268,8 @@ fn collect_services_from_manifest(
         };
 
         services.push(ServiceEntry {
-            service_type: service_type.clone(),
-            version: id.clone(),
+            service_type: kind.to_string(),
+            version: id,
             host_port,
             extensions,
         });
@@ -275,9 +295,10 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
         .map_err(|e| format!("failed to parse .env file: {e}"))?;
     let env_map = env_file.to_map();
 
-    // 创建 VersionManifest 用于 env prefix 反查
+    // 创建 VersionManifest / UserOverrideManager 用于 env prefix 反查
     let manifest = VersionManifest::new();
-    let services = parse_env_to_services(&env_map, &manifest);
+    let override_manager = UserOverrideManager::new(&project_root);
+    let services = parse_env_to_services(&env_map, &manifest, Some(&override_manager), &project_root);
 
     // 如果没有解析到任何服务，返回 None
     if services.is_empty() {
@@ -314,8 +335,8 @@ pub fn generate_env_config(config: EnvConfig) -> Result<String, String> {
 /// 预览 docker-compose.yml 内容
 #[tauri::command]
 pub fn preview_compose(config: EnvConfig) -> Result<String, String> {
-    ConfigGenerator::validate(&config)?;
     let project_root = get_project_root()?;
+    ConfigGenerator::validate(&config, Some(&project_root))?;
     Ok(ConfigGenerator::generate_compose(&config, &project_root))
 }
 
@@ -474,30 +495,22 @@ pub async fn apply_env_config(
 /// 4. 拉取完成 → 调 `apply_env_config`（此时镜像已存在，extract 路径生效）
 #[tauri::command]
 pub fn check_service_images_presence(config: EnvConfig) -> Result<Vec<ImageStatus>, String> {
+    use crate::engine::config_generator::resolve_service_image_tag;
+    use crate::engine::service_catalog::normalize_service_kind;
+
+    let project_root = get_project_root()?;
+    let override_manager = UserOverrideManager::new(&project_root);
     let manifest = VersionManifest::new();
     let mut tags: Vec<String> = Vec::new();
 
     for service in &config.services {
-        let vm_service_type = match service.service_type {
-            crate::engine::config_generator::ServiceType::PHP => VmServiceType::Php,
-            crate::engine::config_generator::ServiceType::MySQL => VmServiceType::Mysql,
-            crate::engine::config_generator::ServiceType::Redis => VmServiceType::Redis,
-            crate::engine::config_generator::ServiceType::Nginx => VmServiceType::Nginx,
-        };
-
-        // 优先用 manifest 的 image_tag（自定义 fallback 与 generate_service_dirs 保持一致）
-        let tag = manifest
-            .get_entry(&vm_service_type, &service.version)
-            .map(|entry| entry.image_tag.clone())
-            .unwrap_or_else(|| {
-                let svc_prefix = match service.service_type {
-                    crate::engine::config_generator::ServiceType::PHP => "php",
-                    crate::engine::config_generator::ServiceType::MySQL => "mysql",
-                    crate::engine::config_generator::ServiceType::Redis => "redis",
-                    crate::engine::config_generator::ServiceType::Nginx => "nginx",
-                };
-                format!("{svc_prefix}:{}", service.version)
-            });
+        let kind = normalize_service_kind(&service.service_type);
+        let tag = resolve_service_image_tag(
+            &override_manager,
+            &manifest,
+            &kind,
+            &service.version,
+        );
         tags.push(tag);
     }
 
@@ -562,33 +575,21 @@ pub fn extract_service_config(
     image_tag: String,
 ) -> Result<ExtractOutcome, String> {
     use crate::app_log;
+    use crate::engine::service_catalog::normalize_service_kind;
 
     let project_root = get_project_root()?;
-
-    // 字符串 → VmServiceType
-    let vm_service_type = match service_type.as_str() {
-        "php" => VmServiceType::Php,
-        "mysql" => VmServiceType::Mysql,
-        "redis" => VmServiceType::Redis,
-        "nginx" => VmServiceType::Nginx,
-        other => {
-            return Err(format!(
-                "unknown service type '{other}' (expected php/mysql/redis/nginx)"
-            ))
-        }
-    };
+    let kind = normalize_service_kind(&service_type);
 
     app_log!(
         info,
         "commands::extract_service_config",
         "Extracting {} config from {} (dir={})",
-        service_type,
+        kind,
         image_tag,
         service_dir
     );
 
-    let outcome =
-        ConfigExtractor::extract_config(&vm_service_type, &service_dir, &image_tag, &project_root);
+    let outcome = ConfigExtractor::extract_config(&kind, &service_dir, &image_tag, &project_root);
     Ok(outcome)
 }
 
@@ -1535,7 +1536,6 @@ mod tests {
     use super::parse_env_to_services;
     use super::run_blocking_command;
     use super::PullImageResult;
-    use crate::engine::config_generator::ServiceType;
     use crate::engine::env_parser::EnvFile;
     use crate::engine::version_manifest::VersionManifest;
 
@@ -1570,11 +1570,11 @@ mod tests {
             "SOURCE_DIR=./www\nTZ=Asia/Shanghai\nREDIS62_VERSION=6.2-alpine-01\nREDIS62_HOST_PORT=6379\nREDIS72_VERSION=7.2-alpine\nREDIS72_HOST_PORT=6380\n",
         );
         let manifest = VersionManifest::new();
-        let services = parse_env_to_services(&env_map, &manifest);
+        let services = parse_env_to_services(&env_map, &manifest, None, std::path::Path::new("."));
 
         let redis: Vec<_> = services
             .iter()
-            .filter(|s| matches!(s.service_type, ServiceType::Redis))
+            .filter(|s| s.service_type == "redis")
             .collect();
         assert_eq!(
             redis.len(),
@@ -1594,11 +1594,11 @@ mod tests {
             "SOURCE_DIR=./www\nTZ=Asia/Shanghai\nNGINX127_VERSION=1.27-alpine\nNGINX127_HTTP_HOST_PORT=80\nNGINX125_VERSION=1.25-alpine\nNGINX125_HTTP_HOST_PORT=8080\n",
         );
         let manifest = VersionManifest::new();
-        let services = parse_env_to_services(&env_map, &manifest);
+        let services = parse_env_to_services(&env_map, &manifest, None, std::path::Path::new("."));
 
         let nginx: Vec<_> = services
             .iter()
-            .filter(|s| matches!(s.service_type, ServiceType::Nginx))
+            .filter(|s| s.service_type == "nginx")
             .collect();
         assert_eq!(
             nginx.len(),
@@ -1623,13 +1623,13 @@ mod tests {
             "SOURCE_DIR=./www\nTZ=Asia/Shanghai\nPHP85_VERSION=8.5\nPHP85_HOST_PORT=9000\nPHP85_EXTENSIONS=mysqli,mbstring\nMYSQL84_VERSION=8.4\nMYSQL84_HOST_PORT=3306\nREDIS62_VERSION=6.2-alpine-01\nREDIS62_HOST_PORT=6379\nNGINX127_VERSION=1.27-alpine\nNGINX127_HTTP_HOST_PORT=80\n",
         );
         let manifest = VersionManifest::new();
-        let services = parse_env_to_services(&env_map, &manifest);
+        let services = parse_env_to_services(&env_map, &manifest, None, std::path::Path::new("."));
 
         assert_eq!(services.len(), 4, "应解析出 4 个服务，实际: {services:?}");
 
         let php = services
             .iter()
-            .find(|s| matches!(s.service_type, ServiceType::PHP))
+            .find(|s| s.service_type == "php")
             .expect("应包含 PHP 服务");
         assert_eq!(php.version, "php85", "PHP85 应反查为 ID php85");
         assert_eq!(php.host_port, 9000);
@@ -1642,14 +1642,15 @@ mod tests {
 
         let mysql = services
             .iter()
-            .find(|s| matches!(s.service_type, ServiceType::MySQL))
+            .find(|s| s.service_type == "mysql")
             .expect("应包含 MySQL 服务");
         assert_eq!(mysql.version, "mysql84");
         assert_eq!(mysql.host_port, 3306);
 
         // MYSQL_ROOT_PASSWORD 不应被误识别为 MySQL 服务
         let with_root = parse_env("MYSQL_ROOT_PASSWORD=secret\n");
-        let no_services = parse_env_to_services(&with_root, &VersionManifest::new());
+        let no_services =
+            parse_env_to_services(&with_root, &VersionManifest::new(), None, std::path::Path::new("."));
         assert!(
             no_services.is_empty(),
             "仅 ROOT_PASSWORD 时不应解析出服务，实际: {no_services:?}"

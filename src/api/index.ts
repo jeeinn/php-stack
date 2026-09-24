@@ -38,6 +38,10 @@ export {
 } from './docker'
 export {
   getVersionMappings,
+  getServiceCatalog,
+  saveCustomService,
+  updateCustomService,
+  removeCustomService,
   loadExistingConfig,
   generateEnvConfig,
   previewCompose,

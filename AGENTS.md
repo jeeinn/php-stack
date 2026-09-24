@@ -15,12 +15,13 @@
     - `mirror.rs`: 处理 Docker 和 PHP 镜像源切换。
   - `engine/`: 核心业务引擎。
     - `env_parser.rs`: **.env 文件解析器与格式化器**（v0.1.0）
-    - `config_generator.rs`: **可视化配置生成器**（v0.1.0，含模板释放 resolve_template_dir/copy_template_file）
+    - `config_generator.rs`: **可视化配置生成器**（v0.1.0，含模板释放；v0.5 按 catalog generator 路由）
+    - `service_catalog.rs`: **服务目录 / 描述符**（v0.5.0，内置 + `.user-config/custom_services.json`）
     - `mirror_manager.rs`: **统一镜像源管理器**（v0.1.0）
     - `backup_manifest.rs`: **备份清单数据模型**（v0.1.0）
     - `backup_engine.rs`: **增强备份引擎**（v0.1.0）
     - `restore_engine.rs`: **恢复引擎**（v0.1.0，zip-slip 防护/回滚包）
-    - `version_manifest.rs`: **服务版本清单管理器**（v0.2.0）
+    - `version_manifest.rs`: **服务版本清单管理器**（v0.2.0；v0.5 动态 kind 键）
     - `user_override_manager.rs`: **用户版本覆盖管理器**（v0.2.0，entry_kind: override/custom）
     - `mirror_config_manager.rs`: **用户镜像源配置管理器**（v0.2.0）
     - `workspace_manager.rs`: **工作目录管理器**（v0.3.0）
@@ -34,7 +35,7 @@
     - `env_config.rs`: 环境配置生成、应用、启动/重启/停止环境。
     - `mirror.rs`: 镜像源预设管理、自定义配置、连接测试。
     - `backup.rs`: 备份创建、恢复预览/验证/执行、路径转换。
-    - `workspace.rs`: 工作区管理、版本映射查询、用户覆盖、日志导出。
+    - `workspace.rs`: 工作区管理、版本映射、用户覆盖、服务目录 CRUD、日志导出。
     - `app.rs`: 应用信息与更新相关命令。
   - `lib.rs`: 插件注册与指令分发中心。
   - `logging.rs` / `macros.rs`: 三层日志系统与 `app_log!` / `ui_log!` 宏。
@@ -134,6 +135,19 @@
 
 ### 5. 运行时配置提取（Phase 3）
 - 应用配置前镜像存在性检测 / 拉取确认 / `docker create + cp` 提取默认配置
+
+## ✅ v0.5.0 新增功能（进行中 / Unreleased）
+
+### 1. 服务目录（Service Catalog）
+- `service_catalog.rs` + 内置 `service_catalog.json`；用户自定义落盘 `.user-config/custom_services.json`
+- `ServiceEntry.service_type` 为字符串 kind；生成按 `generator: php|nginx|image` 路由
+- `version_manifest` 顶层动态键；`get_version_mappings` / 连接提示 / SoftwareSettings 读 catalog
+
+### 2. 可选中间件
+- MySQL 默认可关（同 Redis）；新工作区默认不启用 MySQL；未选中不写配置
+
+### 3. 自定义服务（高级）
+- 环境配置页可添加 image 型自定义服务（MongoDB / Memcached 等）；不内置官方条目
 
 ## 🛠️ 开发规范
 
@@ -288,7 +302,7 @@
 
 ## 🗺️ 后续开发重点 (给下个 Agent 的 Tip)
 
-### 已完成的功能（v0.1.0 ~ v0.4.0）
+### 已完成的功能（v0.1.0 ~ v0.5.0）
 ✅ **环境可视化配置** - 完整实现需求 1.1-1.9，支持多 PHP 版本独立服务
 ✅ **统一镜像源管理** - 完整实现需求 2.1-2.7
 ✅ **环境备份** - 完整实现需求 3.1-3.8, 6.1-6.4（数据库 dump 除外）
@@ -299,12 +313,15 @@
 ✅ **跨平台权限映射** - PUID/PGID 用户映射
 ✅ **Nginx 站点管理** - 多站点挂载与托管 conf
 ✅ **关于页与自动更新** - 日志等级/导出、GitHub Releases 更新
+✅ **服务目录与可选中间件** - Catalog 描述符；MySQL 可选；自定义 image 服务
 ✅ **测试框架** - 单元测试 + 集成测试 + 组件测试
 
-### 当前版本定位（v0.4.0）
+### 当前版本定位（v0.5.0）
 
-**核心定位**: PHP-Stack v0.4.0 是一个**环境配置管理与迁移工具**，专注于：
+**核心定位**: PHP-Stack v0.5.0 是一个**可扩展的环境配置管理与迁移工具**，专注于：
 - ✅ 可视化配置生成（替代手动编辑 .env 和 docker-compose.yml）
+- ✅ 服务目录驱动扩展（内置四类 + 用户自定义 image 服务）
+- ✅ 可选中间件（可仅启动 PHP + Nginx）
 - ✅ Nginx 多站点挂载与托管 conf
 - ✅ 镜像源统一管理（加速国内开发体验）
 - ✅ 环境备份与恢复（含跨机路径重映射）
@@ -315,11 +332,13 @@
 **不包含的功能**（未来版本可能考虑）:
 - ❌ 软件管理中心（多版本一键安装/拉取编排）— 镜像需用户本地具备或在应用配置时确认拉取
 - ❌ 数据库自动 dump / SQL 自动导入 — 当前可手动备份数据库文件或自行 mysqldump
+- ❌ 官方内置 MongoDB / Elasticsearch / Memcached — 可用「添加自定义服务」自行配置
 
 **设计理念**: 
 - **轻量级**: 专注于配置管理和环境迁移，不做复杂的容器编排
 - **透明性**: 生成的配置文件完全可见可编辑，不隐藏任何细节
 - **兼容性**: 与 dnmp 等项目保持兼容，便于团队协作
+- **可扩展**: 新增服务种类优先改 catalog / 清单 / 模板，而非改枚举
 
 ### 待完善功能
 

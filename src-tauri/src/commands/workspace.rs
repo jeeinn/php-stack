@@ -1,6 +1,10 @@
 use crate::app_log;
+use crate::engine::service_catalog::{
+    self, build_custom_descriptor, default_custom_version_id, normalize_service_kind,
+    CustomServiceForm, ServiceCatalog, ServiceDescriptor,
+};
 use crate::engine::user_override_manager::UserOverrideManager;
-use crate::engine::version_manifest::{ServiceType as VmServiceType, VersionManifest};
+use crate::engine::version_manifest::{VersionEntry, VersionManifest};
 use crate::engine::workspace_manager::WorkspaceManager;
 
 use super::{get_log_file, get_project_root, paths};
@@ -115,22 +119,31 @@ pub fn recreate_workspace_dir() -> Result<WorkspaceInfo, String> {
 /// 获取所有可用的版本映射配置（清单 + 用户自定义）
 #[tauri::command]
 pub fn get_version_mappings() -> Result<serde_json::Value, String> {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     let project_root = get_project_root()?;
     let override_manager = UserOverrideManager::new(&project_root);
+    let manifest = VersionManifest::new();
+    let catalog = ServiceCatalog::merged(&project_root);
+
+    let mut kinds: HashSet<String> = HashSet::new();
+    for k in catalog.kinds() {
+        kinds.insert(k);
+    }
+    for k in manifest.service_kinds() {
+        kinds.insert(k);
+    }
+    for k in override_manager.service_kinds() {
+        kinds.insert(k);
+    }
+
+    let mut kind_list: Vec<String> = kinds.into_iter().collect();
+    kind_list.sort();
+
     let mut result = HashMap::new();
-
-    let service_types = [
-        ("php", VmServiceType::Php),
-        ("mysql", VmServiceType::Mysql),
-        ("redis", VmServiceType::Redis),
-        ("nginx", VmServiceType::Nginx),
-    ];
-
-    for (key, service_type) in &service_types {
+    for key in kind_list {
         let mut versions = Vec::new();
-        for item in override_manager.list_merged_entries(service_type) {
+        for item in override_manager.list_merged_entries(&key) {
             versions.push(serde_json::json!({
                 "id": item.id,
                 "display_name": item.entry.display_name,
@@ -144,7 +157,7 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
                 "is_custom": item.is_custom,
             }));
         }
-        result.insert(key.to_string(), serde_json::Value::Array(versions));
+        result.insert(key, serde_json::Value::Array(versions));
     }
 
     serde_json::to_value(result).map_err(|e| format!("serialize failed: {e}"))
@@ -155,31 +168,17 @@ pub fn get_version_mappings() -> Result<serde_json::Value, String> {
 pub fn validate_version(service_type: String, version: String) -> Result<bool, String> {
     let project_root = get_project_root()?;
     let manager = UserOverrideManager::new(&project_root);
-    let vm_service_type = match service_type.as_str() {
-        "php" => VmServiceType::Php,
-        "mysql" => VmServiceType::Mysql,
-        "redis" => VmServiceType::Redis,
-        "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("unsupported service type: {service_type}")),
-    };
-
-    Ok(manager.is_id_valid(&vm_service_type, &version))
+    let kind = normalize_service_kind(&service_type);
+    Ok(manager.is_id_valid(&kind, &version))
 }
 
 /// 获取推荐版本
 #[tauri::command]
 pub fn get_recommended_version(service_type: String) -> Result<Option<String>, String> {
     let manifest = VersionManifest::new();
-    let vm_service_type = match service_type.as_str() {
-        "php" => VmServiceType::Php,
-        "mysql" => VmServiceType::Mysql,
-        "redis" => VmServiceType::Redis,
-        "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("unsupported service type: {service_type}")),
-    };
-
+    let kind = normalize_service_kind(&service_type);
     Ok(manifest
-        .get_recommended_entry(&vm_service_type)
+        .get_recommended_entry(&kind)
         .map(|(id, _)| id.to_string()))
 }
 
@@ -193,16 +192,7 @@ pub fn save_user_override(
 ) -> Result<(), String> {
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
-
-    let vm_service_type = match service_type.as_str() {
-        "php" => VmServiceType::Php,
-        "mysql" => VmServiceType::Mysql,
-        "redis" => VmServiceType::Redis,
-        "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("unsupported service type: {service_type}")),
-    };
-
-    manager.save_user_override(&project_root, vm_service_type, id, image_tag, description)
+    manager.save_user_override(&project_root, &service_type, id, image_tag, description)
 }
 
 /// 新增完整自定义版本映射
@@ -224,17 +214,9 @@ pub fn add_custom_version(
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
 
-    let vm_service_type = match service_type.as_str() {
-        "php" => VmServiceType::Php,
-        "mysql" => VmServiceType::Mysql,
-        "redis" => VmServiceType::Redis,
-        "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("unsupported service type: {service_type}")),
-    };
-
     manager.add_custom_version(
         &project_root,
-        vm_service_type,
+        &service_type,
         id,
         VersionEntry {
             display_name,
@@ -253,16 +235,7 @@ pub fn add_custom_version(
 pub fn remove_user_override(service_type: String, id: String) -> Result<(), String> {
     let project_root = get_project_root()?;
     let mut manager = UserOverrideManager::new(&project_root);
-
-    let vm_service_type = match service_type.as_str() {
-        "php" => VmServiceType::Php,
-        "mysql" => VmServiceType::Mysql,
-        "redis" => VmServiceType::Redis,
-        "nginx" => VmServiceType::Nginx,
-        _ => return Err(format!("unsupported service type: {service_type}")),
-    };
-
-    manager.remove_user_override(&project_root, &vm_service_type, &id)
+    manager.remove_user_override(&project_root, &service_type, &id)
 }
 
 /// 重置所有用户自定义版本覆盖
@@ -303,4 +276,152 @@ pub fn export_logs() -> Result<String, String> {
     }
 
     std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read log: {e}"))
+}
+
+/// 返回合并后的服务目录（内置 + 工作区自定义）
+#[tauri::command]
+pub fn get_service_catalog() -> Result<Vec<ServiceDescriptor>, String> {
+    let project_root = get_project_root()?;
+    let catalog = ServiceCatalog::merged(&project_root);
+    Ok(catalog.list().to_vec())
+}
+
+fn ensure_custom_version_for_service(
+    project_root: &std::path::Path,
+    descriptor: &ServiceDescriptor,
+    image_tag: &str,
+    version_id: Option<&str>,
+    host_port: u16,
+) -> Result<String, String> {
+    let vid = default_custom_version_id(&descriptor.id, version_id);
+    // 与服务 id 同一字符集（含 `-`）
+    service_catalog::validate_custom_id(&vid)?;
+
+    let mut manager = UserOverrideManager::new(project_root);
+
+    // 已有 custom：更新 image_tag / default_port 并持久化
+    if manager.is_custom_entry(&descriptor.id, &vid) {
+        manager.upsert_custom_version_fields(
+            project_root,
+            &descriptor.id,
+            &vid,
+            image_tag,
+            host_port,
+            None,
+        )?;
+        return Ok(vid);
+    }
+
+    // 仅存在于清单 / override：不覆盖内置，原样返回
+    if manager.is_id_valid(&descriptor.id, &vid) {
+        return Ok(vid);
+    }
+
+    manager.add_custom_version(
+        project_root,
+        &descriptor.id,
+        vid.clone(),
+        VersionEntry {
+            display_name: format!("{} ({})", descriptor.display_name, vid),
+            image_tag: image_tag.to_string(),
+            service_dir: vid.clone(),
+            default_port: host_port,
+            show_port: true,
+            eol: false,
+            description: Some(format!("Auto-created for custom service {}", descriptor.id)),
+        },
+    )?;
+    Ok(vid)
+}
+
+fn upsert_custom_service(
+    form: CustomServiceForm,
+    require_existing: bool,
+) -> Result<ServiceDescriptor, String> {
+    let project_root = get_project_root()?;
+    let host_port = form.host_port;
+    let image_tag = form.image_tag.clone();
+    let version_id = form.version_id.clone();
+    let mut descriptor = build_custom_descriptor(&form)?;
+
+    let mut catalog = ServiceCatalog::merged(&project_root);
+    if require_existing {
+        match catalog.get(&descriptor.id) {
+            Some(existing) if existing.builtin => {
+                return Err(format!(
+                    "cannot update builtin service '{}'",
+                    descriptor.id
+                ));
+            }
+            Some(_) => {}
+            None => {
+                return Err(format!(
+                    "custom service '{}' not found; use save_custom_service",
+                    descriptor.id
+                ));
+            }
+        }
+    } else if let Some(existing) = catalog.get(&descriptor.id) {
+        if existing.builtin {
+            return Err(format!(
+                "service id '{}' conflicts with builtin",
+                descriptor.id
+            ));
+        }
+        // 已有自定义：走更新语义
+    }
+
+    catalog.insert_custom(descriptor.clone())?;
+    service_catalog::persist_custom_from_catalog(&project_root, &catalog)?;
+
+    let vid = ensure_custom_version_for_service(
+        &project_root,
+        &descriptor,
+        &image_tag,
+        version_id.as_deref(),
+        host_port,
+    )?;
+    app_log!(
+        info,
+        "commands::custom_service",
+        "Saved custom service {} (version {})",
+        descriptor.id,
+        vid
+    );
+    // 回读合并结果，保证返回与磁盘一致
+    descriptor = ServiceCatalog::merged(&project_root)
+        .get(&descriptor.id)
+        .cloned()
+        .ok_or_else(|| "failed to reload saved custom service".to_string())?;
+    Ok(descriptor)
+}
+
+/// 新建自定义服务（写入 custom_services.json，并确保有默认版本映射）
+#[tauri::command]
+pub fn save_custom_service(form: CustomServiceForm) -> Result<ServiceDescriptor, String> {
+    upsert_custom_service(form, false)
+}
+
+/// 更新已有非内置自定义服务
+#[tauri::command]
+pub fn update_custom_service(form: CustomServiceForm) -> Result<ServiceDescriptor, String> {
+    upsert_custom_service(form, true)
+}
+
+/// 删除自定义服务（仅从 catalog 移除；不删 data/services 目录）
+#[tauri::command]
+pub fn remove_custom_service(id: String) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    let mut catalog = ServiceCatalog::merged(&project_root);
+    catalog.remove_custom(&id)?;
+    service_catalog::persist_custom_from_catalog(&project_root, &catalog)?;
+    // 同步清除该 kind 的 version_overrides，避免 ghost kinds
+    let mut override_manager = UserOverrideManager::new(&project_root);
+    override_manager.remove_kind(&project_root, &id)?;
+    app_log!(
+        info,
+        "commands::custom_service",
+        "Removed custom service {id} (data dirs kept)"
+    );
+    Ok(())
 }

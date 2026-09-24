@@ -8,7 +8,8 @@
 
 ## ✨ 核心功能
 
-- **🎨 可视化环境配置** - GUI 选择服务版本、端口、扩展，自动生成 `.env` 和 `docker-compose.yml`，支持多 PHP 版本独立服务
+- **🎨 可视化环境配置** - GUI 选择服务版本、端口、扩展，自动生成 `.env` 和 `docker-compose.yml`；MySQL/Redis 等中间件可选（可仅启动 PHP + Nginx）
+- **🧩 可扩展服务目录** - 内置 PHP/MySQL/Redis/Nginx；环境配置页可「添加自定义服务」（如 MongoDB / Memcached 等 image 型服务）
 - **🌐 Nginx 站点管理** - 多站点 `server_name`、宿主机目录挂载、`public_dir`、绑定 PHP/Nginx 服务，自动生成托管 conf
 - **🌐 统一镜像源管理** - 5 个预设方案（阿里云/清华/腾讯云/中科大/官方），一键加速 Docker Registry/APT/Composer/NPM
 - **💾 环境备份与恢复** - ZIP 打包 + SHA256 校验；支持站点路径跨机重映射与恢复前回滚包

@@ -42,20 +42,16 @@ fn test_version_manifest_load() {
     let manifest = VersionManifest::new();
 
     // Test that we can get entries for each service type
-    let php_entries =
-        manifest.get_available_entries(&app_lib::engine::version_manifest::ServiceType::Php);
+    let php_entries = manifest.get_available_entries("php");
     assert!(!php_entries.is_empty(), "Should have PHP versions");
 
-    let mysql_entries =
-        manifest.get_available_entries(&app_lib::engine::version_manifest::ServiceType::Mysql);
+    let mysql_entries = manifest.get_available_entries("mysql");
     assert!(!mysql_entries.is_empty(), "Should have MySQL versions");
 
-    let redis_entries =
-        manifest.get_available_entries(&app_lib::engine::version_manifest::ServiceType::Redis);
+    let redis_entries = manifest.get_available_entries("redis");
     assert!(!redis_entries.is_empty(), "Should have Redis versions");
 
-    let nginx_entries =
-        manifest.get_available_entries(&app_lib::engine::version_manifest::ServiceType::Nginx);
+    let nginx_entries = manifest.get_available_entries("nginx");
     assert!(!nginx_entries.is_empty(), "Should have Nginx versions");
 }
 
@@ -64,17 +60,13 @@ fn test_version_manifest_validate_id() {
     let manifest = VersionManifest::new();
 
     // Test valid IDs
-    let php_entries =
-        manifest.get_available_entries(&app_lib::engine::version_manifest::ServiceType::Php);
+    let php_entries = manifest.get_available_entries("php");
     if let Some((id, _)) = php_entries.first() {
-        assert!(manifest.is_id_valid(&app_lib::engine::version_manifest::ServiceType::Php, id));
+        assert!(manifest.is_id_valid("php", id));
     }
 
     // Test invalid ID
-    assert!(!manifest.is_id_valid(
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "nonexistent_version"
-    ));
+    assert!(!manifest.is_id_valid("php", "nonexistent_version"));
 }
 
 #[test]
@@ -82,29 +74,25 @@ fn test_version_manifest_recommended() {
     let manifest = VersionManifest::new();
 
     // Each service type should have a recommended version
-    let php_recommended =
-        manifest.get_recommended_entry(&app_lib::engine::version_manifest::ServiceType::Php);
+    let php_recommended = manifest.get_recommended_entry("php");
     assert!(
         php_recommended.is_some(),
         "Should have recommended PHP version"
     );
 
-    let mysql_recommended =
-        manifest.get_recommended_entry(&app_lib::engine::version_manifest::ServiceType::Mysql);
+    let mysql_recommended = manifest.get_recommended_entry("mysql");
     assert!(
         mysql_recommended.is_some(),
         "Should have recommended MySQL version"
     );
 
-    let redis_recommended =
-        manifest.get_recommended_entry(&app_lib::engine::version_manifest::ServiceType::Redis);
+    let redis_recommended = manifest.get_recommended_entry("redis");
     assert!(
         redis_recommended.is_some(),
         "Should have recommended Redis version"
     );
 
-    let nginx_recommended =
-        manifest.get_recommended_entry(&app_lib::engine::version_manifest::ServiceType::Nginx);
+    let nginx_recommended = manifest.get_recommended_entry("nginx");
     assert!(
         nginx_recommended.is_some(),
         "Should have recommended Nginx version"
@@ -119,16 +107,13 @@ fn test_user_override_manager_save_and_load() {
     let mut manager = UserOverrideManager::new(&project_root);
 
     // Initially, no overrides should exist
-    let has_override = manager.has_user_override(
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "php82",
-    );
+    let has_override = manager.has_user_override("php", "php82");
     assert!(!has_override, "Should not have override initially");
 
     // Save an override
     let save_result = manager.save_user_override(
         &project_root,
-        app_lib::engine::version_manifest::ServiceType::Php,
+        "php",
         "php82".to_string(),
         "custom/php:8.2".to_string(),
         Some("Custom PHP 8.2".to_string()),
@@ -136,17 +121,11 @@ fn test_user_override_manager_save_and_load() {
     assert!(save_result.is_ok(), "Save override should succeed");
 
     // Now should have override
-    let has_override = manager.has_user_override(
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "php82",
-    );
+    let has_override = manager.has_user_override("php", "php82");
     assert!(has_override, "Should have override after save");
 
     // Get merged entry should return custom values
-    let merged = manager.get_merged_entry(
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "php82",
-    );
+    let merged = manager.get_merged_entry("php", "php82");
     assert!(merged.is_some(), "Should get merged entry");
     let merged = merged.unwrap();
     assert_eq!(merged.image_tag, "custom/php:8.2");
@@ -164,7 +143,7 @@ fn test_user_override_manager_remove() {
     manager
         .save_user_override(
             &project_root,
-            app_lib::engine::version_manifest::ServiceType::Php,
+            "php",
             "php82".to_string(),
             "custom/php:8.2".to_string(),
             None,
@@ -172,18 +151,11 @@ fn test_user_override_manager_remove() {
         .unwrap();
 
     // Remove the override
-    let remove_result = manager.remove_user_override(
-        &project_root,
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "php82",
-    );
+    let remove_result = manager.remove_user_override(&project_root, "php", "php82");
     assert!(remove_result.is_ok(), "Remove override should succeed");
 
     // Should not have override anymore
-    let has_override = manager.has_user_override(
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "php82",
-    );
+    let has_override = manager.has_user_override("php", "php82");
     assert!(!has_override, "Should not have override after remove");
 }
 
@@ -198,7 +170,7 @@ fn test_user_override_manager_reset_all() {
     manager
         .save_user_override(
             &project_root,
-            app_lib::engine::version_manifest::ServiceType::Php,
+            "php",
             "php82".to_string(),
             "custom/php:8.2".to_string(),
             None,
@@ -208,7 +180,7 @@ fn test_user_override_manager_reset_all() {
     manager
         .save_user_override(
             &project_root,
-            app_lib::engine::version_manifest::ServiceType::Mysql,
+            "mysql",
             "mysql80".to_string(),
             "custom/mysql:8.0".to_string(),
             None,
@@ -220,14 +192,8 @@ fn test_user_override_manager_reset_all() {
     assert!(reset_result.is_ok(), "Reset all overrides should succeed");
 
     // Should not have any overrides
-    let has_php_override = manager.has_user_override(
-        &app_lib::engine::version_manifest::ServiceType::Php,
-        "php82",
-    );
-    let has_mysql_override = manager.has_user_override(
-        &app_lib::engine::version_manifest::ServiceType::Mysql,
-        "mysql80",
-    );
+    let has_php_override = manager.has_user_override("php", "php82");
+    let has_mysql_override = manager.has_user_override("mysql", "mysql80");
 
     assert!(
         !has_php_override,

@@ -5,6 +5,9 @@ import {
   getWorkspaceInfo,
   checkConfigFilesExist,
   getVersionMappings,
+  getServiceCatalog,
+  saveCustomService,
+  removeCustomService,
   loadExistingConfig as apiLoadExistingConfig,
   generateEnvConfig,
   previewCompose as previewComposeApi,
@@ -20,7 +23,17 @@ import {
 import { open } from '@tauri-apps/plugin-shell';
 import { open as openDirectoryDialog } from '@tauri-apps/plugin-dialog';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-import type { ServiceEntry, EnvConfig, SiteEntry, VersionInfo, ImagePresence, PullImageResultItem } from '../types/env-config';
+import type {
+  ServiceEntry,
+  EnvConfig,
+  SiteEntry,
+  VersionInfo,
+  VersionMappings,
+  ServiceDescriptor,
+  CustomServiceForm,
+  ImagePresence,
+  PullImageResultItem,
+} from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 import CustomSelect from './CustomSelect.vue';
@@ -36,11 +49,27 @@ import {
 
 const { t } = useI18n();
 
-// Available versions (将从后端动态加载)
-const phpVersions = ref<VersionInfo[]>([]);
-const mysqlVersions = ref<VersionInfo[]>([]);
-const redisVersions = ref<VersionInfo[]>([]);
-const nginxVersions = ref<VersionInfo[]>([]);
+// 版本映射（按 kind 动态）
+const versionMappings = ref<VersionMappings>({});
+const serviceCatalog = ref<ServiceDescriptor[]>([]);
+
+const phpVersions = computed(() => versionMappings.value.php ?? []);
+const mysqlVersions = computed(() => versionMappings.value.mysql ?? []);
+const redisVersions = computed(() => versionMappings.value.redis ?? []);
+const nginxVersions = computed(() => versionMappings.value.nginx ?? []);
+
+function versionsOf(kind: string): VersionInfo[] {
+  return versionMappings.value[kind] ?? [];
+}
+
+function catalogOf(kind: string): ServiceDescriptor | undefined {
+  return serviceCatalog.value.find(s => s.id === kind);
+}
+
+/** 非内置自定义服务目录项 */
+const customCatalogEntries = computed(() =>
+  serviceCatalog.value.filter(s => !s.builtin),
+);
 
 // 版本清单加载状态：失败时不回退到内置硬编码列表，而是展示可操作的错误态，
 // 避免用户自己在 version_manifest.json 里加的版本"看起来没生效"。
@@ -110,6 +139,14 @@ const nginxVersionOptions = computed(() =>
   }))
 );
 
+function versionOptionsOf(kind: string) {
+  return versionsOf(kind).map(v => ({
+    value: v.id,
+    label: `${v.display_name} → ${v.image_tag}${v.eol ? ' (EOL)' : ''}`,
+    disabled: false,
+  }));
+}
+
 const timezoneOptions = computed(() => [
   ...commonTimezones.map(tz => ({ value: tz.value, label: t(tz.labelKey) })),
   ...(showCustomTimezoneInput.value && customTimezone.value ? [{ value: customTimezone.value, label: t('envConfig.general.customTimezoneLabel', { tz: customTimezone.value }) }] : []),
@@ -121,6 +158,23 @@ const phpServices = ref<ServiceEntry[]>([]);
 const mysqlServices = ref<ServiceEntry[]>([]);
 const redisServices = ref<ServiceEntry[]>([]);
 const nginxServices = ref<ServiceEntry[]>([]);
+/** 自定义 kind → 实例列表 */
+const customKindServices = ref<Record<string, ServiceEntry[]>>({});
+
+// 自定义服务对话框
+const showCustomServiceDialog = ref(false);
+const customForm = ref({
+  id: '',
+  display_name: '',
+  image_tag: '',
+  host_port: 27017,
+  container_port: 27017,
+  short_alias: '',
+  version_id: '',
+  data_container_path: '',
+  entrypoint: '',
+});
+const savingCustomService = ref(false);
 
 const sourceDir = ref('./www');
 const sites = ref<SiteEntry[]>([]);
@@ -172,7 +226,7 @@ function openVersionHelp() {
 // Load existing config on mount
 onMounted(async () => {
   await loadWorkspaceInfo();
-  await loadVersionMappings();
+  await Promise.all([loadVersionMappings(), loadServiceCatalog()]);
   await loadExistingConfig();
   window.addEventListener(WORKSPACE_CHANGED_EVENT, loadWorkspaceInfo);
 });
@@ -195,32 +249,22 @@ async function loadWorkspaceInfo() {
   }
 }
 
+async function loadServiceCatalog() {
+  try {
+    serviceCatalog.value = await getServiceCatalog();
+  } catch (e) {
+    console.error('[EnvConfig] failed to load service catalog:', e);
+    serviceCatalog.value = [];
+  }
+}
+
 // 从后端加载版本映射
 async function loadVersionMappings() {
   try {
-    const mappings = await getVersionMappings();
-    
-    // 提取版本信息列表（包含 id、display_name、image_tag、service_dir 等完整信息）
-    if (mappings.php) {
-      phpVersions.value = mappings.php;
-    }
-    if (mappings.mysql) {
-      mysqlVersions.value = mappings.mysql;
-    }
-    if (mappings.redis) {
-      redisVersions.value = mappings.redis;
-    }
-    if (mappings.nginx) {
-      nginxVersions.value = mappings.nginx;
-    }
-
-    // 加载成功：清除上一次可能残留的错误态（用户修正清单后重试成功时）
+    versionMappings.value = await getVersionMappings();
     versionLoadError.value = false;
   } catch (e) {
     console.error('[EnvConfig] failed to load version mapping:', e);
-    // 不再回退到内置的硬编码列表：那份列表会与 services/version_manifest.json 脱节，
-    // 导致用户自行添加的版本"看起来没生效"。改为展示可操作的错误态，
-    // 引导用户检查清单文件后重试。
     versionLoadError.value = true;
   } finally {
     versionLoadRetrying.value = false;
@@ -231,7 +275,7 @@ async function loadVersionMappings() {
 async function retryLoadVersionMappings() {
   if (versionLoadRetrying.value) return;
   versionLoadRetrying.value = true;
-  await loadVersionMappings();
+  await Promise.all([loadVersionMappings(), loadServiceCatalog()]);
 }
 
 // 错误信息格式化
@@ -280,46 +324,46 @@ async function loadExistingConfig() {
     const config = await apiLoadExistingConfig();
     
     if (config) {
-      // Parse services
       const phpSvcs: ServiceEntry[] = [];
       const mysqlSvcs: ServiceEntry[] = [];
       const redisSvcs: ServiceEntry[] = [];
       const nginxSvcs: ServiceEntry[] = [];
+      const extras: Record<string, ServiceEntry[]> = {};
       
       config.services.forEach(s => {
-        if (s.service_type === 'PHP') {
-          phpSvcs.push({ ...s, extensions: s.extensions ? [...s.extensions] : [] });
-        } else if (s.service_type === 'MySQL') {
-          mysqlSvcs.push({ ...s });
-        } else if (s.service_type === 'Redis') {
-          redisSvcs.push({ ...s });
-        } else if (s.service_type === 'Nginx') {
-          nginxSvcs.push({ ...s });
+        const kind = (s.service_type || '').toLowerCase();
+        const entry = { ...s, service_type: kind, extensions: s.extensions ? [...s.extensions] : undefined };
+        if (kind === 'php') {
+          phpSvcs.push({ ...entry, extensions: entry.extensions ? [...entry.extensions] : [] });
+        } else if (kind === 'mysql') {
+          mysqlSvcs.push(entry);
+        } else if (kind === 'redis') {
+          redisSvcs.push(entry);
+        } else if (kind === 'nginx') {
+          nginxSvcs.push(entry);
+        } else if (kind) {
+          if (!extras[kind]) extras[kind] = [];
+          extras[kind].push(entry);
         }
       });
       
-      
       phpServices.value = phpSvcs.length > 0 ? phpSvcs : [{
-        service_type: 'PHP',
+        service_type: 'php',
         version: 'php82',
         host_port: 9000,
         extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
       }];
       
-      // 初始化 PHP 服务的扩展面板状态（全部关闭）
       phpExtensionsPanelState.value = {};
       phpServices.value.forEach((_, idx) => {
         phpExtensionsPanelState.value[idx] = false;
       });
       
-      mysqlServices.value = mysqlSvcs.length > 0 ? mysqlSvcs : [{
-        service_type: 'MySQL',
-        version: 'mysql80',
-        host_port: 3306,
-      }];
-      
+      // MySQL 可选：无则空列表，不默认填充
+      mysqlServices.value = mysqlSvcs.length > 0 ? mysqlSvcs : [];
       redisServices.value = redisSvcs.length > 0 ? redisSvcs : [];
       nginxServices.value = nginxSvcs.length > 0 ? nginxSvcs : [];
+      customKindServices.value = extras;
       
       sourceDir.value = repairHostPath(config.source_dir);
       sites.value = (config.sites ?? []).map(site => ({
@@ -332,57 +376,49 @@ async function loadExistingConfig() {
       }
       timezone.value = config.timezone;
       
-      // Check if timezone is in common list
       const isInCommonList = commonTimezones.some(tz => tz.value === config.timezone);
       if (!isInCommonList && config.timezone) {
         customTimezone.value = config.timezone;
         showCustomTimezoneInput.value = true;
       }
       
-      // 加载MySQL root密码（如果有）
       if (config.mysql_root_password) {
         mysqlRootPassword.value = config.mysql_root_password;
       }
       
     } else {
-      // Default config
+      // 新工作区默认：仅 PHP；MySQL/Redis/Nginx 为空
       phpServices.value = [{
-        service_type: 'PHP',
+        service_type: 'php',
         version: 'php82',
         host_port: 9000,
         extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
       }];
-      // 初始化默认 PHP 服务的扩展面板状态
       phpExtensionsPanelState.value = { 0: false };
-      mysqlServices.value = [{
-        service_type: 'MySQL',
-        version: 'mysql80',
-        host_port: 3306,
-      }];
+      mysqlServices.value = [];
+      redisServices.value = [];
+      nginxServices.value = [];
+      customKindServices.value = {};
     }
   } catch (e) {
     console.error('[EnvConfig] failed to load config:', e);
-    // Use defaults
     phpServices.value = [{
-      service_type: 'PHP',
+      service_type: 'php',
       version: 'php82',
       host_port: 9000,
       extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'gd', 'curl', 'opcache'],
     }];
-    // 初始化默认 PHP 服务的扩展面板状态
     phpExtensionsPanelState.value = { 0: false };
-    mysqlServices.value = [{
-      service_type: 'MySQL',
-      version: 'mysql80',
-      host_port: 3306,
-    }];
+    mysqlServices.value = [];
+    redisServices.value = [];
+    nginxServices.value = [];
+    customKindServices.value = {};
   }
 }
 
-// Port conflict detection (仅检测 MySQL、Redis、Nginx 的宿主机端口)
+// Port conflict detection (仅检测 MySQL、Redis、Nginx、自定义服务的宿主机端口)
 const allPorts = computed(() => {
   const ports: { service: string; port: number }[] = [];
-  // PHP 服务不需要宿主机端口映射，跳过
   mysqlServices.value.forEach((s, i) => {
     ports.push({ service: `MySQL ${s.version} (#${i + 1})`, port: s.host_port });
   });
@@ -392,6 +428,12 @@ const allPorts = computed(() => {
   nginxServices.value.forEach((s, i) => {
     ports.push({ service: `Nginx ${s.version} (#${i + 1})`, port: s.host_port });
   });
+  for (const [kind, list] of Object.entries(customKindServices.value)) {
+    const label = catalogOf(kind)?.display_name || kind;
+    list.forEach((s, i) => {
+      ports.push({ service: `${label} ${s.version} (#${i + 1})`, port: s.host_port });
+    });
+  }
   return ports;
 });
 
@@ -418,7 +460,8 @@ function connectInfoFor(
   versions: VersionInfo[],
   count: number,
 ) {
-  return resolveConnectInfo(serviceDirOf(versionId, versions), kind, count);
+  const desc = catalogOf(kind);
+  return resolveConnectInfo(serviceDirOf(versionId, versions), count, desc?.connect);
 }
 
 /** 同类服务的 service_dir 列表（多实例警告里展示） */
@@ -454,6 +497,9 @@ function collectConnectionEndpoints(): { endpoints: string[]; hasMulti: boolean 
   push('mysql', mysqlServices.value, mysqlVersions.value);
   push('redis', redisServices.value, redisVersions.value);
   push('nginx', nginxServices.value, nginxVersions.value);
+  for (const [kind, list] of Object.entries(customKindServices.value)) {
+    push(kind, list, versionsOf(kind));
+  }
   return { endpoints, hasMulti };
 }
 
@@ -601,25 +647,34 @@ const nginxSiteOptions = computed(() =>
 function buildConfig(): EnvConfig {
   const services: ServiceEntry[] = [];
   phpServices.value.forEach(s => {
-    services.push({ ...s, extensions: [...(s.extensions || [])] });
+    services.push({ ...s, service_type: 'php', extensions: [...(s.extensions || [])] });
   });
   mysqlServices.value.forEach(s => {
-    services.push({ ...s });
+    services.push({ ...s, service_type: 'mysql' });
   });
   redisServices.value.forEach(s => {
-    services.push({ ...s });
+    services.push({ ...s, service_type: 'redis' });
   });
   nginxServices.value.forEach(s => {
-    services.push({ ...s });
+    services.push({ ...s, service_type: 'nginx' });
   });
+  for (const [kind, list] of Object.entries(customKindServices.value)) {
+    list.forEach(s => {
+      services.push({ ...s, service_type: kind });
+    });
+  }
   const siteList = nginxServices.value.length > 0 ? normalizedSites() : [];
-  return { 
-    services, 
-    source_dir: siteList[0]?.host_path || sourceDir.value, 
+  const config: EnvConfig = {
+    services,
+    source_dir: siteList[0]?.host_path || sourceDir.value,
     timezone: timezone.value,
-    mysql_root_password: mysqlRootPassword.value === 'root' ? undefined : mysqlRootPassword.value,
     sites: siteList,
   };
+  if (mysqlServices.value.length > 0) {
+    config.mysql_root_password =
+      mysqlRootPassword.value === 'root' ? undefined : mysqlRootPassword.value;
+  }
+  return config;
 }
 
 // Add PHP version
@@ -629,12 +684,11 @@ function addPhpVersion() {
   if (available.length === 0) return;
   const newIndex = phpServices.value.length;
   phpServices.value.push({
-    service_type: 'PHP',
+    service_type: 'php',
     version: available[0].id,
     host_port: 9000 + phpServices.value.length,
     extensions: ['pdo_mysql', 'mysqli', 'mbstring', 'curl'],
   });
-  // 初始化新添加的 PHP 服务的扩展面板状态与自定义扩展输入
   phpExtensionsPanelState.value[newIndex] = false;
   customExtInput.value[newIndex] = '';
 }
@@ -674,14 +728,13 @@ function addMysqlVersion() {
   const available = mysqlVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   mysqlServices.value.push({
-    service_type: 'MySQL',
+    service_type: 'mysql',
     version: available[0].id,
-    host_port: 3306 + mysqlServices.value.length,
+    host_port: available[0].default_port || 3306 + mysqlServices.value.length,
   });
 }
 
 function removeMysqlVersion(index: number) {
-  if (mysqlServices.value.length <= 1) return;
   mysqlServices.value.splice(index, 1);
 }
 
@@ -691,9 +744,9 @@ function addRedisVersion() {
   const available = redisVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   redisServices.value.push({
-    service_type: 'Redis',
+    service_type: 'redis',
     version: available[0].id,
-    host_port: 6379 + redisServices.value.length,
+    host_port: available[0].default_port || 6379 + redisServices.value.length,
   });
 }
 
@@ -707,7 +760,7 @@ function addNginxVersion() {
   const available = nginxVersions.value.filter(v => !usedVersions.includes(v.id));
   if (available.length === 0) return;
   nginxServices.value.push({
-    service_type: 'Nginx',
+    service_type: 'nginx',
     version: available[0].id,
     host_port: available[0].default_port || 80,
   });
@@ -721,6 +774,119 @@ function removeNginxVersion(index: number) {
     sourceDir.value = sites.value[0].host_path;
   }
   nginxServices.value.splice(index, 1);
+}
+
+function ensureCustomKindList(kind: string): ServiceEntry[] {
+  if (!customKindServices.value[kind]) {
+    customKindServices.value[kind] = [];
+  }
+  return customKindServices.value[kind];
+}
+
+function addCustomKindInstance(kind: string) {
+  const versions = versionsOf(kind);
+  const list = ensureCustomKindList(kind);
+  const used = list.map(s => s.version);
+  const available = versions.filter(v => !used.includes(v.id));
+  const desc = catalogOf(kind);
+  if (available.length === 0) {
+    showToast(t('envConfig.customService.noVersion'), 'error');
+    return;
+  }
+  list.push({
+    service_type: kind,
+    version: available[0].id,
+    host_port: available[0].default_port || desc?.container_port || 0,
+  });
+}
+
+function removeCustomKindInstance(kind: string, index: number) {
+  const list = customKindServices.value[kind];
+  if (!list) return;
+  list.splice(index, 1);
+}
+
+function openCustomServiceDialog() {
+  customForm.value = {
+    id: '',
+    display_name: '',
+    image_tag: '',
+    host_port: 27017,
+    container_port: 27017,
+    short_alias: '',
+    version_id: '',
+    data_container_path: '',
+    entrypoint: '',
+  };
+  showCustomServiceDialog.value = true;
+}
+
+async function submitCustomService() {
+  const f = customForm.value;
+  const id = f.id.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]*$/.test(id)) {
+    showToast(t('envConfig.customService.idInvalid'), 'error');
+    return;
+  }
+  if (!f.display_name.trim() || !f.image_tag.trim()) {
+    showToast(t('envConfig.customService.required'), 'error');
+    return;
+  }
+  const form: CustomServiceForm = {
+    id,
+    display_name: f.display_name.trim(),
+    container_port: Number(f.container_port) || 0,
+    host_port: Number(f.host_port) || 0,
+    image_tag: f.image_tag.trim(),
+    version_id: f.version_id.trim() || null,
+    short_alias: f.short_alias.trim() || null,
+    data_container_path: f.data_container_path.trim() || null,
+    entrypoint: f.entrypoint.trim()
+      ? f.entrypoint.trim().split(/\s+/).filter(Boolean)
+      : null,
+  };
+  savingCustomService.value = true;
+  try {
+    const desc = await saveCustomService(form);
+    await Promise.all([loadServiceCatalog(), loadVersionMappings()]);
+    const versions = versionsOf(desc.id);
+    const versionId = form.version_id || versions[0]?.id || `${desc.id}default`;
+    const port = form.host_port || versions[0]?.default_port || desc.container_port;
+    ensureCustomKindList(desc.id);
+    if (!customKindServices.value[desc.id].some(s => s.version === versionId)) {
+      customKindServices.value[desc.id].push({
+        service_type: desc.id,
+        version: versionId,
+        host_port: port,
+      });
+    }
+    showCustomServiceDialog.value = false;
+    showToast(t('envConfig.customService.saved'), 'success');
+  } catch (e) {
+    showToast(formatErrorMessage(e), 'error');
+  } finally {
+    savingCustomService.value = false;
+  }
+}
+
+async function deleteCustomKind(kind: string) {
+  const confirmed = await showConfirm({
+    title: t('envConfig.customService.deleteTitle'),
+    message: t('envConfig.customService.deleteMessage', {
+      name: catalogOf(kind)?.display_name || kind,
+    }),
+    confirmText: t('common.delete'),
+    type: 'danger',
+  });
+  if (!confirmed) return;
+  try {
+    await removeCustomService(kind);
+    delete customKindServices.value[kind];
+    await Promise.all([loadServiceCatalog(), loadVersionMappings()]);
+    showToast(t('envConfig.customService.deleted'), 'success');
+  } catch (e) {
+    showToast(formatErrorMessage(e), 'error');
+  }
 }
 
 function toggleExtension(phpIndex: number, ext: string) {
@@ -1236,16 +1402,19 @@ async function openNginxConfigDir(serviceDir?: string) {
               <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
               <input v-model.number="mysql.host_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <button v-if="mysqlServices.length > 1" @click="removeMysqlVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
+            <button v-if="mysqlServices.length >= 1" @click="removeMysqlVersion(idx)" class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.remove') }}</button>
           </div>
           <ConnectHostHint
             :info="connectInfoFor('mysql', mysql.version, mysqlVersions, mysqlServices.length)"
             @copy="copyConnectHost"
           />
         </div>
+        <div v-if="mysqlServices.length === 0" class="text-center py-8 text-slate-500 dark:text-slate-500 text-sm">
+          {{ $t('envConfig.mysql.empty', { action: $t('envConfig.addVersion') }) }}
+        </div>
         
-        <!-- MySQL Root 密码配置 -->
-        <div class="mt-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/50 rounded-lg">
+        <!-- MySQL Root 密码配置（仅有 MySQL 实例时显示） -->
+        <div v-if="mysqlServices.length > 0" class="mt-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/50 rounded-lg">
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
             <div class="flex-1 w-full sm:w-64">
               <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.mysql.rootPassword') }}</label>
@@ -1398,6 +1567,91 @@ async function openNginxConfigDir(serviceDir?: string) {
         <p class="text-[11px] text-slate-500 dark:text-slate-500">{{ $t('envConfig.sites.defaultNote') }}</p>
       </section>
 
+      <!-- 自定义服务（高级） -->
+      <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.customService.title') }}</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{ $t('envConfig.customService.subtitle') }}</p>
+          </div>
+          <button
+            type="button"
+            @click="openCustomServiceDialog"
+            class="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg hover:bg-blue-600 hover:text-white transition"
+          >
+            {{ $t('envConfig.customService.addKind') }}
+          </button>
+        </div>
+
+        <div
+          v-for="desc in customCatalogEntries"
+          :key="desc.id"
+          class="mb-4 border border-slate-200 dark:border-slate-700 rounded-lg p-3 sm:p-4"
+        >
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+            <h3 class="font-semibold text-slate-900 dark:text-slate-200">{{ desc.display_name }} <span class="text-xs font-mono text-slate-500">({{ desc.id }})</span></h3>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                @click="addCustomKindInstance(desc.id)"
+                class="text-sm px-3 py-1 ui-btn-soft rounded-lg transition"
+              >{{ $t('envConfig.addVersion') }}</button>
+              <button
+                type="button"
+                @click="deleteCustomKind(desc.id)"
+                class="text-sm text-rose-400 hover:text-rose-300"
+              >{{ $t('envConfig.customService.deleteKind') }}</button>
+            </div>
+          </div>
+          <div
+            v-if="(customKindServices[desc.id] || []).length > 1"
+            class="mb-3 p-3 ui-hint-box rounded-lg text-xs text-slate-700 dark:text-slate-300"
+          >
+            {{ $t('envConfig.connectHost.multiWarn', {
+              service: desc.display_name,
+              short: desc.short_alias || desc.connect?.short_name || desc.id,
+              hosts: serviceDirsOf(customKindServices[desc.id] || [], versionsOf(desc.id)),
+            }) }}
+          </div>
+          <div
+            v-for="(svc, idx) in (customKindServices[desc.id] || [])"
+            :key="`${desc.id}-${idx}`"
+            class="mb-3 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg"
+          >
+            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+              <div class="flex-1 w-full sm:w-auto">
+                <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.version') }}</label>
+                <CustomSelect
+                  v-model="svc.version"
+                  :options="versionOptionsOf(desc.id)"
+                  :placeholder="$t('envConfig.customService.versionPlaceholder')"
+                />
+              </div>
+              <div class="w-full sm:w-32" v-if="versionsOf(desc.id).find(v => v.id === svc.version)?.show_port !== false">
+                <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.hostPort') }}</label>
+                <input v-model.number="svc.host_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <button
+                type="button"
+                @click="removeCustomKindInstance(desc.id, idx)"
+                class="w-full sm:w-auto mt-2 sm:mt-5 text-rose-400 hover:text-rose-300 text-sm"
+              >{{ $t('envConfig.remove') }}</button>
+            </div>
+            <ConnectHostHint
+              :info="connectInfoFor(desc.id, svc.version, versionsOf(desc.id), (customKindServices[desc.id] || []).length)"
+              @copy="copyConnectHost"
+            />
+          </div>
+          <div v-if="!(customKindServices[desc.id] || []).length" class="text-center py-6 text-slate-500 text-sm">
+            {{ $t('envConfig.customService.emptyInstance', { action: $t('envConfig.addVersion') }) }}
+          </div>
+        </div>
+
+        <div v-if="customCatalogEntries.length === 0" class="text-center py-6 text-slate-500 dark:text-slate-500 text-sm">
+          {{ $t('envConfig.customService.empty', { action: $t('envConfig.customService.addKind') }) }}
+        </div>
+      </section>
+
       <!-- General Settings -->
       <section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <h2 class="text-lg font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('envConfig.general.title') }}</h2>
@@ -1496,5 +1750,59 @@ async function openNginxConfigDir(serviceDir?: string) {
       @confirm="confirmPullAndApply"
       @cancel="cancelPull"
     />
+
+    <!-- 添加自定义服务对话框 -->
+    <div v-if="showCustomServiceDialog" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="bg-white dark:bg-slate-900 rounded-xl p-6 max-w-lg w-full border border-slate-200 dark:border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('envConfig.customService.dialogTitle') }}</h2>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.displayName') }} *</label>
+            <input v-model="customForm.display_name" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm" :placeholder="$t('envConfig.customService.displayNamePlaceholder')" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.id') }} *</label>
+            <input v-model="customForm.id" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.idPlaceholder')" />
+            <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.customService.idHint') }}</p>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.imageTag') }} *</label>
+            <input v-model="customForm.image_tag" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.imagePlaceholder')" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.hostPort') }} *</label>
+              <input v-model.number="customForm.host_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.containerPort') }} *</label>
+              <input v-model.number="customForm.container_port" type="number" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.shortAlias') }}</label>
+            <input v-model="customForm.short_alias" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.shortAliasPlaceholder')" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.versionId') }}</label>
+            <input v-model="customForm.version_id" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.versionIdPlaceholder')" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.dataPath') }}</label>
+            <input v-model="customForm.data_container_path" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.dataPathPlaceholder')" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.entrypoint') }}</label>
+            <input v-model="customForm.entrypoint" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.entrypointPlaceholder')" />
+          </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+          <button type="button" @click="showCustomServiceDialog = false" class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">{{ $t('common.cancel') }}</button>
+          <button type="button" @click="submitCustomService" :disabled="savingCustomService" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+            {{ savingCustomService ? $t('common.loading') : $t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

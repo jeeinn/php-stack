@@ -22,6 +22,7 @@ import type { ImagePresence, PullImageResultItem, VersionInfo } from '../../type
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: vi.fn() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(async () => null) }))
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({ writeText: vi.fn(async () => {}) }))
 vi.mock('../../composables/useToast', () => ({ showToast: vi.fn() }))
 vi.mock('../../composables/useConfirmDialog', () => ({ showConfirm: vi.fn() }))
 
@@ -32,13 +33,21 @@ const mysqlVersions: VersionInfo[] = [
   { id: 'mysql80', display_name: 'MySQL 8.0', image_tag: 'mysql:8.0', service_dir: 'mysql80', default_port: 3306, show_port: true, eol: false },
 ]
 
+const mockCatalog = [
+  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: null } },
+  { id: 'mysql', display_name: 'MySQL', builtin: true, generator: 'image', container_port: 3306, connect: { container_port: 3306, short_name: 'mysql' } },
+  { id: 'redis', display_name: 'Redis', builtin: true, generator: 'image', container_port: 6379, connect: { container_port: 6379, short_name: 'redis' } },
+  { id: 'nginx', display_name: 'Nginx', builtin: true, generator: 'nginx', container_port: 80, connect: { container_port: 80, short_name: 'nginx' } },
+]
+
 /** 组件挂载期会调用的基础命令；测试只 override 与镜像/apply 相关的部分 */
 const baseInvoke: Record<string, unknown> = {
   get_version_mappings: { php: phpVersions, mysql: mysqlVersions, redis: [], nginx: [] },
+  get_service_catalog: mockCatalog,
   load_existing_config: {
     services: [
-      { service_type: 'PHP', version: 'php82', host_port: 9000 },
-      { service_type: 'MySQL', version: 'mysql80', host_port: 3306 },
+      { service_type: 'php', version: 'php82', host_port: 9000 },
+      { service_type: 'mysql', version: 'mysql80', host_port: 3306 },
     ],
     source_dir: './www',
     timezone: 'Asia/Shanghai',

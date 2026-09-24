@@ -64,8 +64,9 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 │  └── paths.rs (路径解析单一模块) / mod.rs                    │
 ├─────────────────────────────────────────────────────────────┤
 │  engine/ (核心业务引擎)                                      │
-│  ├── config_generator.rs     (配置生成 + 模板释放)           │
-│  ├── version_manifest.rs     (版本清单 — VersionEntry)       │
+│  ├── config_generator.rs     (配置生成 + 模板释放；按 catalog generator 路由) │
+│  ├── service_catalog.rs      (服务目录 — 内置 + custom_services 合并)       │
+│  ├── version_manifest.rs     (版本清单 — 动态 kind 键 / VersionEntry)       │
 │  ├── user_override_manager.rs(用户覆盖 — entry_kind)         │
 │  ├── env_parser.rs           (.env 解析器)                   │
 │  ├── mirror_manager.rs + mirror_config_manager.rs + mirror_config.rs(兼容层) │
@@ -93,16 +94,17 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 
 | 模块 | 职责 |
 |------|------|
-| `config_generator.rs` | 根据 GUI 输入生成 `.env`、`docker-compose.yml`、释放 `services/` 模板（`resolve_template_dir` 回退 + `copy_template_file` 存在即跳过） |
-| `version_manifest.rs` | 管理 `VersionEntry` 数据（`get_entry` / `get_available_entries` / `find_entry_by_env_prefix`），清单 `include_str!` 编译进二进制，可被 app_data_dir 外部清单覆盖 |
+| `config_generator.rs` | 根据 GUI 输入生成 `.env`、`docker-compose.yml`、释放 `services/` 模板；按 `ServiceCatalog` 的 `generator: php\|nginx\|image` 路由 |
+| `service_catalog.rs` | 内置 `service_catalog.json` + `.user-config/custom_services.json` 合并；可选中间件 / 短别名 / 卷挂载元数据 |
+| `version_manifest.rs` | 管理 `VersionEntry`（动态顶层 kind 键）；`get_entry` / `get_available_entries` / `find_entry_by_env_prefix`；可被 app_data_dir 外部清单覆盖 |
 | `user_override_manager.rs` | 管理 `.user-config/version_overrides.json`（`entry_kind: override/custom`），`get_merged_entry` 合并用户镜像 tag |
 | `env_parser.rs` | `.env` 文件可靠读写，保留注释和空行，往返一致 |
 | `mirror_manager.rs` / `mirror_config_manager.rs` | 镜像源预设与用户配置管理；`mirror_config.rs` 为向后兼容层 |
 | `workspace_manager.rs` | 管理 `workspace.json`（app_data_dir），解耦软件本体与业务数据 |
 | `backup_engine.rs` / `backup_manifest.rs` | ZIP 备份（manifest + SHA256 + 64KB 分块流式写入） |
 | `restore_engine.rs` | 备份验证与还原：zip-slip 防护、预览端口冲突检测、恢复前自动回滚包、返回完整明细 |
-| `config_extractor.rs` | 运行时按需配置提取（Phase 3）：`docker create + cp` 从官方镜像提取默认配置 |
-| `site_manager.rs` / `user_config.rs` / `backup_options_store.rs` | 站点定义 / 用户配置收纳 / 备份选项持久化 |
+| `config_extractor.rs` | 运行时按需配置提取（Phase 3）：路径表读 catalog（php/nginx 仍按主版本硬编码） |
+| `site_manager.rs` / `user_config.rs` / `backup_options_store.rs` | 站点定义 / 用户配置收纳（含 `custom_services.json`） / 备份选项持久化 |
 
 ### 3.2 前端组件（`src/components/`）
 
@@ -151,6 +153,18 @@ pub struct VersionEntry {
 | `custom` | 完整 VersionEntry 独立条目，可出现在环境配置下拉 |
 
 优先级：用户覆盖 → 内置清单 → Dockerfile 默认值（兜底）。
+
+### 4.2.1 服务目录（v0.5）
+
+服务种类由 `service_catalog.json`（内置）与 `.user-config/custom_services.json`（用户）合并描述，不再依赖硬编码 `ServiceType` 枚举。
+
+| `generator` | 用途 |
+|---|---|
+| `php` | PHP-FPM build + 扩展 / 站点卷 |
+| `nginx` | Nginx build + conf.d / 站点卷 |
+| `image` | 官方镜像 + 端口 + 可选 conf/data/log（MySQL、Redis、用户自定义） |
+
+可选性 = 是否出现在 `EnvConfig.services`；MySQL / Redis / 自定义默认可不启用。短主机名由描述符 `short_alias` 在同类仅 1 实例时写入 compose network aliases。
 
 ### 4.3 docker-compose 变量插值
 

@@ -11,6 +11,8 @@ pub const VERSION_OVERRIDES: &str = "version_overrides.json";
 pub const SITES: &str = "sites.json";
 /// 备份页 UI 偏好（不打进环境 ZIP）
 pub const BACKUP: &str = "backup.json";
+/// 用户自定义服务描述符
+pub const CUSTOM_SERVICES: &str = "custom_services.json";
 
 pub fn dir(project_root: &Path) -> PathBuf {
     project_root.join(DIR_NAME)
@@ -55,6 +57,7 @@ mod tests {
         );
         assert_eq!(relative(SITES), ".user-config/sites.json");
         assert_eq!(relative(BACKUP), ".user-config/backup.json");
+        assert_eq!(relative(CUSTOM_SERVICES), ".user-config/custom_services.json");
         assert!(!relative(MIRROR_CONFIG).contains('\\'));
     }
 

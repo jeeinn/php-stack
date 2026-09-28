@@ -286,6 +286,24 @@ pub fn get_service_catalog() -> Result<Vec<ServiceDescriptor>, String> {
     Ok(catalog.list().to_vec())
 }
 
+const AUTO_CREATED_DESC_PREFIX: &str = "Auto-created for custom service";
+
+fn is_auto_created_custom(entry: &VersionEntry) -> bool {
+    entry
+        .description
+        .as_deref()
+        .is_some_and(|d| d.starts_with(AUTO_CREATED_DESC_PREFIX))
+}
+
+fn list_auto_created_custom_ids(manager: &UserOverrideManager, kind: &str) -> Vec<String> {
+    manager
+        .list_merged_entries(kind)
+        .into_iter()
+        .filter(|item| item.is_custom && is_auto_created_custom(&item.entry))
+        .map(|item| item.id)
+        .collect()
+}
+
 fn ensure_custom_version_for_service(
     project_root: &std::path::Path,
     descriptor: &ServiceDescriptor,
@@ -293,11 +311,27 @@ fn ensure_custom_version_for_service(
     version_id: Option<&str>,
     host_port: u16,
 ) -> Result<String, String> {
-    let vid = default_custom_version_id(&descriptor.id, version_id);
+    let requested = default_custom_version_id(&descriptor.id, version_id);
     // 与服务 id 同一字符集（含 `-`）
-    service_catalog::validate_custom_id(&vid)?;
+    service_catalog::validate_custom_id(&requested)?;
 
     let mut manager = UserOverrideManager::new(project_root);
+
+    // 已有 auto-created custom 时锁定 version_id：编辑换 id 不会再新建孤儿条目
+    let autos = list_auto_created_custom_ids(&manager, &descriptor.id);
+    let vid = if autos.is_empty() {
+        requested
+    } else if autos.iter().any(|id| id == &requested) {
+        requested
+    } else {
+        autos[0].clone()
+    };
+
+    for orphan in &autos {
+        if orphan != &vid {
+            manager.remove_user_override(project_root, &descriptor.id, orphan)?;
+        }
+    }
 
     // 已有 custom：更新 image_tag / default_port 并持久化
     if manager.is_custom_entry(&descriptor.id, &vid) {
@@ -328,7 +362,7 @@ fn ensure_custom_version_for_service(
             default_port: host_port,
             show_port: true,
             eol: false,
-            description: Some(format!("Auto-created for custom service {}", descriptor.id)),
+            description: Some(format!("{AUTO_CREATED_DESC_PREFIX} {}", descriptor.id)),
         },
     )?;
     Ok(vid)
@@ -421,4 +455,76 @@ pub fn remove_custom_service(id: String) -> Result<(), String> {
         "Removed custom service {id} (data dirs kept)"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::service_catalog::GeneratorKind;
+
+    fn sample_descriptor(id: &str) -> ServiceDescriptor {
+        ServiceDescriptor {
+            id: id.to_string(),
+            display_name: "MongoDB".to_string(),
+            ui_order: 100,
+            required_min: 0,
+            default_on_new_workspace: false,
+            multi_instance: true,
+            generator: GeneratorKind::Image,
+            builtin: false,
+            container_port: 27017,
+            host_port_env_suffix: "HOST_PORT".to_string(),
+            short_alias: Some("mongo".to_string()),
+            conf_key_file: None,
+            fallback_template_dir: None,
+            volumes: Default::default(),
+            extra_env: vec![],
+            compose_environment: vec![],
+            entrypoint: None,
+            extract: None,
+            connect: crate::engine::service_catalog::ConnectInfo {
+                container_port: 27017,
+                short_name: Some("mongo".to_string()),
+            },
+        }
+    }
+
+    #[test]
+    fn ensure_custom_version_locks_to_existing_auto_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let desc = sample_descriptor("mongodb");
+
+        let first = ensure_custom_version_for_service(
+            tmp.path(),
+            &desc,
+            "mongo:7",
+            Some("mongodbdefault"),
+            27017,
+        )
+        .unwrap();
+        assert_eq!(first, "mongodbdefault");
+
+        // 再次保存时改成另一个 version_id → 应锁定到原 auto 条目，不新建孤儿
+        let second = ensure_custom_version_for_service(
+            tmp.path(),
+            &desc,
+            "mongo:8",
+            Some("mongo8"),
+            27018,
+        )
+        .unwrap();
+        assert_eq!(second, "mongodbdefault");
+
+        let manager = UserOverrideManager::new(tmp.path());
+        let customs: Vec<_> = manager
+            .list_merged_entries("mongodb")
+            .into_iter()
+            .filter(|i| i.is_custom)
+            .collect();
+        assert_eq!(customs.len(), 1);
+        assert_eq!(customs[0].id, "mongodbdefault");
+        assert_eq!(customs[0].entry.image_tag, "mongo:8");
+        assert_eq!(customs[0].entry.default_port, 27018);
+        assert!(!manager.is_custom_entry("mongodb", "mongo8"));
+    }
 }

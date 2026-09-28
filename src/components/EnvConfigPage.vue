@@ -7,6 +7,7 @@ import {
   getVersionMappings,
   getServiceCatalog,
   saveCustomService,
+  updateCustomService,
   removeCustomService,
   loadExistingConfig as apiLoadExistingConfig,
   generateEnvConfig,
@@ -163,6 +164,8 @@ const customKindServices = ref<Record<string, ServiceEntry[]>>({});
 
 // 自定义服务对话框
 const showCustomServiceDialog = ref(false);
+/** 非空表示编辑已有自定义 kind（锁定 id / version_id） */
+const editingCustomKind = ref<string | null>(null);
 const customForm = ref({
   id: '',
   display_name: '',
@@ -175,6 +178,12 @@ const customForm = ref({
   entrypoint: '',
 });
 const savingCustomService = ref(false);
+
+const customDialogTitle = computed(() =>
+  editingCustomKind.value
+    ? t('envConfig.customService.dialogTitleEdit')
+    : t('envConfig.customService.dialogTitle'),
+);
 
 const sourceDir = ref('./www');
 const sites = ref<SiteEntry[]>([]);
@@ -807,6 +816,7 @@ function removeCustomKindInstance(kind: string, index: number) {
 }
 
 function openCustomServiceDialog() {
+  editingCustomKind.value = null;
   customForm.value = {
     id: '',
     display_name: '',
@@ -817,6 +827,26 @@ function openCustomServiceDialog() {
     version_id: '',
     data_container_path: '',
     entrypoint: '',
+  };
+  showCustomServiceDialog.value = true;
+}
+
+function openEditCustomServiceDialog(kind: string) {
+  const desc = catalogOf(kind);
+  if (!desc || desc.builtin) return;
+  const versions = versionsOf(kind);
+  const primary = versions[0];
+  editingCustomKind.value = kind;
+  customForm.value = {
+    id: desc.id,
+    display_name: desc.display_name,
+    image_tag: primary?.image_tag || '',
+    host_port: primary?.default_port || desc.container_port,
+    container_port: desc.container_port,
+    short_alias: desc.short_alias || desc.connect?.short_name || '',
+    version_id: primary?.id || `${desc.id}default`,
+    data_container_path: desc.volumes?.data?.container_path || '',
+    entrypoint: (desc.entrypoint || []).join(' '),
   };
   showCustomServiceDialog.value = true;
 }
@@ -832,13 +862,18 @@ async function submitCustomService() {
     showToast(t('envConfig.customService.required'), 'error');
     return;
   }
+  const isEdit = !!editingCustomKind.value;
+  // 编辑态强制沿用已锁定的 version_id，避免换 id 产生孤儿条目
+  const lockedVersionId = isEdit
+    ? (f.version_id.trim() || versionsOf(id)[0]?.id || `${id}default`)
+    : (f.version_id.trim() || null);
   const form: CustomServiceForm = {
     id,
     display_name: f.display_name.trim(),
     container_port: Number(f.container_port) || 0,
     host_port: Number(f.host_port) || 0,
     image_tag: f.image_tag.trim(),
-    version_id: f.version_id.trim() || null,
+    version_id: lockedVersionId,
     short_alias: f.short_alias.trim() || null,
     data_container_path: f.data_container_path.trim() || null,
     entrypoint: f.entrypoint.trim()
@@ -847,7 +882,9 @@ async function submitCustomService() {
   };
   savingCustomService.value = true;
   try {
-    const desc = await saveCustomService(form);
+    const desc = isEdit
+      ? await updateCustomService(form)
+      : await saveCustomService(form);
     await Promise.all([loadServiceCatalog(), loadVersionMappings()]);
     const versions = versionsOf(desc.id);
     const versionId = form.version_id || versions[0]?.id || `${desc.id}default`;
@@ -861,6 +898,7 @@ async function submitCustomService() {
       });
     }
     showCustomServiceDialog.value = false;
+    editingCustomKind.value = null;
     showToast(t('envConfig.customService.saved'), 'success');
   } catch (e) {
     showToast(formatErrorMessage(e), 'error');
@@ -1598,6 +1636,11 @@ async function openNginxConfigDir(serviceDir?: string) {
               >{{ $t('envConfig.addVersion') }}</button>
               <button
                 type="button"
+                @click="openEditCustomServiceDialog(desc.id)"
+                class="text-sm px-3 py-1 ui-btn-soft rounded-lg transition"
+              >{{ $t('envConfig.customService.editKind') }}</button>
+              <button
+                type="button"
                 @click="deleteCustomKind(desc.id)"
                 class="text-sm text-rose-400 hover:text-rose-300"
               >{{ $t('envConfig.customService.deleteKind') }}</button>
@@ -1754,7 +1797,7 @@ async function openNginxConfigDir(serviceDir?: string) {
     <!-- 添加自定义服务对话框 -->
     <div v-if="showCustomServiceDialog" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div class="bg-white dark:bg-slate-900 rounded-xl p-6 max-w-lg w-full border border-slate-200 dark:border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h2 class="text-xl font-bold mb-4 text-slate-900 dark:text-slate-200">{{ $t('envConfig.customService.dialogTitle') }}</h2>
+        <h2 class="text-xl font-bold mb-4 text-slate-900 dark:text-slate-200">{{ customDialogTitle }}</h2>
         <div class="space-y-3">
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.displayName') }} *</label>
@@ -1762,7 +1805,13 @@ async function openNginxConfigDir(serviceDir?: string) {
           </div>
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.id') }} *</label>
-            <input v-model="customForm.id" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.idPlaceholder')" />
+            <input
+              v-model="customForm.id"
+              type="text"
+              class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono disabled:opacity-60"
+              :placeholder="$t('envConfig.customService.idPlaceholder')"
+              :disabled="!!editingCustomKind"
+            />
             <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.customService.idHint') }}</p>
           </div>
           <div>
@@ -1785,7 +1834,14 @@ async function openNginxConfigDir(serviceDir?: string) {
           </div>
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.versionId') }}</label>
-            <input v-model="customForm.version_id" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" :placeholder="$t('envConfig.customService.versionIdPlaceholder')" />
+            <input
+              v-model="customForm.version_id"
+              type="text"
+              class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono disabled:opacity-60"
+              :placeholder="$t('envConfig.customService.versionIdPlaceholder')"
+              :disabled="!!editingCustomKind"
+            />
+            <p v-if="editingCustomKind" class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.customService.versionIdLockedHint') }}</p>
           </div>
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.customService.dataPath') }}</label>
@@ -1797,7 +1853,7 @@ async function openNginxConfigDir(serviceDir?: string) {
           </div>
         </div>
         <div class="flex gap-3 mt-6">
-          <button type="button" @click="showCustomServiceDialog = false" class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">{{ $t('common.cancel') }}</button>
+          <button type="button" @click="showCustomServiceDialog = false; editingCustomKind = null" class="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">{{ $t('common.cancel') }}</button>
           <button type="button" @click="submitCustomService" :disabled="savingCustomService" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
             {{ savingCustomService ? $t('common.loading') : $t('common.save') }}
           </button>

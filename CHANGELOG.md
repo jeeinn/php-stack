@@ -8,14 +8,15 @@
 ## [Unreleased]
 
 ### ⚠ 破坏性变更
-- **站点挂载统一为 `SITE_*`**：移除 `SOURCE_DIR` 与默认 `/www` 代码卷；每站一律 `SITE_{ID}` → `/sites/{id}`。无站点时不挂源码。请重新「应用配置」。Nginx 模板 `default.conf` 默认整段注释，由托管站点 conf 提供 server。
+- **站点挂载统一为 `SITE_*`**：移除「首站特例」，每站一律 `SITE_{ID}` → `/sites/{id}`。请重新「应用配置」。
 
 ### ✨ 新增
+- **默认欢迎页**：工作区 `SOURCE_DIR=./www` → `/www` **始终挂载**（与站点卷共存）；Nginx `default.conf` 以 `default_server` + `server_name _` 提供欢迎页，`fastcgi_pass` 使用短别名 `php`；模板 `src-tauri/www/index.html` 在应用配置时释放（已存在同名文件不覆盖）。未匹配域名的请求回落到该页
 - **服务目录（Service Catalog）**：内置 `service_catalog.json` + 工作区 `.user-config/custom_services.json` 合并；生成按 `generator: php|nginx|image` 路由，服务 kind 为字符串（兼容历史 `PHP`/`MySQL` 序列化）
 - **可选中间件**：MySQL 与 Redis 对齐——可删到 0；新工作区默认不启用 MySQL；未选中不写 `.env` / compose
 - **添加自定义服务**：环境配置页高级区可自建 image 型服务（如 MongoDB / Memcached），落盘自定义描述符 + 版本映射；不删用户 `data/`
 - **容器内连接主机名提示**：环境配置页每个服务卡片展示推荐主机名（可复制）；同类多实例时警告短名不可用；应用配置后汇总连接地址
-- 单实例短主机名别名由 catalog `short_alias` 驱动（内置 mysql/redis/nginx；自定义服务可指定）
+- 单实例短主机名别名由 catalog `short_alias` 驱动（内置 php/mysql/redis/nginx；自定义服务可指定）
 
 ### 待完善（未纳入本版）
 - 恢复时按建议端口自动改写 `.env` / compose（`port_overrides`）

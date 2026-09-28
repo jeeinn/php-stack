@@ -24,7 +24,7 @@ const mockVersionMappings = {
 }
 
 const mockCatalog = [
-  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: null } },
+  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: 'php' } },
   {
     id: 'mongodb',
     display_name: 'MongoDB',

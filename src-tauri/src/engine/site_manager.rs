@@ -12,8 +12,11 @@ use super::env_parser::EnvFile;
 use super::user_config;
 use crate::app_log;
 pub const MANAGED_MARKER_PREFIX: &str = "# php-stack:managed site=";
-/// 历史遗留键；生成配置时一律清除，不再写入。
-pub const LEGACY_SOURCE_DIR_KEY: &str = "SOURCE_DIR";
+/// 默认欢迎页键：宿主机 `./www` → 容器 `/www`，始终写入 `.env` 并挂载，与站点卷共存。
+pub const PRIMARY_ENV_KEY: &str = "SOURCE_DIR";
+pub const PRIMARY_CONTAINER_PATH: &str = "/www";
+/// 默认欢迎页目录（相对工作区），写入 `SOURCE_DIR`。
+pub const DEFAULT_SOURCE_DIR: &str = "./www";
 pub const KIND_RELATIVE: &str = "workspace-relative";
 pub const KIND_ABSOLUTE: &str = "absolute";
 
@@ -328,11 +331,12 @@ pub fn resolve_host_path(project_root: &Path, host_path: &str) -> PathBuf {
     }
 }
 
+/// 站点卷 + 默认欢迎页卷。
+///
+/// 默认欢迎页目录（`./www` → `/www`）**始终挂载**，与站点卷共存：
+/// 站点各自服务自己的 `server_name`，未匹配域名的请求回落到默认站的欢迎页。
 pub fn source_volume_lines(sites: &[SiteEntry], role: MountRole, service_dir: &str) -> Vec<String> {
-    if sites.is_empty() {
-        return Vec::new();
-    }
-    sites
+    let mut lines: Vec<String> = sites
         .iter()
         .filter(|site| match role {
             MountRole::Php => site.php_service == service_dir,
@@ -346,7 +350,12 @@ pub fn source_volume_lines(sites: &[SiteEntry], role: MountRole, service_dir: &s
             };
             format!("      - ${{{}}}:{container}:rw", site.env_key)
         })
-        .collect()
+        .collect();
+    lines.push(format!(
+        "      - ${{{}}}:{}/:rw",
+        PRIMARY_ENV_KEY, PRIMARY_CONTAINER_PATH
+    ));
+    lines
 }
 
 pub fn load_sites_with_hosts(project_root: &Path, env: &EnvFile) -> Vec<SiteEntry> {
@@ -423,22 +432,35 @@ fn read_records(project_root: &Path) -> Result<Vec<SiteRecord>, String> {
     Ok(file.sites)
 }
 
-/// 去掉上一版站点写入、这次不再使用的站点键（含历史 `SOURCE_DIR`）。
+/// 去掉上一版站点写入、这次不再使用的 `SITE_*` 键。默认欢迎页键 `SOURCE_DIR` 由调用方统一维护。
 pub fn remove_stale_site_keys(env: &mut EnvFile, project_root: &Path, sites: &[SiteEntry]) {
     let Ok(previous) = read_records(project_root) else {
         return;
     };
     for record in previous {
+        // 默认欢迎页键不是站点键，由调用方统一维护，不参与清理。
+        if record.env_key == PRIMARY_ENV_KEY {
+            continue;
+        }
         if !sites.iter().any(|site| site.env_key == record.env_key) {
             env.remove(&record.env_key);
         }
     }
 }
 
-/// 无 `sites.json` 时返回空列表（无站点 = 不挂代码卷）。
+/// 无 `sites.json`（即无自定义站点）时，用默认欢迎页目录合成一条默认站。
 pub fn collect_manifest_sites(project_root: &Path) -> Vec<ManifestSite> {
     let env = read_env(project_root);
     let records = read_records(project_root).unwrap_or_default();
+    if records.is_empty() {
+        let host = env
+            .as_ref()
+            .and_then(|file| file.get(PRIMARY_ENV_KEY))
+            .map(normalize_host_path)
+            .filter(|path| !path.is_empty())
+            .unwrap_or_else(|| DEFAULT_SOURCE_DIR.to_string());
+        return vec![synthetic_site(&host)];
+    }
     records
         .into_iter()
         .map(|record| {
@@ -459,6 +481,25 @@ pub fn collect_manifest_sites(project_root: &Path) -> Vec<ManifestSite> {
             }
         })
         .collect()
+}
+
+/// 默认欢迎页站点（无自定义站点时的备份清单条目）。
+pub fn synthetic_site(host_path: &str) -> ManifestSite {
+    let host_path = normalize_host_path(host_path);
+    let host_path = if host_path.is_empty() {
+        DEFAULT_SOURCE_DIR.to_string()
+    } else {
+        host_path
+    };
+    ManifestSite {
+        id: "main".to_string(),
+        env_key: PRIMARY_ENV_KEY.to_string(),
+        container_path: PRIMARY_CONTAINER_PATH.to_string(),
+        host_path: repair_host_path(&host_path),
+        kind: path_kind(&repair_host_path(&host_path)).to_string(),
+        server_name: "localhost".to_string(),
+        public_dir: String::new(),
+    }
 }
 
 fn read_env(project_root: &Path) -> Option<EnvFile> {
@@ -689,19 +730,32 @@ mod tests {
             },
         ];
         normalize_sites(&mut sites);
+        // 站点卷之后追加默认欢迎页卷，两者共存
         let php82 = source_volume_lines(&sites, MountRole::Php, "php82");
         assert_eq!(
             php82,
-            vec!["      - ${SITE_MAIN}:/sites/main/:rw".to_string()]
+            vec![
+                "      - ${SITE_MAIN}:/sites/main/:rw".to_string(),
+                "      - ${SOURCE_DIR}:/www/:rw".to_string(),
+            ]
         );
         let php84 = source_volume_lines(&sites, MountRole::Php, "php84");
         assert_eq!(
             php84,
-            vec!["      - ${SITE_SHOP}:/sites/shop/:rw".to_string()]
+            vec![
+                "      - ${SITE_SHOP}:/sites/shop/:rw".to_string(),
+                "      - ${SOURCE_DIR}:/www/:rw".to_string(),
+            ]
         );
         let nginx = source_volume_lines(&sites, MountRole::Nginx, "nginx125");
-        assert_eq!(nginx.len(), 2);
-        assert!(source_volume_lines(&[], MountRole::Php, "php82").is_empty());
+        assert_eq!(nginx.len(), 3);
+        assert!(nginx.iter().any(|line| line.contains("${SITE_MAIN}")));
+        assert!(nginx.iter().any(|line| line.contains("${SITE_SHOP}")));
+        // 无自定义站点：仅默认欢迎页目录 ./www → /www
+        assert_eq!(
+            source_volume_lines(&[], MountRole::Php, "php82"),
+            vec!["      - ${SOURCE_DIR}:/www/:rw".to_string()]
+        );
     }
 
     #[test]
@@ -810,7 +864,10 @@ mod tests {
         let lines = source_volume_lines(std::slice::from_ref(&site), MountRole::Nginx, "nginx125");
         assert_eq!(
             lines,
-            vec!["      - ${SITE_SHOP}:/sites/shop/:rw".to_string()]
+            vec![
+                "      - ${SITE_SHOP}:/sites/shop/:rw".to_string(),
+                "      - ${SOURCE_DIR}:/www/:rw".to_string(),
+            ]
         );
         site.public_dir.clear();
         assert_eq!(nginx_root(&site), "/sites/shop");

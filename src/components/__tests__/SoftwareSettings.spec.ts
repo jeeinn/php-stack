@@ -25,7 +25,7 @@ vi.mock('@tauri-apps/api/core', () => ({
     }
     if (command === 'get_service_catalog') {
       return [
-        { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: null } },
+        { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: 'php' } },
         { id: 'mysql', display_name: 'MySQL', builtin: true, generator: 'image', container_port: 3306, connect: { container_port: 3306, short_name: 'mysql' } },
         { id: 'redis', display_name: 'Redis', builtin: true, generator: 'image', container_port: 6379, connect: { container_port: 6379, short_name: 'redis' } },
         { id: 'nginx', display_name: 'Nginx', builtin: true, generator: 'nginx', container_port: 80, connect: { container_port: 80, short_name: 'nginx' } },

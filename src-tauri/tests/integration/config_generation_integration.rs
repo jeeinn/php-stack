@@ -3,6 +3,8 @@
 //! 解析细节由 config_generator.rs 的单元测试覆盖，本文件验证完整链路。
 
 use app_lib::engine::config_generator::{ConfigGenerator, EnvConfig, ServiceEntry};
+use app_lib::engine::env_parser::EnvFile;
+use app_lib::engine::site_manager::SiteEntry;
 
 fn sample_config() -> EnvConfig {
     EnvConfig {
@@ -50,8 +52,8 @@ fn test_generate_env_contains_expected_keys() {
     let formatted = env.format();
 
     assert!(
-        !formatted.contains("SOURCE_DIR="),
-        "无站点不应写入 SOURCE_DIR"
+        formatted.contains("SOURCE_DIR=./www"),
+        "无站点应回落默认欢迎页目录，实际:\n{formatted}"
     );
     assert!(formatted.contains("TZ=Asia/Shanghai"), "应包含 TZ");
     assert!(
@@ -84,6 +86,51 @@ fn test_generate_compose_contains_services() {
     assert!(
         compose.contains("mysql80"),
         "compose 应包含 mysql80 服务配置"
+    );
+}
+
+/// 有自定义站点时：站点走 `SITE_*` → `/sites/{id}`，默认站键 `SOURCE_DIR` **保留**，
+/// 使未匹配域名的请求仍能访问默认欢迎页。
+#[test]
+fn test_generate_env_keeps_default_source_dir_when_sites_exist() {
+    let tmp = tempfile::tempdir().expect("创建临时目录失败");
+    let existing = EnvFile::parse("SOURCE_DIR=./old\nMY_CUSTOM_VAR=hello\n").unwrap();
+
+    let mut config = sample_config();
+    config.sites = vec![SiteEntry {
+        id: "demo".to_string(),
+        server_name: "demo.localhost".to_string(),
+        host_path: "E:/projects/demo".to_string(),
+        env_key: String::new(),
+        container_path: String::new(),
+        nginx_service: "nginx125".to_string(),
+        php_service: "php82".to_string(),
+        public_dir: String::new(),
+    }];
+
+    let formatted = ConfigGenerator::generate_env(&config, Some(&existing), tmp.path()).format();
+
+    assert!(
+        formatted.contains("SOURCE_DIR=./www"),
+        "默认欢迎页键应保留，实际:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("SITE_DEMO=E:/projects/demo"),
+        "站点键应为 SITE_DEMO，实际:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("MY_CUSTOM_VAR=hello"),
+        "用户自定义变量应保留"
+    );
+
+    let compose = ConfigGenerator::generate_compose(&config, tmp.path());
+    assert!(
+        compose.contains("${SITE_DEMO}:/sites/demo/:rw"),
+        "站点卷应指向 /sites/demo，实际:\n{compose}"
+    );
+    assert!(
+        compose.contains("${SOURCE_DIR}:/www/:rw"),
+        "默认欢迎页卷应与站点卷共存，实际:\n{compose}"
     );
 }
 

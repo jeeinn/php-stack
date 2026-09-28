@@ -119,7 +119,7 @@
 
 ### 1. Nginx 站点管理
 - `site_manager.rs` + 环境配置页站点面板：多站点 `server_name`、挂载路径、`public_dir`、绑定 PHP/Nginx 服务
-- 生成托管 Nginx conf 与 compose 卷映射（一律 `SITE_{ID}` → `/sites/{id}`；无站点则不挂代码卷）；元数据 `.user-config/sites.json`
+- 生成托管 Nginx conf 与 compose 卷映射（站点一律 `SITE_{ID}` → `/sites/{id}`；默认欢迎页卷 `SOURCE_DIR=./www` → `/www` 始终挂载、与站点卷共存，未匹配域名的请求回落欢迎页；模板 `src-tauri/www/index.html` 在应用配置时释放且已存在同名文件不覆盖）；元数据 `.user-config/sites.json`
 
 ### 2. 跨机恢复与备份增强
 - 恢复预览支持站点路径覆写；备份选项持久化（`.user-config/backup.json`）

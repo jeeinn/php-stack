@@ -281,7 +281,7 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "Container path",
-      "defaultNote": "Managed site confs serve traffic. The stock default.conf is commented out in the template; if you enable it, ensure a matching volume is mounted."
+      "defaultNote": "The default server always mounts ./www → /www and serves the welcome page (PHP via short alias php). Each site is served by its own managed conf; requests with unmatched host names fall back to the welcome page."
     },
     "previewModal": {
       "title": "Config Preview",

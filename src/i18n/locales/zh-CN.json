@@ -281,7 +281,7 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "容器路径",
-      "defaultNote": "站点由托管 conf 提供；模板里的 default.conf 默认已注释。若自行启用，请保证对应代码卷已挂载。"
+      "defaultNote": "默认站始终挂载 ./www → /www 提供欢迎页（PHP 走短别名 php）。站点由各自的托管 conf 服务，未匹配域名的请求回落到欢迎页。"
     },
     "previewModal": {
       "title": "配置预览",

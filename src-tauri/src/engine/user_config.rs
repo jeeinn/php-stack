@@ -57,7 +57,10 @@ mod tests {
         );
         assert_eq!(relative(SITES), ".user-config/sites.json");
         assert_eq!(relative(BACKUP), ".user-config/backup.json");
-        assert_eq!(relative(CUSTOM_SERVICES), ".user-config/custom_services.json");
+        assert_eq!(
+            relative(CUSTOM_SERVICES),
+            ".user-config/custom_services.json"
+        );
         assert!(!relative(MIRROR_CONFIG).contains('\\'));
     }
 

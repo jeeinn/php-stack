@@ -298,7 +298,8 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
     // 创建 VersionManifest / UserOverrideManager 用于 env prefix 反查
     let manifest = VersionManifest::new();
     let override_manager = UserOverrideManager::new(&project_root);
-    let services = parse_env_to_services(&env_map, &manifest, Some(&override_manager), &project_root);
+    let services =
+        parse_env_to_services(&env_map, &manifest, Some(&override_manager), &project_root);
 
     // 如果没有解析到任何服务，返回 None
     if services.is_empty() {
@@ -505,12 +506,7 @@ pub fn check_service_images_presence(config: EnvConfig) -> Result<Vec<ImageStatu
 
     for service in &config.services {
         let kind = normalize_service_kind(&service.service_type);
-        let tag = resolve_service_image_tag(
-            &override_manager,
-            &manifest,
-            &kind,
-            &service.version,
-        );
+        let tag = resolve_service_image_tag(&override_manager, &manifest, &kind, &service.version);
         tags.push(tag);
     }
 
@@ -1649,8 +1645,12 @@ mod tests {
 
         // MYSQL_ROOT_PASSWORD 不应被误识别为 MySQL 服务
         let with_root = parse_env("MYSQL_ROOT_PASSWORD=secret\n");
-        let no_services =
-            parse_env_to_services(&with_root, &VersionManifest::new(), None, std::path::Path::new("."));
+        let no_services = parse_env_to_services(
+            &with_root,
+            &VersionManifest::new(),
+            None,
+            std::path::Path::new("."),
+        );
         assert!(
             no_services.is_empty(),
             "仅 ROOT_PASSWORD 时不应解析出服务，实际: {no_services:?}"

@@ -162,9 +162,7 @@ impl VersionManifest {
     /// 按 ID 查询版本条目
     pub fn get_entry(&self, service_kind: &str, id: &str) -> Option<&VersionEntry> {
         let kind = normalize_service_kind(service_kind);
-        self.versions
-            .get(&kind)
-            .and_then(|entries| entries.get(id))
+        self.versions.get(&kind).and_then(|entries| entries.get(id))
     }
 
     /// 按 env 变量前缀反查版本条目
@@ -185,10 +183,7 @@ impl VersionManifest {
 
     /// 获取指定服务的所有可用版本条目，按版本号降序排列
     /// 返回 Vec<(&String, &VersionEntry)>，其中 String 为 ID
-    pub fn get_available_entries(
-        &self,
-        service_kind: &str,
-    ) -> Vec<(&String, &VersionEntry)> {
+    pub fn get_available_entries(&self, service_kind: &str) -> Vec<(&String, &VersionEntry)> {
         let kind = normalize_service_kind(service_kind);
         let mut entries: Vec<(&String, &VersionEntry)> = self
             .versions
@@ -207,10 +202,7 @@ impl VersionManifest {
     }
 
     /// 获取推荐版本（非 EOL 的最新版本）
-    pub fn get_recommended_entry(
-        &self,
-        service_kind: &str,
-    ) -> Option<(&String, &VersionEntry)> {
+    pub fn get_recommended_entry(&self, service_kind: &str) -> Option<(&String, &VersionEntry)> {
         self.get_available_entries(service_kind)
             .into_iter()
             .find(|(_, entry)| !entry.eol)

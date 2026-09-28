@@ -348,10 +348,7 @@ fn upsert_custom_service(
     if require_existing {
         match catalog.get(&descriptor.id) {
             Some(existing) if existing.builtin => {
-                return Err(format!(
-                    "cannot update builtin service '{}'",
-                    descriptor.id
-                ));
+                return Err(format!("cannot update builtin service '{}'", descriptor.id));
             }
             Some(_) => {}
             None => {

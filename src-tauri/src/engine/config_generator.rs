@@ -152,15 +152,18 @@ impl ConfigGenerator {
         override_manager
             .get_merged_entry(kind, id)
             .unwrap_or_else(|| {
-                manifest.get_entry(kind, id).cloned().unwrap_or_else(|| VersionEntry {
-                    display_name: id.to_string(),
-                    image_tag: id.to_string(),
-                    service_dir: id.to_string(),
-                    default_port: 0,
-                    show_port: false,
-                    eol: false,
-                    description: None,
-                })
+                manifest
+                    .get_entry(kind, id)
+                    .cloned()
+                    .unwrap_or_else(|| VersionEntry {
+                        display_name: id.to_string(),
+                        image_tag: id.to_string(),
+                        service_dir: id.to_string(),
+                        default_port: 0,
+                        show_port: false,
+                        eol: false,
+                        description: None,
+                    })
             })
     }
 
@@ -313,8 +316,7 @@ impl ConfigGenerator {
                 continue;
             };
 
-            let entry =
-                Self::lookup_version_entry(&override_manager, &manifest, &kind, id);
+            let entry = Self::lookup_version_entry(&override_manager, &manifest, &kind, id);
             let env_prefix = entry.service_dir.to_uppercase();
             let service_dir = &entry.service_dir;
 
@@ -367,12 +369,7 @@ impl ConfigGenerator {
             }
         }
 
-        Self::remove_stale_managed_env_keys(
-            &mut env,
-            config,
-            &override_manager,
-            &manifest,
-        );
+        Self::remove_stale_managed_env_keys(&mut env, config, &override_manager, &manifest);
 
         // Merge mirror configuration from .user-config/mirror_config.json
         if let Ok(user_mirror_config) = UserMirrorConfig::load(project_root) {
@@ -409,6 +406,17 @@ impl ConfigGenerator {
     }
 
     /// 移除已不在当前 config 中的托管 .env 键（保留用户自定义键）
+    ///
+    /// 删除需同时满足三个条件，避免误伤用户手写变量：
+    /// 1. 键以某个托管后缀结尾；
+    /// 2. 前缀是**已知服务前缀**——出现在版本清单 / 用户覆盖 / 当前 config 中的
+    ///    `service_dir` 大写形式；
+    /// 3. 该前缀不在当前 config 的服务列表里。
+    ///
+    /// 只认已知前缀，是为了不把 `APP_VERSION` / `APP_LOG_DIR` 这类恰好撞上托管
+    /// 后缀的用户变量当成过期键删掉。代价是：已从清单中移除的旧版本（如 `MYSQL56_*`）
+    /// 会残留，但 `parse_env_to_services` 只按已知 `service_dir` 反查，残留键不会被
+    /// 回读成服务，属无害噪音。
     fn remove_stale_managed_env_keys(
         env: &mut EnvFile,
         config: &EnvConfig,
@@ -438,11 +446,25 @@ impl ConfigGenerator {
             keep_prefixes.insert(entry.service_dir.to_uppercase());
         }
 
+        // 已知服务前缀：清单全部版本 + 用户覆盖/自定义 + 当前 config
+        let mut known_prefixes: HashSet<String> = HashSet::new();
+        let mut kinds: HashSet<String> = manifest.service_kinds().into_iter().collect();
+        kinds.extend(override_manager.service_kinds());
+        for kind in kinds {
+            for item in override_manager.list_merged_entries(&kind) {
+                known_prefixes.insert(item.entry.service_dir.to_uppercase());
+            }
+        }
+        known_prefixes.extend(keep_prefixes.iter().cloned());
+
         let keys: Vec<String> = env.to_map().into_keys().collect();
         for key in keys {
             for suffix in MANAGED_SUFFIXES {
                 if let Some(prefix) = key.strip_suffix(suffix) {
-                    if !prefix.is_empty() && !keep_prefixes.contains(prefix) {
+                    if !prefix.is_empty()
+                        && known_prefixes.contains(prefix)
+                        && !keep_prefixes.contains(prefix)
+                    {
                         env.remove(&key);
                     }
                     break;
@@ -484,10 +506,7 @@ impl ConfigGenerator {
         );
 
         if let Some(vol) = &desc.volumes.conf {
-            let conf_name = desc
-                .conf_key_file
-                .as_deref()
-                .unwrap_or("config");
+            let conf_name = desc.conf_key_file.as_deref().unwrap_or("config");
             env.set(
                 &format!("{env_prefix}_{}", vol.env_suffix),
                 &format!("./services/{service_dir}/{conf_name}"),
@@ -1707,6 +1726,102 @@ SOURCE_DIR=./old
         assert!(!map.contains_key("MYSQL80_LOG_DIR"));
         assert!(!map.contains_key("MYSQL_ROOT_PASSWORD"));
         assert!(!map.contains_key("NGINX_LOG_DIR"));
+    }
+
+    #[test]
+    fn test_generate_env_keeps_user_vars_with_managed_suffixes() {
+        // 用户手写变量恰好以托管后缀结尾：必须保留（非已知服务前缀）
+        let existing_content = "\
+APP_VERSION=1.2.3
+APP_LOG_DIR=/var/app
+APP_DATA_DIR=/var/data
+APP_HOST_PORT=8080
+CUSTOM_FOO=bar
+";
+        let existing_env = EnvFile::parse(existing_content).unwrap();
+
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php82".to_string(),
+                host_port: 9000,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+
+        let env =
+            ConfigGenerator::generate_env(&config, Some(&existing_env), &std::env::temp_dir());
+        let map = env.to_map();
+
+        assert_eq!(map.get("APP_VERSION").unwrap(), "1.2.3");
+        assert_eq!(map.get("APP_LOG_DIR").unwrap(), "/var/app");
+        assert_eq!(map.get("APP_DATA_DIR").unwrap(), "/var/data");
+        assert_eq!(map.get("APP_HOST_PORT").unwrap(), "8080");
+        assert_eq!(map.get("CUSTOM_FOO").unwrap(), "bar");
+        // 当前服务的托管键照常写入
+        assert!(map.contains_key("PHP82_VERSION"));
+    }
+
+    #[test]
+    fn test_generate_env_removes_stale_keys_for_custom_kind() {
+        // 自定义 kind 只存在于 version_overrides：其 service_dir 仍属「已知前缀」，
+        // 从 config 移除后托管键要清掉；同时用户变量不受影响。
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join(".user-config");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("version_overrides.json"),
+            r#"{
+              "mongodb": {
+                "mongodbdefault": {
+                  "entry_kind": "custom",
+                  "display_name": "MongoDB (mongodbdefault)",
+                  "image_tag": "mongo:7",
+                  "service_dir": "mongodbdefault",
+                  "default_port": 27017,
+                  "show_port": true,
+                  "eol": false
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let existing_content = "\
+MONGODBDEFAULT_VERSION=mongo:7
+MONGODBDEFAULT_HOST_PORT=27017
+MONGODBDEFAULT_DATA_DIR=./data/mongodbdefault
+APP_VERSION=9
+";
+        let existing_env = EnvFile::parse(existing_content).unwrap();
+
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php82".to_string(),
+                host_port: 9000,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+
+        let env = ConfigGenerator::generate_env(&config, Some(&existing_env), temp.path());
+        let map = env.to_map();
+
+        assert!(!map.contains_key("MONGODBDEFAULT_VERSION"));
+        assert!(!map.contains_key("MONGODBDEFAULT_HOST_PORT"));
+        assert!(!map.contains_key("MONGODBDEFAULT_DATA_DIR"));
+        assert_eq!(map.get("APP_VERSION").unwrap(), "9");
+        assert!(map.contains_key("PHP82_VERSION"));
     }
 
     #[test]

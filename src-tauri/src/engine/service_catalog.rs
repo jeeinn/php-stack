@@ -150,11 +150,7 @@ impl ServiceCatalog {
                     svc.builtin = false;
                     svc.generator = GeneratorKind::Image;
                     if let Err(e) = catalog.insert_custom(svc) {
-                        app_log!(
-                            warn,
-                            "engine::service_catalog",
-                            "skip custom service: {e}"
-                        );
+                        app_log!(warn, "engine::service_catalog", "skip custom service: {e}");
                     }
                 }
             }
@@ -267,10 +263,7 @@ pub fn load_custom_services(project_root: &Path) -> Result<CustomServicesFile, S
     serde_json::from_str(&content).map_err(|e| format!("failed to parse custom_services.json: {e}"))
 }
 
-pub fn save_custom_services(
-    project_root: &Path,
-    file: &CustomServicesFile,
-) -> Result<(), String> {
+pub fn save_custom_services(project_root: &Path, file: &CustomServicesFile) -> Result<(), String> {
     user_config::ensure_dir(project_root)?;
     let path = user_config::path(project_root, user_config::CUSTOM_SERVICES);
     let content = serde_json::to_string_pretty(file)
@@ -493,10 +486,10 @@ mod tests {
         assert_eq!(d.connect.container_port, 27017);
         assert_eq!(d.connect.short_name.as_deref(), Some("mongo"));
         assert!(d.volumes.data.is_some());
-        assert_eq!(default_custom_version_id("mongodb", Some("mongo7")), "mongo7");
         assert_eq!(
-            default_custom_version_id("mongodb", None),
-            "mongodbdefault"
+            default_custom_version_id("mongodb", Some("mongo7")),
+            "mongo7"
         );
+        assert_eq!(default_custom_version_id("mongodb", None), "mongodbdefault");
     }
 }

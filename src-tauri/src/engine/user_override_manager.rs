@@ -454,9 +454,9 @@ impl UserOverrideManager {
                 }
                 self.persist(project_root)
             }
-            Some(UserVersionOverride::Override { .. }) => Err(format!(
-                "id '{id}' is an override entry, not custom"
-            )),
+            Some(UserVersionOverride::Override { .. }) => {
+                Err(format!("id '{id}' is an override entry, not custom"))
+            }
             None => Err(format!("custom entry '{id}' not found for {kind}")),
         }
     }
@@ -735,7 +735,9 @@ mod tests {
 
         manager.remove_kind(temp.path(), "mongodb").unwrap();
         assert!(!manager.service_kinds().contains(&"mongodb".to_string()));
-        assert!(manager.get_merged_entry("mongodb", "mongodefault").is_none());
+        assert!(manager
+            .get_merged_entry("mongodb", "mongodefault")
+            .is_none());
     }
 
     #[test]

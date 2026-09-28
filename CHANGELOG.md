@@ -8,13 +8,17 @@
 ## [Unreleased]
 
 ### ✨ 新增
+- **服务目录（Service Catalog）**：内置 `service_catalog.json` + 工作区 `.user-config/custom_services.json` 合并；生成按 `generator: php|nginx|image` 路由，服务 kind 为字符串（兼容历史 `PHP`/`MySQL` 序列化）
+- **可选中间件**：MySQL 与 Redis 对齐——可删到 0；新工作区默认不启用 MySQL；未选中不写 `.env` / compose
+- **添加自定义服务**：环境配置页高级区可自建 image 型服务（如 MongoDB / Memcached），落盘自定义描述符 + 版本映射；不删用户 `data/`
 - **容器内连接主机名提示**：环境配置页每个服务卡片展示推荐主机名（可复制）；同类多实例时警告短名不可用；应用配置后汇总连接地址
-- 单实例 MySQL/Redis/Nginx 在 compose 网络上增加短主机名别名（`mysql` / `redis` / `nginx`），便于应用使用常见主机名
+- 单实例短主机名别名由 catalog `short_alias` 驱动（内置 mysql/redis/nginx；自定义服务可指定）
 
 ### 待完善（未纳入本版）
 - 恢复时按建议端口自动改写 `.env` / compose（`port_overrides`）
 - 数据库 mysqldump 导出与恢复时 SQL 自动导入
 - 多实例时「默认实例」选型（短别名指向用户指定的默认服务）
+- 官方内置 MongoDB / Elasticsearch / Memcached 清单与模板（当前可通过自定义服务自行添加）
 
 ---
 

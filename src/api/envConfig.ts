@@ -1,13 +1,35 @@
 import { invokeCommand } from './client'
 import type {
+  CustomServiceForm,
   EnvConfig,
   ImagePresence,
   PullImageResultItem,
+  ServiceDescriptor,
   VersionMappings,
 } from '../types/env-config'
 
 export function getVersionMappings(): Promise<VersionMappings> {
   return invokeCommand<VersionMappings>('get_version_mappings')
+}
+
+export function getServiceCatalog(): Promise<ServiceDescriptor[]> {
+  return invokeCommand<ServiceDescriptor[]>('get_service_catalog')
+}
+
+export function saveCustomService(
+  form: CustomServiceForm,
+): Promise<ServiceDescriptor> {
+  return invokeCommand<ServiceDescriptor>('save_custom_service', { form })
+}
+
+export function updateCustomService(
+  form: CustomServiceForm,
+): Promise<ServiceDescriptor> {
+  return invokeCommand<ServiceDescriptor>('update_custom_service', { form })
+}
+
+export function removeCustomService(id: string): Promise<void> {
+  return invokeCommand<void>('remove_custom_service', { id })
 }
 
 export function loadExistingConfig(): Promise<EnvConfig | null> {

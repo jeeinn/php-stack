@@ -22,15 +22,11 @@ pub struct VersionEntry {
     pub description: Option<String>,
 }
 
-/// 服务类型枚举
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ServiceType {
-    Php,
-    Mysql,
-    Redis,
-    Nginx,
-}
+/// 服务 kind id（小写，如 `php` / `mysql`）。历史 PascalCase 请先经 `normalize_service_kind`。
+pub type ServiceKind = String;
+
+/// 将历史 PascalCase / 大小写混用规范为小写 kind id。
+pub use super::service_catalog::normalize_service_kind;
 
 /// 清单溯源信息 —— 记录模板与版本数据的来源，便于后续核对与自动同步。
 ///
@@ -54,26 +50,19 @@ pub struct ManifestProvenance {
 
 /// `version_manifest.json` 的整体结构。
 ///
-/// 服务类型显式列出（而非直接反序列化为 `HashMap<String, HashMap<..>>`），
-/// 这样 `_provenance` 这类元信息键不会因类型不匹配导致整份清单解析失败。
+/// 顶层除 `_provenance` 外均为「服务 kind → 版本映射」；未知键自动生效。
 #[derive(Debug, Deserialize)]
 struct ManifestFile {
     #[serde(default)]
     _provenance: Option<ManifestProvenance>,
-    #[serde(default)]
-    php: HashMap<String, VersionEntry>,
-    #[serde(default)]
-    mysql: HashMap<String, VersionEntry>,
-    #[serde(default)]
-    redis: HashMap<String, VersionEntry>,
-    #[serde(default)]
-    nginx: HashMap<String, VersionEntry>,
+    #[serde(flatten)]
+    services: HashMap<String, HashMap<String, VersionEntry>>,
 }
 
 /// 版本清单管理器
 pub struct VersionManifest {
-    /// 所有服务的版本映射，key 为 ID（如 "php82"）
-    versions: HashMap<ServiceType, HashMap<String, VersionEntry>>,
+    /// 所有服务的版本映射，外层 key 为服务 kind（如 "php"）
+    versions: HashMap<String, HashMap<String, VersionEntry>>,
     /// 清单溯源信息（可选）
     provenance: Option<ManifestProvenance>,
 }
@@ -145,10 +134,12 @@ impl VersionManifest {
             .map_err(|e| format!("failed to parse version_manifest: {e}"))?;
 
         let mut versions = HashMap::new();
-        versions.insert(ServiceType::Php, file.php);
-        versions.insert(ServiceType::Mysql, file.mysql);
-        versions.insert(ServiceType::Redis, file.redis);
-        versions.insert(ServiceType::Nginx, file.nginx);
+        for (kind, entries) in file.services {
+            if kind.starts_with('_') {
+                continue;
+            }
+            versions.insert(normalize_service_kind(&kind), entries);
+        }
 
         Ok(Self {
             versions,
@@ -161,24 +152,29 @@ impl VersionManifest {
         self.provenance.as_ref()
     }
 
-    // ─── 新 API ───────────────────────────────────────────────
+    /// 列出清单中出现过的服务 kind
+    pub fn service_kinds(&self) -> Vec<String> {
+        let mut keys: Vec<String> = self.versions.keys().cloned().collect();
+        keys.sort();
+        keys
+    }
 
     /// 按 ID 查询版本条目
-    pub fn get_entry(&self, service_type: &ServiceType, id: &str) -> Option<&VersionEntry> {
-        self.versions
-            .get(service_type)
-            .and_then(|entries| entries.get(id))
+    pub fn get_entry(&self, service_kind: &str, id: &str) -> Option<&VersionEntry> {
+        let kind = normalize_service_kind(service_kind);
+        self.versions.get(&kind).and_then(|entries| entries.get(id))
     }
 
     /// 按 env 变量前缀反查版本条目
     /// 将 prefix 转小写后匹配 service_dir（如 "PHP82" → "php82"）
     pub fn find_entry_by_env_prefix(
         &self,
-        service_type: &ServiceType,
+        service_kind: &str,
         prefix: &str,
     ) -> Option<(&String, &VersionEntry)> {
+        let kind = normalize_service_kind(service_kind);
         let prefix_lower = prefix.to_lowercase();
-        self.versions.get(service_type).and_then(|entries| {
+        self.versions.get(&kind).and_then(|entries| {
             entries
                 .iter()
                 .find(|(_, entry)| entry.service_dir == prefix_lower)
@@ -187,13 +183,11 @@ impl VersionManifest {
 
     /// 获取指定服务的所有可用版本条目，按版本号降序排列
     /// 返回 Vec<(&String, &VersionEntry)>，其中 String 为 ID
-    pub fn get_available_entries(
-        &self,
-        service_type: &ServiceType,
-    ) -> Vec<(&String, &VersionEntry)> {
+    pub fn get_available_entries(&self, service_kind: &str) -> Vec<(&String, &VersionEntry)> {
+        let kind = normalize_service_kind(service_kind);
         let mut entries: Vec<(&String, &VersionEntry)> = self
             .versions
-            .get(service_type)
+            .get(&kind)
             .map(|e| e.iter().collect())
             .unwrap_or_default();
 
@@ -208,23 +202,20 @@ impl VersionManifest {
     }
 
     /// 获取推荐版本（非 EOL 的最新版本）
-    pub fn get_recommended_entry(
-        &self,
-        service_type: &ServiceType,
-    ) -> Option<(&String, &VersionEntry)> {
-        self.get_available_entries(service_type)
+    pub fn get_recommended_entry(&self, service_kind: &str) -> Option<(&String, &VersionEntry)> {
+        self.get_available_entries(service_kind)
             .into_iter()
             .find(|(_, entry)| !entry.eol)
     }
 
     /// 检查 ID 是否存在
-    pub fn is_id_valid(&self, service_type: &ServiceType, id: &str) -> bool {
-        self.get_entry(service_type, id).is_some()
+    pub fn is_id_valid(&self, service_kind: &str, id: &str) -> bool {
+        self.get_entry(service_kind, id).is_some()
     }
 
     /// 获取版本警告信息（如果是 EOL 版本）
-    pub fn get_entry_warning(&self, service_type: &ServiceType, id: &str) -> Option<String> {
-        self.get_entry(service_type, id)
+    pub fn get_entry_warning(&self, service_kind: &str, id: &str) -> Option<String> {
+        self.get_entry(service_kind, id)
             .filter(|entry| entry.eol)
             .and_then(|entry| {
                 entry
@@ -292,9 +283,9 @@ mod tests {
             "nginx": {}
         }"#;
         let m = VersionManifest::from_json(json).expect("minimal manifest should parse");
-        assert!(m.is_id_valid(&ServiceType::Php, "php99"));
+        assert!(m.is_id_valid("php", "php99"));
         assert_eq!(
-            m.get_entry(&ServiceType::Php, "php99").unwrap().image_tag,
+            m.get_entry("php", "php99").unwrap().image_tag,
             "php:9.9-fpm"
         );
     }
@@ -312,7 +303,7 @@ mod tests {
         let manifest = VersionManifest::new();
 
         // 测试 MySQL 8.4
-        let entry = manifest.get_entry(&ServiceType::Mysql, "mysql84");
+        let entry = manifest.get_entry("mysql", "mysql84");
         assert!(entry.is_some());
         let entry = entry.unwrap();
         assert_eq!(entry.display_name, "MySQL 8.4 LTS");
@@ -323,7 +314,7 @@ mod tests {
         assert!(!entry.eol);
 
         // 测试 PHP 8.2
-        let entry = manifest.get_entry(&ServiceType::Php, "php82");
+        let entry = manifest.get_entry("php", "php82");
         assert!(entry.is_some());
         let entry = entry.unwrap();
         assert_eq!(entry.display_name, "PHP 8.2");
@@ -336,9 +327,9 @@ mod tests {
     fn test_id_validation() {
         let manifest = VersionManifest::new();
 
-        assert!(manifest.is_id_valid(&ServiceType::Mysql, "mysql80"));
-        assert!(manifest.is_id_valid(&ServiceType::Mysql, "mysql84"));
-        assert!(!manifest.is_id_valid(&ServiceType::Mysql, "mysql90"));
+        assert!(manifest.is_id_valid("mysql", "mysql80"));
+        assert!(manifest.is_id_valid("mysql", "mysql84"));
+        assert!(!manifest.is_id_valid("mysql", "mysql90"));
     }
 
     #[test]
@@ -346,11 +337,11 @@ mod tests {
         let manifest = VersionManifest::new();
 
         // MySQL 5.7 应该是 EOL
-        let warning = manifest.get_entry_warning(&ServiceType::Mysql, "mysql57");
+        let warning = manifest.get_entry_warning("mysql", "mysql57");
         assert!(warning.is_some());
 
         // MySQL 8.0 应该不是 EOL
-        let warning = manifest.get_entry_warning(&ServiceType::Mysql, "mysql80");
+        let warning = manifest.get_entry_warning("mysql", "mysql80");
         assert!(warning.is_none());
     }
 
@@ -359,20 +350,20 @@ mod tests {
         let manifest = VersionManifest::new();
 
         // PHP82 → php82
-        let result = manifest.find_entry_by_env_prefix(&ServiceType::Php, "PHP82");
+        let result = manifest.find_entry_by_env_prefix("php", "PHP82");
         assert!(result.is_some());
         let (id, entry) = result.unwrap();
         assert_eq!(id, "php82");
         assert_eq!(entry.image_tag, "php:8.2-fpm");
 
         // MYSQL84 → mysql84
-        let result = manifest.find_entry_by_env_prefix(&ServiceType::Mysql, "MYSQL84");
+        let result = manifest.find_entry_by_env_prefix("mysql", "MYSQL84");
         assert!(result.is_some());
         let (id, _) = result.unwrap();
         assert_eq!(id, "mysql84");
 
         // 不存在的前缀
-        let result = manifest.find_entry_by_env_prefix(&ServiceType::Php, "PHP99");
+        let result = manifest.find_entry_by_env_prefix("php", "PHP99");
         assert!(result.is_none());
     }
 
@@ -380,14 +371,14 @@ mod tests {
     fn test_recommended_entry() {
         let manifest = VersionManifest::new();
 
-        let recommended = manifest.get_recommended_entry(&ServiceType::Mysql);
+        let recommended = manifest.get_recommended_entry("mysql");
         assert!(recommended.is_some());
 
         // 推荐 = 按版本号降序后的第一个非 EOL（不硬编码 ID，避免 sync 增版后失败）
         let (id, entry) = recommended.unwrap();
         assert!(!entry.eol);
         let expected = manifest
-            .get_available_entries(&ServiceType::Mysql)
+            .get_available_entries("mysql")
             .into_iter()
             .find(|(_, e)| !e.eol)
             .map(|(i, _)| i.as_str());
@@ -398,7 +389,7 @@ mod tests {
     fn test_available_entries_sorted() {
         let manifest = VersionManifest::new();
 
-        let entries = manifest.get_available_entries(&ServiceType::Php);
+        let entries = manifest.get_available_entries("php");
         assert!(!entries.is_empty());
 
         // 验证按版本号降序排列（不硬编码 ID，避免 sync 增版后失败）
@@ -422,7 +413,7 @@ mod tests {
     fn test_available_entries_nginx_sorted() {
         let manifest = VersionManifest::new();
 
-        let entries = manifest.get_available_entries(&ServiceType::Nginx);
+        let entries = manifest.get_available_entries("nginx");
         assert!(!entries.is_empty());
 
         // Nginx 按 extract_version_numbers 降序（不硬编码最新 ID）
@@ -501,7 +492,11 @@ mod tests {
         let file: ManifestFile =
             serde_json::from_str(json).expect("未声明 _provenance 的清单应正常解析");
         assert!(file._provenance.is_none(), "未声明 _provenance 时应为 None");
-        assert_eq!(file.php.len(), 1, "版本条目本身不应受影响");
+        assert_eq!(
+            file.services.get("php").map(|m| m.len()),
+            Some(1),
+            "版本条目本身不应受影响"
+        );
     }
 
     #[test]

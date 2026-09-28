@@ -117,6 +117,11 @@ pub fn run() {
             commands::add_custom_version,
             commands::remove_user_override,
             commands::reset_all_overrides,
+            // 服务目录 / 自定义服务
+            commands::get_service_catalog,
+            commands::save_custom_service,
+            commands::update_custom_service,
+            commands::remove_custom_service,
             // 日志导出
             commands::export_logs,
             commands::export_logs_to,

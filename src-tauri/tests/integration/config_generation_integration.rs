@@ -2,19 +2,19 @@
 //!
 //! 解析细节由 config_generator.rs 的单元测试覆盖，本文件验证完整链路。
 
-use app_lib::engine::config_generator::{ConfigGenerator, EnvConfig, ServiceEntry, ServiceType};
+use app_lib::engine::config_generator::{ConfigGenerator, EnvConfig, ServiceEntry};
 
 fn sample_config() -> EnvConfig {
     EnvConfig {
         services: vec![
             ServiceEntry {
-                service_type: ServiceType::PHP,
+                service_type: "php".to_string(),
                 version: "php82".to_string(),
                 host_port: 9000,
                 extensions: Some(vec!["pdo_mysql".to_string(), "mysqli".to_string()]),
             },
             ServiceEntry {
-                service_type: ServiceType::MySQL,
+                service_type: "mysql".to_string(),
                 version: "mysql80".to_string(),
                 host_port: 3306,
                 extensions: None,
@@ -29,14 +29,14 @@ fn sample_config() -> EnvConfig {
 
 #[test]
 fn test_validate_accepts_conflict_free_config() {
-    ConfigGenerator::validate(&sample_config()).expect("无冲突配置应通过验证");
+    ConfigGenerator::validate(&sample_config(), None).expect("无冲突配置应通过验证");
 }
 
 #[test]
 fn test_validate_rejects_port_conflict() {
     let mut config = sample_config();
     config.services[1].host_port = 9000; // 与 PHP 服务同端口
-    let result = ConfigGenerator::validate(&config);
+    let result = ConfigGenerator::validate(&config, None);
     assert!(result.is_err(), "同端口配置应验证失败");
     assert!(
         result.unwrap_err().contains("9000"),

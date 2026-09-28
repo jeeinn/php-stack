@@ -1,0 +1,133 @@
+{
+  "services": [
+    {
+      "id": "php",
+      "display_name": "PHP",
+      "ui_order": 10,
+      "required_min": 1,
+      "default_on_new_workspace": true,
+      "multi_instance": true,
+      "generator": "php",
+      "builtin": true,
+      "container_port": 9000,
+      "host_port_env_suffix": "HOST_PORT",
+      "short_alias": null,
+      "conf_key_file": "Dockerfile",
+      "fallback_template_dir": "php85",
+      "connect": {
+        "container_port": 9000,
+        "short_name": null
+      }
+    },
+    {
+      "id": "mysql",
+      "display_name": "MySQL",
+      "ui_order": 20,
+      "required_min": 0,
+      "default_on_new_workspace": false,
+      "multi_instance": true,
+      "generator": "image",
+      "builtin": true,
+      "container_port": 3306,
+      "host_port_env_suffix": "HOST_PORT",
+      "short_alias": "mysql",
+      "conf_key_file": "mysql.cnf",
+      "fallback_template_dir": "mysql80",
+      "volumes": {
+        "conf": {
+          "env_suffix": "CONF_FILE",
+          "container_path": "/etc/mysql/conf.d/mysql.cnf",
+          "read_only": true
+        },
+        "data": {
+          "env_suffix": "DATA_DIR",
+          "container_path": "/var/lib/mysql/",
+          "read_only": false
+        },
+        "log": {
+          "env_suffix": "LOG_DIR",
+          "container_path": "/var/log/mysql/",
+          "read_only": false
+        }
+      },
+      "extra_env": [
+        {
+          "name": "MYSQL_ROOT_PASSWORD",
+          "from": "mysql_root_password",
+          "default": "root"
+        }
+      ],
+      "compose_environment": ["MYSQL_ROOT_PASSWORD", "TZ"],
+      "entrypoint": null,
+      "extract": {
+        "dest_name": "mysql.cnf",
+        "default_src": "/etc/my.cnf",
+        "paths_by_major": {
+          "5": "/etc/mysql/my.cnf"
+        }
+      },
+      "connect": {
+        "container_port": 3306,
+        "short_name": "mysql"
+      }
+    },
+    {
+      "id": "redis",
+      "display_name": "Redis",
+      "ui_order": 30,
+      "required_min": 0,
+      "default_on_new_workspace": false,
+      "multi_instance": true,
+      "generator": "image",
+      "builtin": true,
+      "container_port": 6379,
+      "host_port_env_suffix": "HOST_PORT",
+      "short_alias": "redis",
+      "conf_key_file": "redis.conf",
+      "fallback_template_dir": "redis72",
+      "volumes": {
+        "conf": {
+          "env_suffix": "CONF_FILE",
+          "container_path": "/etc/redis.conf",
+          "read_only": true
+        },
+        "data": {
+          "env_suffix": "DATA_DIR",
+          "container_path": "/data/",
+          "read_only": false
+        }
+      },
+      "extra_env": [],
+      "compose_environment": ["TZ"],
+      "entrypoint": ["redis-server", "/etc/redis.conf"],
+      "extract": {
+        "dest_name": "redis.conf",
+        "default_src": "/usr/local/etc/redis/redis.conf",
+        "paths_by_major": {}
+      },
+      "connect": {
+        "container_port": 6379,
+        "short_name": "redis"
+      }
+    },
+    {
+      "id": "nginx",
+      "display_name": "Nginx",
+      "ui_order": 40,
+      "required_min": 0,
+      "default_on_new_workspace": false,
+      "multi_instance": true,
+      "generator": "nginx",
+      "builtin": true,
+      "container_port": 80,
+      "host_port_env_suffix": "HTTP_HOST_PORT",
+      "short_alias": "nginx",
+      "conf_key_file": "Dockerfile",
+      "fallback_template_dir": "nginx127",
+      "connect": {
+        "container_port": 80,
+        "short_name": "nginx"
+      }
+    }
+  ]
+}

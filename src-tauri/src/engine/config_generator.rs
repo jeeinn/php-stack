@@ -1,5 +1,6 @@
 use chrono::Local;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use zip::write::FileOptions;
@@ -7,23 +8,52 @@ use zip::write::FileOptions;
 use super::config_extractor::{ConfigExtractor, ExtractOutcome};
 use super::env_parser::EnvFile;
 use super::mirror_config_manager::UserMirrorConfig;
+use super::service_catalog::{
+    normalize_service_kind, GeneratorKind, ServiceCatalog, ServiceDescriptor,
+};
 use super::site_manager::{self, SiteEntry};
 use super::user_config;
 use super::user_override_manager::UserOverrideManager;
-use super::version_manifest::{ServiceType as VmServiceType, VersionManifest};
+use super::version_manifest::{VersionEntry, VersionManifest};
 use crate::app_log;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ServiceType {
-    PHP,
-    MySQL,
-    Redis,
-    Nginx,
+/// 解析服务镜像 tag：override/custom → manifest → `{kind}:{version}`
+pub(crate) fn resolve_service_image_tag(
+    override_manager: &UserOverrideManager,
+    manifest: &VersionManifest,
+    kind: &str,
+    version: &str,
+) -> String {
+    override_manager
+        .get_merged_entry(kind, version)
+        .or_else(|| manifest.get_entry(kind, version).cloned())
+        .map(|e| e.image_tag)
+        .unwrap_or_else(|| format!("{kind}:{version}"))
+}
+
+fn serialize_service_kind<S>(kind: &str, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&normalize_service_kind(kind))
+}
+
+fn deserialize_service_kind<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = String::deserialize(deserializer)?;
+    Ok(normalize_service_kind(&raw))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceEntry {
-    pub service_type: ServiceType,
+    /// 服务 kind（小写，如 `php` / `mysql`）。反序列化接受 `PHP` / `MySQL` 等历史写法。
+    #[serde(
+        serialize_with = "serialize_service_kind",
+        deserialize_with = "deserialize_service_kind"
+    )]
+    pub service_type: String,
     pub version: String,
     pub host_port: u16,
     pub extensions: Option<Vec<String>>, // Only for PHP
@@ -101,31 +131,106 @@ enum BackupState {
 }
 
 impl ConfigGenerator {
-    /// Validate config: check for port conflicts.
-    /// Returns Err with message containing conflicting port and service names.
-    pub fn validate(config: &EnvConfig) -> Result<(), String> {
+    fn catalog_for(project_root: Option<&Path>) -> ServiceCatalog {
+        match project_root {
+            Some(root) => ServiceCatalog::merged(root),
+            None => ServiceCatalog::builtin(),
+        }
+    }
+
+    fn service_kind(service: &ServiceEntry) -> String {
+        normalize_service_kind(&service.service_type)
+    }
+
+    /// 三级查找：override/custom → manifest → 合成占位（image_tag=id）
+    pub(crate) fn lookup_version_entry(
+        override_manager: &UserOverrideManager,
+        manifest: &VersionManifest,
+        kind: &str,
+        id: &str,
+    ) -> VersionEntry {
+        override_manager
+            .get_merged_entry(kind, id)
+            .unwrap_or_else(|| {
+                manifest
+                    .get_entry(kind, id)
+                    .cloned()
+                    .unwrap_or_else(|| VersionEntry {
+                        display_name: id.to_string(),
+                        image_tag: id.to_string(),
+                        service_dir: id.to_string(),
+                        default_port: 0,
+                        show_port: false,
+                        eol: false,
+                        description: None,
+                    })
+            })
+    }
+
+    /// Validate config: port conflicts, unknown versions, required_min / multi_instance.
+    ///
+    /// `project_root` 用于合并自定义服务目录与 UserOverride；为 `None` 时仅用内置 catalog/清单。
+    pub fn validate(config: &EnvConfig, project_root: Option<&Path>) -> Result<(), String> {
+        let catalog = Self::catalog_for(project_root);
         let manifest = VersionManifest::new();
-        let mut port_services: std::collections::HashMap<u16, Vec<String>> =
-            std::collections::HashMap::new();
+        let override_manager = project_root.map(UserOverrideManager::new);
+        let mut port_services: HashMap<u16, Vec<String>> = HashMap::new();
+        let mut kind_counts: HashMap<String, usize> = HashMap::new();
+        let mut seen_service_dirs: HashSet<String> = HashSet::new();
 
         for service in &config.services {
-            let vm_service_type = match &service.service_type {
-                ServiceType::PHP => VmServiceType::Php,
-                ServiceType::MySQL => VmServiceType::Mysql,
-                ServiceType::Redis => VmServiceType::Redis,
-                ServiceType::Nginx => VmServiceType::Nginx,
+            let kind = Self::service_kind(service);
+            if catalog.get(&kind).is_none() {
+                return Err(format!("Unknown service type: {kind}"));
+            }
+
+            if service.host_port == 0 {
+                return Err(format!(
+                    "host_port must be > 0 for service {}",
+                    service.version
+                ));
+            }
+
+            let resolved = match &override_manager {
+                Some(mgr) => mgr
+                    .get_merged_entry(&kind, &service.version)
+                    .or_else(|| manifest.get_entry(&kind, &service.version).cloned()),
+                None => manifest.get_entry(&kind, &service.version).cloned(),
+            };
+            let Some(entry) = resolved else {
+                return Err(format!("Unknown version id: {}", service.version));
             };
 
-            // Look up display_name from manifest, fall back to ID
-            let name = manifest
-                .get_entry(&vm_service_type, &service.version)
-                .map(|entry| entry.display_name.clone())
-                .unwrap_or_else(|| service.version.clone());
+            // compose 服务键与 .env 前缀都落在 service_dir 上；重复会互相覆盖
+            if !seen_service_dirs.insert(entry.service_dir.clone()) {
+                return Err(format!(
+                    "Duplicate service_dir: {} (service version: {})",
+                    entry.service_dir, service.version
+                ));
+            }
+
+            *kind_counts.entry(kind.clone()).or_default() += 1;
 
             port_services
                 .entry(service.host_port)
                 .or_default()
-                .push(name);
+                .push(entry.display_name);
+        }
+
+        for desc in catalog.list() {
+            let count = kind_counts.get(&desc.id).copied().unwrap_or(0);
+            if (count as u32) < desc.required_min {
+                return Err(format!(
+                    "Service '{}' requires at least {} instance(s), got {}",
+                    desc.id, desc.required_min, count
+                ));
+            }
+            if !desc.multi_instance && count > 1 {
+                return Err(format!(
+                    "Service '{}' does not allow multiple instances, got {}",
+                    desc.id, count
+                ));
+            }
         }
 
         for (port, services) in &port_services {
@@ -141,32 +246,23 @@ impl ConfigGenerator {
         let mut sites = config.sites.clone();
         site_manager::normalize_sites(&mut sites);
         if !sites.is_empty() {
-            let php_dirs = Self::service_dirs(config, &manifest, ServiceType::PHP);
-            let nginx_dirs = Self::service_dirs(config, &manifest, ServiceType::Nginx);
+            let php_dirs = Self::service_dirs(config, &manifest, "php");
+            let nginx_dirs = Self::service_dirs(config, &manifest, "nginx");
             site_manager::validate_sites(&sites, &php_dirs, &nginx_dirs)?;
         }
 
         Ok(())
     }
 
-    fn service_dirs(
-        config: &EnvConfig,
-        manifest: &VersionManifest,
-        kind: ServiceType,
-    ) -> Vec<String> {
-        let vm_type = match kind {
-            ServiceType::PHP => VmServiceType::Php,
-            ServiceType::MySQL => VmServiceType::Mysql,
-            ServiceType::Redis => VmServiceType::Redis,
-            ServiceType::Nginx => VmServiceType::Nginx,
-        };
+    fn service_dirs(config: &EnvConfig, manifest: &VersionManifest, kind: &str) -> Vec<String> {
+        let kind = normalize_service_kind(kind);
         config
             .services
             .iter()
-            .filter(|service| service.service_type == kind)
+            .filter(|service| Self::service_kind(service) == kind)
             .map(|service| {
                 manifest
-                    .get_entry(&vm_type, &service.version)
+                    .get_entry(&kind, &service.version)
                     .map(|entry| entry.service_dir.clone())
                     .unwrap_or_else(|| service.version.clone())
             })
@@ -190,7 +286,7 @@ impl ConfigGenerator {
             EnvFile { lines: Vec::new() }
         };
 
-        // Create manifest and override manager ONCE at method start
+        let catalog = ServiceCatalog::merged(project_root);
         let manifest = VersionManifest::new();
         let override_manager = UserOverrideManager::new(project_root);
 
@@ -218,45 +314,23 @@ impl ConfigGenerator {
         env.set("PGID", &gid.to_string());
 
         for service in &config.services {
-            // service.version is now a manifest ID (e.g., "php82", "mysql80", "redis72", "nginx125")
             let id = &service.version;
-
-            // Map ServiceType to VmServiceType for manifest lookup
-            let vm_service_type = match &service.service_type {
-                ServiceType::PHP => VmServiceType::Php,
-                ServiceType::MySQL => VmServiceType::Mysql,
-                ServiceType::Redis => VmServiceType::Redis,
-                ServiceType::Nginx => VmServiceType::Nginx,
+            let kind = Self::service_kind(service);
+            let Some(desc) = catalog.get(&kind) else {
+                app_log!(
+                    warn,
+                    "engine::config_generator",
+                    "skip env for unknown service kind: {kind}"
+                );
+                continue;
             };
 
-            // Get merged entry (user override > default manifest)
-            let entry = override_manager
-                .get_merged_entry(&vm_service_type, id)
-                .unwrap_or_else(|| {
-                    manifest
-                        .get_entry(&vm_service_type, id)
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            // Fallback: use the ID itself to construct a minimal entry
-                            super::version_manifest::VersionEntry {
-                                display_name: id.clone(),
-                                image_tag: id.clone(),
-                                service_dir: id.clone(),
-                                default_port: 0,
-                                show_port: false,
-                                eol: false,
-                                description: None,
-                            }
-                        })
-                });
-
-            // Derive env_prefix from service_dir (e.g., "php82" → "PHP82")
+            let entry = Self::lookup_version_entry(&override_manager, &manifest, &kind, id);
             let env_prefix = entry.service_dir.to_uppercase();
             let service_dir = &entry.service_dir;
 
-            match &service.service_type {
-                ServiceType::PHP => {
-                    // Use entry.image_tag directly (e.g., "php:8.2-fpm")
+            match desc.generator {
+                GeneratorKind::Php => {
                     env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
                     env.set(
                         &format!("{env_prefix}_HOST_PORT"),
@@ -278,49 +352,10 @@ impl ConfigGenerator {
                         &format!("./logs/{service_dir}"),
                     );
                 }
-                ServiceType::MySQL => {
+                GeneratorKind::Nginx => {
                     env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
                     env.set(
-                        &format!("{env_prefix}_HOST_PORT"),
-                        &service.host_port.to_string(),
-                    );
-
-                    // 设置MySQL root密码（优先使用用户配置的密码）
-                    let root_password = config.mysql_root_password.as_deref().unwrap_or("root");
-                    env.set("MYSQL_ROOT_PASSWORD", root_password);
-
-                    env.set(
-                        &format!("{env_prefix}_CONF_FILE"),
-                        &format!("./services/{service_dir}/mysql.cnf"),
-                    );
-                    env.set(
-                        &format!("{env_prefix}_DATA_DIR"),
-                        &format!("./data/{service_dir}"),
-                    );
-                    env.set(
-                        &format!("{env_prefix}_LOG_DIR"),
-                        &format!("./logs/{service_dir}"),
-                    );
-                }
-                ServiceType::Redis => {
-                    env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
-                    env.set(
-                        &format!("{env_prefix}_HOST_PORT"),
-                        &service.host_port.to_string(),
-                    );
-                    env.set(
-                        &format!("{env_prefix}_CONF_FILE"),
-                        &format!("./services/{service_dir}/redis.conf"),
-                    );
-                    env.set(
-                        &format!("{env_prefix}_DATA_DIR"),
-                        &format!("./data/{service_dir}"),
-                    );
-                }
-                ServiceType::Nginx => {
-                    env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
-                    env.set(
-                        &format!("{env_prefix}_HTTP_HOST_PORT"),
+                        &format!("{env_prefix}_{}", desc.host_port_env_suffix),
                         &service.host_port.to_string(),
                     );
                     env.set(
@@ -337,8 +372,13 @@ impl ConfigGenerator {
                     );
                     env.set("NGINX_LOG_DIR", "./logs/nginx");
                 }
+                GeneratorKind::Image => {
+                    Self::emit_image_env(&mut env, config, desc, &entry, service);
+                }
             }
         }
+
+        Self::remove_stale_managed_env_keys(&mut env, config, &override_manager, &manifest);
 
         // Merge mirror configuration from .user-config/mirror_config.json
         if let Ok(user_mirror_config) = UserMirrorConfig::load(project_root) {
@@ -374,65 +414,200 @@ impl ConfigGenerator {
         env
     }
 
+    /// 移除已不在当前 config 中的托管 .env 键（保留用户自定义键）
+    ///
+    /// 删除需同时满足三个条件，避免误伤用户手写变量：
+    /// 1. 键以某个托管后缀结尾；
+    /// 2. 前缀是**已知服务前缀**——出现在版本清单 / 用户覆盖 / 当前 config 中的
+    ///    `service_dir` 大写形式；
+    /// 3. 该前缀不在当前 config 的服务列表里。
+    ///
+    /// 只认已知前缀，是为了不把 `APP_VERSION` / `APP_LOG_DIR` 这类恰好撞上托管
+    /// 后缀的用户变量当成过期键删掉。代价是：已从清单中移除的旧版本（如 `MYSQL56_*`）
+    /// 会残留，但 `parse_env_to_services` 只按已知 `service_dir` 反查，残留键不会被
+    /// 回读成服务，属无害噪音。
+    fn remove_stale_managed_env_keys(
+        env: &mut EnvFile,
+        config: &EnvConfig,
+        override_manager: &UserOverrideManager,
+        manifest: &VersionManifest,
+    ) {
+        // 长后缀优先，避免 `_HOST_PORT` 误匹配 `_HTTP_HOST_PORT`
+        const MANAGED_SUFFIXES: &[&str] = &[
+            "_HTTP_HOST_PORT",
+            "_PHP_CONF_FILE",
+            "_FPM_CONF_FILE",
+            "_BUILD_CONTEXT",
+            "_EXTENSIONS",
+            "_HOST_PORT",
+            "_CONF_FILE",
+            "_CONFD_DIR",
+            "_DATA_DIR",
+            "_LOG_DIR",
+            "_VERSION",
+        ];
+
+        let mut keep_prefixes: HashSet<String> = HashSet::new();
+        for service in &config.services {
+            let kind = Self::service_kind(service);
+            let entry =
+                Self::lookup_version_entry(override_manager, manifest, &kind, &service.version);
+            keep_prefixes.insert(entry.service_dir.to_uppercase());
+        }
+
+        // 已知服务前缀：清单全部版本 + 用户覆盖/自定义 + 当前 config
+        let mut known_prefixes: HashSet<String> = HashSet::new();
+        let mut kinds: HashSet<String> = manifest.service_kinds().into_iter().collect();
+        kinds.extend(override_manager.service_kinds());
+        for kind in kinds {
+            for item in override_manager.list_merged_entries(&kind) {
+                known_prefixes.insert(item.entry.service_dir.to_uppercase());
+            }
+        }
+        known_prefixes.extend(keep_prefixes.iter().cloned());
+
+        let keys: Vec<String> = env.to_map().into_keys().collect();
+        for key in keys {
+            for suffix in MANAGED_SUFFIXES {
+                if let Some(prefix) = key.strip_suffix(suffix) {
+                    if !prefix.is_empty()
+                        && known_prefixes.contains(prefix)
+                        && !keep_prefixes.contains(prefix)
+                    {
+                        env.remove(&key);
+                    }
+                    break;
+                }
+            }
+        }
+
+        let has_mysql = config
+            .services
+            .iter()
+            .any(|s| Self::service_kind(s) == "mysql");
+        if !has_mysql {
+            env.remove("MYSQL_ROOT_PASSWORD");
+        }
+        let has_nginx = config
+            .services
+            .iter()
+            .any(|s| Self::service_kind(s) == "nginx");
+        if !has_nginx {
+            env.remove("NGINX_LOG_DIR");
+        }
+    }
+
+    /// 通用 Image 生成器：按 catalog volumes / extra_env 写 .env
+    fn emit_image_env(
+        env: &mut EnvFile,
+        config: &EnvConfig,
+        desc: &ServiceDescriptor,
+        entry: &VersionEntry,
+        service: &ServiceEntry,
+    ) {
+        let env_prefix = entry.service_dir.to_uppercase();
+        let service_dir = &entry.service_dir;
+
+        env.set(&format!("{env_prefix}_VERSION"), &entry.image_tag);
+        env.set(
+            &format!("{env_prefix}_{}", desc.host_port_env_suffix),
+            &service.host_port.to_string(),
+        );
+
+        if let Some(vol) = &desc.volumes.conf {
+            let conf_name = desc.conf_key_file.as_deref().unwrap_or("config");
+            env.set(
+                &format!("{env_prefix}_{}", vol.env_suffix),
+                &format!("./services/{service_dir}/{conf_name}"),
+            );
+        }
+        if let Some(vol) = &desc.volumes.data {
+            env.set(
+                &format!("{env_prefix}_{}", vol.env_suffix),
+                &format!("./data/{service_dir}"),
+            );
+        }
+        if let Some(vol) = &desc.volumes.log {
+            env.set(
+                &format!("{env_prefix}_{}", vol.env_suffix),
+                &format!("./logs/{service_dir}"),
+            );
+        }
+
+        for extra in &desc.extra_env {
+            let value = match extra.from.as_str() {
+                "mysql_root_password" => config
+                    .mysql_root_password
+                    .as_deref()
+                    .or(extra.default.as_deref())
+                    .unwrap_or("root"),
+                _ => extra.default.as_deref().unwrap_or(""),
+            };
+            env.set(&extra.name, value);
+        }
+    }
+
     /// Generate docker-compose.yml content using ${VAR} interpolation.
-    /// Reference dnmp pattern: each service uses ${VAR} for image, ports, volumes.
     ///
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql80").
-    /// We look up the manifest entry to get `service_dir` directly, eliminating all
-    /// `version.replace('.', "")`, `split('.')`, and `split('-')` calculations.
+    /// 路由按 catalog `generator`：Php / Nginx 走专用块，Image 走通用块。
     pub fn generate_compose(config: &EnvConfig, project_root: &Path) -> String {
         let mut sites = config.sites.clone();
         site_manager::normalize_sites(&mut sites);
+        let catalog = ServiceCatalog::merged(project_root);
         let override_manager = UserOverrideManager::new(project_root);
         let mut lines: Vec<String> = Vec::new();
         // Note: 'version' attribute is obsolete in modern Docker Compose, omit it
         lines.push("name: php-stack".to_string());
         lines.push("services:".to_string());
 
-        // 单实例短主机名：应用常写死 host=redis / mysql / nginx。
-        // 仅在该类服务只有 1 个实例时挂短别名，避免多实例抢同一个 DNS 名。
-        let mysql_count = config
-            .services
-            .iter()
-            .filter(|s| matches!(s.service_type, ServiceType::MySQL))
-            .count();
-        let redis_count = config
-            .services
-            .iter()
-            .filter(|s| matches!(s.service_type, ServiceType::Redis))
-            .count();
-        let nginx_count = config
-            .services
-            .iter()
-            .filter(|s| matches!(s.service_type, ServiceType::Nginx))
-            .count();
-        let mut mysql_alias_assigned = false;
-        let mut redis_alias_assigned = false;
-        let mut nginx_alias_assigned = false;
+        // 单实例短主机名：仅对 catalog 声明了 short_alias 的 kind，且 count==1 时挂别名。
+        let mut kind_counts: HashMap<String, usize> = HashMap::new();
+        for service in &config.services {
+            let kind = Self::service_kind(service);
+            if catalog
+                .get(&kind)
+                .and_then(|d| d.short_alias.as_ref())
+                .is_some()
+            {
+                *kind_counts.entry(kind).or_default() += 1;
+            }
+        }
+        let mut alias_assigned: HashMap<String, bool> = HashMap::new();
 
         for service in &config.services {
-            // service.version is now a manifest ID (e.g., "php82", "mysql80", "redis70", "nginx125")
             let id = &service.version;
-
-            // Map ServiceType to VmServiceType for manifest lookup
-            let vm_service_type = match &service.service_type {
-                ServiceType::PHP => VmServiceType::Php,
-                ServiceType::MySQL => VmServiceType::Mysql,
-                ServiceType::Redis => VmServiceType::Redis,
-                ServiceType::Nginx => VmServiceType::Nginx,
+            let kind = Self::service_kind(service);
+            let Some(desc) = catalog.get(&kind) else {
+                app_log!(
+                    warn,
+                    "engine::config_generator",
+                    "skip compose for unknown service kind: {kind}"
+                );
+                continue;
             };
 
-            // Get service_dir from merged entry (manifest + user custom/override)
             let service_dir = override_manager
-                .get_merged_entry(&vm_service_type, id)
+                .get_merged_entry(&kind, id)
                 .map(|entry| entry.service_dir)
                 .unwrap_or_else(|| id.clone());
-
-            // Derive env_prefix from service_dir (e.g., "php82" → "PHP82")
             let env_prefix = service_dir.to_uppercase();
 
-            match &service.service_type {
-                ServiceType::PHP => {
+            let aliases: Vec<&str> = if let Some(alias) = desc.short_alias.as_deref() {
+                let count = kind_counts.get(&kind).copied().unwrap_or(0);
+                let assigned = alias_assigned.entry(kind.clone()).or_default();
+                if count == 1 && !*assigned {
+                    *assigned = true;
+                    vec![alias]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            };
+
+            match desc.generator {
+                GeneratorKind::Php => {
                     lines.push(format!("  {service_dir}:"));
                     lines.push("    build:".to_string());
                     lines.push(format!("      context: ./services/{service_dir}"));
@@ -446,7 +621,6 @@ impl ConfigGenerator {
                     ));
                     lines.push("        TZ: \"${TZ}\"".to_string());
                     // 镜像源配置（Debian APT 加速，适用于所有 PHP 版本）
-                    // 注意：所有 PHP Dockerfile 现已统一使用 Debian 基础镜像（与 version_manifest.json 一致）
                     lines.push(
                         "        DEBIAN_MIRROR_DOMAIN: \"${APT_MIRROR:-deb.debian.org}\""
                             .to_string(),
@@ -461,7 +635,7 @@ impl ConfigGenerator {
                     lines.push("        PGID: \"${PGID:-1000}\"".to_string());
                     lines.push(format!("    container_name: ps-{service_dir}"));
                     lines.push("    expose:".to_string());
-                    lines.push("      - 9000".to_string());
+                    lines.push(format!("      - {}", desc.container_port));
                     lines.push("    volumes:".to_string());
                     lines.extend(site_manager::source_volume_lines(
                         &sites,
@@ -484,64 +658,7 @@ impl ConfigGenerator {
                     Self::push_compose_network(&mut lines, &[]);
                     lines.push(String::new());
                 }
-                ServiceType::MySQL => {
-                    lines.push(format!("  {service_dir}:"));
-                    // Use full image tag directly (e.g., mysql:8.4)
-                    lines.push(format!("    image: ${{{env_prefix}_VERSION}}"));
-                    lines.push(format!("    container_name: ps-{service_dir}"));
-                    lines.push("    ports:".to_string());
-                    lines.push(format!("      - \"${{{env_prefix}_HOST_PORT}}:3306\""));
-                    lines.push("    volumes:".to_string());
-                    lines.push(format!(
-                        "      - ${{{env_prefix}_CONF_FILE}}:/etc/mysql/conf.d/mysql.cnf:ro"
-                    ));
-                    lines.push(format!(
-                        "      - ${{{env_prefix}_DATA_DIR}}:/var/lib/mysql/:rw"
-                    ));
-                    lines.push(format!(
-                        "      - ${{{env_prefix}_LOG_DIR}}:/var/log/mysql/:rw"
-                    ));
-                    lines.push("    restart: always".to_string());
-                    lines.push("    environment:".to_string());
-                    lines.push("      MYSQL_ROOT_PASSWORD: \"${MYSQL_ROOT_PASSWORD}\"".to_string());
-                    lines.push("      TZ: \"${TZ}\"".to_string());
-                    let aliases = if mysql_count == 1 && !mysql_alias_assigned {
-                        mysql_alias_assigned = true;
-                        vec!["mysql"]
-                    } else {
-                        vec![]
-                    };
-                    Self::push_compose_network(&mut lines, &aliases);
-                    lines.push(String::new());
-                }
-                ServiceType::Redis => {
-                    lines.push(format!("  {service_dir}:"));
-                    // Use full image tag directly (e.g., redis:7.2-alpine)
-                    lines.push(format!("    image: ${{{env_prefix}_VERSION}}"));
-                    lines.push(format!("    container_name: ps-{service_dir}"));
-                    lines.push("    ports:".to_string());
-                    lines.push(format!("      - \"${{{env_prefix}_HOST_PORT}}:6379\""));
-                    lines.push("    volumes:".to_string());
-                    lines.push(format!(
-                        "      - ${{{env_prefix}_CONF_FILE}}:/etc/redis.conf:ro"
-                    ));
-                    lines.push(format!("      - ${{{env_prefix}_DATA_DIR}}:/data/:rw"));
-                    lines.push("    restart: always".to_string());
-                    lines.push(
-                        "    entrypoint: [\"redis-server\", \"/etc/redis.conf\"]".to_string(),
-                    );
-                    lines.push("    environment:".to_string());
-                    lines.push("      TZ: \"${TZ}\"".to_string());
-                    let aliases = if redis_count == 1 && !redis_alias_assigned {
-                        redis_alias_assigned = true;
-                        vec!["redis"]
-                    } else {
-                        vec![]
-                    };
-                    Self::push_compose_network(&mut lines, &aliases);
-                    lines.push(String::new());
-                }
-                ServiceType::Nginx => {
+                GeneratorKind::Nginx => {
                     lines.push(format!("  {service_dir}:"));
                     lines.push("    build:".to_string());
                     lines.push(format!("      context: ${{{env_prefix}_BUILD_CONTEXT}}"));
@@ -555,7 +672,10 @@ impl ConfigGenerator {
                     lines.push("        PGID: \"${PGID:-1000}\"".to_string());
                     lines.push(format!("    container_name: ps-{service_dir}"));
                     lines.push("    ports:".to_string());
-                    lines.push(format!("      - \"${{{env_prefix}_HTTP_HOST_PORT}}:80\""));
+                    lines.push(format!(
+                        "      - \"${{{env_prefix}_{}}}:{}\"",
+                        desc.host_port_env_suffix, desc.container_port
+                    ));
                     lines.push("    volumes:".to_string());
                     lines.extend(site_manager::source_volume_lines(
                         &sites,
@@ -573,14 +693,11 @@ impl ConfigGenerator {
                     // Nginx 官方镜像不会 bake TZ；必须运行时注入，否则 error/access 日志落 UTC
                     lines.push("    environment:".to_string());
                     lines.push("      TZ: \"${TZ}\"".to_string());
-                    let aliases = if nginx_count == 1 && !nginx_alias_assigned {
-                        nginx_alias_assigned = true;
-                        vec!["nginx"]
-                    } else {
-                        vec![]
-                    };
                     Self::push_compose_network(&mut lines, &aliases);
                     lines.push(String::new());
+                }
+                GeneratorKind::Image => {
+                    Self::emit_image_compose(&mut lines, desc, &service_dir, &env_prefix, &aliases);
                 }
             }
         }
@@ -590,6 +707,58 @@ impl ConfigGenerator {
         lines.push("    driver: bridge".to_string());
 
         lines.join("\n")
+    }
+
+    /// 通用 Image 生成器：按 catalog volumes / entrypoint / compose_environment 写 compose 块
+    fn emit_image_compose(
+        lines: &mut Vec<String>,
+        desc: &ServiceDescriptor,
+        service_dir: &str,
+        env_prefix: &str,
+        aliases: &[&str],
+    ) {
+        lines.push(format!("  {service_dir}:"));
+        lines.push(format!("    image: ${{{env_prefix}_VERSION}}"));
+        lines.push(format!("    container_name: ps-{service_dir}"));
+        lines.push("    ports:".to_string());
+        lines.push(format!(
+            "      - \"${{{env_prefix}_{}}}:{}\"",
+            desc.host_port_env_suffix, desc.container_port
+        ));
+
+        let has_volumes = desc.volumes.conf.is_some()
+            || desc.volumes.data.is_some()
+            || desc.volumes.log.is_some();
+        if has_volumes {
+            lines.push("    volumes:".to_string());
+            for vol in [&desc.volumes.conf, &desc.volumes.data, &desc.volumes.log]
+                .into_iter()
+                .flatten()
+            {
+                let mode = if vol.read_only { ":ro" } else { ":rw" };
+                lines.push(format!(
+                    "      - ${{{env_prefix}_{}}}:{}{}",
+                    vol.env_suffix, vol.container_path, mode
+                ));
+            }
+        }
+
+        lines.push("    restart: always".to_string());
+
+        if let Some(entrypoint) = &desc.entrypoint {
+            let items: Vec<String> = entrypoint.iter().map(|s| format!("\"{s}\"")).collect();
+            lines.push(format!("    entrypoint: [{}]", items.join(", ")));
+        }
+
+        if !desc.compose_environment.is_empty() {
+            lines.push("    environment:".to_string());
+            for env_name in &desc.compose_environment {
+                lines.push(format!("      {env_name}: \"${{{env_name}}}\""));
+            }
+        }
+
+        Self::push_compose_network(lines, aliases);
+        lines.push(String::new());
     }
 
     /// 写入 compose 的 `networks` 段；有别名时用 map 形式挂 `aliases`（单实例短主机名）。
@@ -718,7 +887,7 @@ impl ConfigGenerator {
         fallback_template_dir: Option<&str>,
         dest_dir: &Path,
         dest_filename: &str,
-        service_type: &VmServiceType,
+        service_kind: &str,
         service_dir: &str,
         image_tag: &str,
         dest_root: &Path,
@@ -747,7 +916,7 @@ impl ConfigGenerator {
 
         // 3. 调用 ConfigExtractor 从官方镜像提取
         let extract_outcome =
-            ConfigExtractor::extract_config(service_type, service_dir, image_tag, dest_root);
+            ConfigExtractor::extract_config(service_kind, service_dir, image_tag, dest_root);
         match extract_outcome {
             ExtractOutcome::Extracted { dest, bytes } => {
                 app_log!(
@@ -791,17 +960,21 @@ impl ConfigGenerator {
         ))
     }
 
-    /// Resolve the template source directory for a given service.
-    /// Checks if the exact `service_dir` template exists; if not, falls back to a default.
+    /// Resolve the template source directory for a given service kind.
+    /// Checks if the exact `service_dir` template exists; if not, falls back to catalog default.
     /// Returns `(template_dir, is_fallback)`.
-    fn resolve_template_dir(service_type: &ServiceType, service_dir: &str) -> (String, bool) {
-        // Determine the key file to check for template existence
-        let key_file = match service_type {
-            ServiceType::PHP => "Dockerfile",
-            ServiceType::MySQL => "mysql.cnf",
-            ServiceType::Redis => "redis.conf",
-            ServiceType::Nginx => "Dockerfile",
-        };
+    fn resolve_template_dir(
+        kind: &str,
+        service_dir: &str,
+        catalog: &ServiceCatalog,
+    ) -> (String, bool) {
+        let desc = catalog.get(kind);
+        let key_file = desc
+            .and_then(|d| d.conf_key_file.as_deref())
+            .unwrap_or("Dockerfile");
+        let fallback = desc
+            .and_then(|d| d.fallback_template_dir.clone())
+            .unwrap_or_else(|| service_dir.to_string());
 
         // Check if the exact service_dir template exists in any candidate base dir
         let exact_found = Self::template_base_candidates()
@@ -811,23 +984,14 @@ impl ConfigGenerator {
             return (service_dir.to_string(), false);
         }
 
-        // Fall back to a sensible default per service type
-        let fallback = match service_type {
-            ServiceType::PHP => "php85",
-            ServiceType::MySQL => "mysql80",
-            ServiceType::Redis => "redis72",
-            ServiceType::Nginx => "nginx127",
-        };
-        (fallback.to_string(), true)
+        (fallback, true)
     }
 
     /// Create services/, data/, logs/ directory structure.
     ///
     /// Note: `ServiceEntry.version` is now a manifest ID (e.g., "php82", "mysql80").
-    /// We look up the manifest entry to get `service_dir` directly, eliminating all
-    /// `version.replace('.', "")`, `split('.')`, and `if version.starts_with(...)` chains.
     /// Template selection is based on checking if the exact `service_dir` template directory
-    /// exists; if not, a sensible default is used and an informational message is logged.
+    /// exists; if not, catalog `fallback_template_dir` is used.
     pub fn generate_service_dirs(config: &EnvConfig, root: &Path) -> Result<(), String> {
         // Create top-level directories
         std::fs::create_dir_all(root.join("services"))
@@ -837,22 +1001,22 @@ impl ConfigGenerator {
         std::fs::create_dir_all(root.join("logs"))
             .map_err(|e| format!("failed to create logs/ dir: {e}"))?;
 
-        // Create override manager for merged lookups (manifest + custom)
+        let catalog = ServiceCatalog::merged(root);
         let override_manager = UserOverrideManager::new(root);
 
         for service in &config.services {
-            // service.version is now a manifest ID (e.g., "php82", "mysql80", "redis72", "nginx125")
             let id = &service.version;
-
-            // Map ServiceType to VmServiceType for manifest lookup
-            let vm_service_type = match &service.service_type {
-                ServiceType::PHP => VmServiceType::Php,
-                ServiceType::MySQL => VmServiceType::Mysql,
-                ServiceType::Redis => VmServiceType::Redis,
-                ServiceType::Nginx => VmServiceType::Nginx,
+            let kind = Self::service_kind(service);
+            let Some(desc) = catalog.get(&kind) else {
+                app_log!(
+                    warn,
+                    "engine::config_generator",
+                    "skip service dirs for unknown service kind: {kind}"
+                );
+                continue;
             };
 
-            let merged = override_manager.get_merged_entry(&vm_service_type, id);
+            let merged = override_manager.get_merged_entry(&kind, id);
             let service_dir_name = merged
                 .as_ref()
                 .map(|e| e.service_dir.clone())
@@ -860,19 +1024,10 @@ impl ConfigGenerator {
             let image_tag = merged
                 .as_ref()
                 .map(|e| e.image_tag.clone())
-                .unwrap_or_else(|| {
-                    let svc_prefix = match &service.service_type {
-                        ServiceType::PHP => "php",
-                        ServiceType::MySQL => "mysql",
-                        ServiceType::Redis => "redis",
-                        ServiceType::Nginx => "nginx",
-                    };
-                    format!("{svc_prefix}:{id}")
-                });
+                .unwrap_or_else(|| format!("{kind}:{id}"));
 
-            // Resolve template directory: check if exact service_dir template exists, else fallback
             let (template_dir, is_fallback) =
-                Self::resolve_template_dir(&service.service_type, &service_dir_name);
+                Self::resolve_template_dir(&kind, &service_dir_name, &catalog);
             if is_fallback {
                 app_log!(
                     info,
@@ -892,8 +1047,8 @@ impl ConfigGenerator {
                 (Some(template_dir.as_str()), None)
             };
 
-            match &service.service_type {
-                ServiceType::PHP => {
+            match desc.generator {
+                GeneratorKind::Php => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir).map_err(|e| {
                         format!("failed to create services/{service_dir_name}/ dir: {e}")
@@ -911,7 +1066,7 @@ impl ConfigGenerator {
                         fallback_tpl_dir,
                         &service_dir,
                         "php.ini",
-                        &vm_service_type,
+                        &kind,
                         &service_dir_name,
                         &image_tag,
                         root,
@@ -929,59 +1084,7 @@ impl ConfigGenerator {
                             format!("failed to create logs/{service_dir_name}/ dir: {e}")
                         })?;
                 }
-                ServiceType::MySQL => {
-                    let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir).map_err(|e| {
-                        format!("failed to create services/{service_dir_name}/ dir: {e}")
-                    })?;
-
-                    // Copy mysql.cnf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
-                    Self::ensure_config_with_extract_fallback(
-                        primary_tpl_dir,
-                        fallback_tpl_dir,
-                        &service_dir,
-                        "mysql.cnf",
-                        &vm_service_type,
-                        &service_dir_name,
-                        &image_tag,
-                        root,
-                    )?;
-
-                    // Create data and log directories
-                    std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
-                        .map_err(|e| {
-                            format!("failed to create data/{service_dir_name}/ dir: {e}")
-                        })?;
-                    std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
-                        .map_err(|e| {
-                            format!("failed to create logs/{service_dir_name}/ dir: {e}")
-                        })?;
-                }
-                ServiceType::Redis => {
-                    let service_dir = root.join(format!("services/{service_dir_name}"));
-                    std::fs::create_dir_all(&service_dir).map_err(|e| {
-                        format!("failed to create services/{service_dir_name}/ dir: {e}")
-                    })?;
-
-                    // Copy redis.conf via multi-layer fallback (Phase 3: 内置模板 → 镜像提取)
-                    Self::ensure_config_with_extract_fallback(
-                        primary_tpl_dir,
-                        fallback_tpl_dir,
-                        &service_dir,
-                        "redis.conf",
-                        &vm_service_type,
-                        &service_dir_name,
-                        &image_tag,
-                        root,
-                    )?;
-
-                    // Create data directory
-                    std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
-                        .map_err(|e| {
-                            format!("failed to create data/{service_dir_name}/ dir: {e}")
-                        })?;
-                }
-                ServiceType::Nginx => {
+                GeneratorKind::Nginx => {
                     let service_dir = root.join(format!("services/{service_dir_name}"));
                     std::fs::create_dir_all(&service_dir).map_err(|e| {
                         format!("failed to create services/{service_dir_name}/ dir: {e}")
@@ -1005,7 +1108,7 @@ impl ConfigGenerator {
                         fallback_tpl_dir,
                         &service_dir,
                         "nginx.conf",
-                        &vm_service_type,
+                        &kind,
                         &service_dir_name,
                         &image_tag,
                         root,
@@ -1020,6 +1123,47 @@ impl ConfigGenerator {
                     // Create log directory
                     std::fs::create_dir_all(root.join("logs/nginx"))
                         .map_err(|e| format!("failed to create logs/nginx/ dir: {e}"))?;
+                }
+                GeneratorKind::Image => {
+                    // 按 volumes 创建 conf/data/log 目录
+                    if desc.volumes.conf.is_some() || desc.conf_key_file.is_some() {
+                        std::fs::create_dir_all(root.join(format!("services/{service_dir_name}")))
+                            .map_err(|e| {
+                                format!("failed to create services/{service_dir_name}/ dir: {e}")
+                            })?;
+                    }
+                    if desc.volumes.data.is_some() {
+                        std::fs::create_dir_all(root.join(format!("data/{service_dir_name}")))
+                            .map_err(|e| {
+                                format!("failed to create data/{service_dir_name}/ dir: {e}")
+                            })?;
+                    }
+                    if desc.volumes.log.is_some() {
+                        std::fs::create_dir_all(root.join(format!("logs/{service_dir_name}")))
+                            .map_err(|e| {
+                                format!("failed to create logs/{service_dir_name}/ dir: {e}")
+                            })?;
+                    }
+
+                    // 有 conf_key_file 且 (extract 或 volumes.conf) 时释放配置；否则跳过
+                    if let Some(conf_file) = &desc.conf_key_file {
+                        if desc.extract.is_some() || desc.volumes.conf.is_some() {
+                            let service_dir = root.join(format!("services/{service_dir_name}"));
+                            std::fs::create_dir_all(&service_dir).map_err(|e| {
+                                format!("failed to create services/{service_dir_name}/ dir: {e}")
+                            })?;
+                            Self::ensure_config_with_extract_fallback(
+                                primary_tpl_dir,
+                                fallback_tpl_dir,
+                                &service_dir,
+                                conf_file,
+                                &kind,
+                                &service_dir_name,
+                                &image_tag,
+                                root,
+                            )?;
+                        }
+                    }
                 }
             }
         }
@@ -1289,7 +1433,7 @@ impl ConfigGenerator {
         enable_backup: bool,
     ) -> Result<Vec<String>, String> {
         // Validate first
-        Self::validate(config)?;
+        Self::validate(config, Some(project_root))?;
 
         // Backup existing config if requested
         let mut backed_up_files = Vec::new();
@@ -1297,9 +1441,34 @@ impl ConfigGenerator {
             backed_up_files = Self::backup_existing_config(project_root)?;
         }
 
-        // Generate and write .env (always generate fresh, backup mechanism handles rollback)
+        // Generate and write .env（保留已有自定义变量，并清理过期托管键）
         let env_path = project_root.join(".env");
-        let env_file = Self::generate_env(config, None, project_root);
+        let existing_env = if env_path.exists() {
+            match std::fs::read_to_string(&env_path) {
+                Ok(content) => match EnvFile::parse(&content) {
+                    Ok(parsed) => Some(parsed),
+                    Err(e) => {
+                        app_log!(
+                            warn,
+                            "engine::config_generator",
+                            "failed to parse existing .env, regenerating fresh: {e}"
+                        );
+                        None
+                    }
+                },
+                Err(e) => {
+                    app_log!(
+                        warn,
+                        "engine::config_generator",
+                        "failed to read existing .env: {e}"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let env_file = Self::generate_env(config, existing_env.as_ref(), project_root);
         std::fs::write(&env_path, env_file.format())
             .map_err(|e| format!("failed to write .env file: {e}"))?;
 
@@ -1347,25 +1516,25 @@ mod tests {
         EnvConfig {
             services: vec![
                 ServiceEntry {
-                    service_type: ServiceType::PHP,
+                    service_type: "php".to_string(),
                     version: "php82".to_string(),
                     host_port: 9000,
                     extensions: Some(vec!["pdo_mysql".to_string(), "gd".to_string()]),
                 },
                 ServiceEntry {
-                    service_type: ServiceType::MySQL,
+                    service_type: "mysql".to_string(),
                     version: "mysql80".to_string(),
                     host_port: 3306,
                     extensions: None,
                 },
                 ServiceEntry {
-                    service_type: ServiceType::Redis,
+                    service_type: "redis".to_string(),
                     version: "redis70".to_string(),
                     host_port: 6379,
                     extensions: None,
                 },
                 ServiceEntry {
-                    service_type: ServiceType::Nginx,
+                    service_type: "nginx".to_string(),
                     version: "nginx125".to_string(),
                     host_port: 80,
                     extensions: None,
@@ -1419,7 +1588,7 @@ mod tests {
     #[test]
     fn test_validate_no_conflict() {
         let config = make_basic_config();
-        assert!(ConfigGenerator::validate(&config).is_ok());
+        assert!(ConfigGenerator::validate(&config, None).is_ok());
     }
 
     #[test]
@@ -1427,13 +1596,19 @@ mod tests {
         let config = EnvConfig {
             services: vec![
                 ServiceEntry {
-                    service_type: ServiceType::MySQL,
+                    service_type: "php".to_string(),
+                    version: "php82".to_string(),
+                    host_port: 9000,
+                    extensions: None,
+                },
+                ServiceEntry {
+                    service_type: "mysql".to_string(),
                     version: "mysql80".to_string(),
                     host_port: 3306,
                     extensions: None,
                 },
                 ServiceEntry {
-                    service_type: ServiceType::Redis,
+                    service_type: "redis".to_string(),
                     version: "redis70".to_string(),
                     host_port: 3306, // conflict!
                     extensions: None,
@@ -1444,7 +1619,7 @@ mod tests {
             mysql_root_password: None,
             sites: vec![],
         };
-        let result = ConfigGenerator::validate(&config);
+        let result = ConfigGenerator::validate(&config, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Port conflict"));
@@ -1496,7 +1671,7 @@ mod tests {
 
         let config = EnvConfig {
             services: vec![ServiceEntry {
-                service_type: ServiceType::Nginx,
+                service_type: "nginx".to_string(),
                 version: "nginx125".to_string(),
                 host_port: 80,
                 extensions: None,
@@ -1520,17 +1695,270 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_env_removes_stale_managed_keys() {
+        // 已有 CUSTOM_FOO + MYSQL80_*；config 仅 PHP → 保留 CUSTOM_FOO，丢弃 MYSQL80_* 与 MYSQL_ROOT_PASSWORD
+        let existing_content = "\
+CUSTOM_FOO=bar
+MYSQL80_VERSION=mysql:8.0
+MYSQL80_HOST_PORT=3306
+MYSQL80_CONF_FILE=./services/mysql80/my.cnf
+MYSQL80_DATA_DIR=./data/mysql80
+MYSQL80_LOG_DIR=./logs/mysql80
+MYSQL_ROOT_PASSWORD=secret
+SOURCE_DIR=./old
+";
+        let existing_env = EnvFile::parse(existing_content).unwrap();
+
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php82".to_string(),
+                host_port: 9000,
+                extensions: Some(vec!["pdo_mysql".to_string()]),
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+
+        let env =
+            ConfigGenerator::generate_env(&config, Some(&existing_env), &std::env::temp_dir());
+        let map = env.to_map();
+
+        assert_eq!(map.get("CUSTOM_FOO").unwrap(), "bar");
+        assert!(map.contains_key("PHP82_VERSION"));
+        assert!(!map.contains_key("MYSQL80_VERSION"));
+        assert!(!map.contains_key("MYSQL80_HOST_PORT"));
+        assert!(!map.contains_key("MYSQL80_CONF_FILE"));
+        assert!(!map.contains_key("MYSQL80_DATA_DIR"));
+        assert!(!map.contains_key("MYSQL80_LOG_DIR"));
+        assert!(!map.contains_key("MYSQL_ROOT_PASSWORD"));
+        assert!(!map.contains_key("NGINX_LOG_DIR"));
+    }
+
+    #[test]
+    fn test_generate_env_keeps_user_vars_with_managed_suffixes() {
+        // 用户手写变量恰好以托管后缀结尾：必须保留（非已知服务前缀）
+        let existing_content = "\
+APP_VERSION=1.2.3
+APP_LOG_DIR=/var/app
+APP_DATA_DIR=/var/data
+APP_HOST_PORT=8080
+CUSTOM_FOO=bar
+";
+        let existing_env = EnvFile::parse(existing_content).unwrap();
+
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php82".to_string(),
+                host_port: 9000,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+
+        let env =
+            ConfigGenerator::generate_env(&config, Some(&existing_env), &std::env::temp_dir());
+        let map = env.to_map();
+
+        assert_eq!(map.get("APP_VERSION").unwrap(), "1.2.3");
+        assert_eq!(map.get("APP_LOG_DIR").unwrap(), "/var/app");
+        assert_eq!(map.get("APP_DATA_DIR").unwrap(), "/var/data");
+        assert_eq!(map.get("APP_HOST_PORT").unwrap(), "8080");
+        assert_eq!(map.get("CUSTOM_FOO").unwrap(), "bar");
+        // 当前服务的托管键照常写入
+        assert!(map.contains_key("PHP82_VERSION"));
+    }
+
+    #[test]
+    fn test_generate_env_removes_stale_keys_for_custom_kind() {
+        // 自定义 kind 只存在于 version_overrides：其 service_dir 仍属「已知前缀」，
+        // 从 config 移除后托管键要清掉；同时用户变量不受影响。
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join(".user-config");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("version_overrides.json"),
+            r#"{
+              "mongodb": {
+                "mongodbdefault": {
+                  "entry_kind": "custom",
+                  "display_name": "MongoDB (mongodbdefault)",
+                  "image_tag": "mongo:7",
+                  "service_dir": "mongodbdefault",
+                  "default_port": 27017,
+                  "show_port": true,
+                  "eol": false
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let existing_content = "\
+MONGODBDEFAULT_VERSION=mongo:7
+MONGODBDEFAULT_HOST_PORT=27017
+MONGODBDEFAULT_DATA_DIR=./data/mongodbdefault
+APP_VERSION=9
+";
+        let existing_env = EnvFile::parse(existing_content).unwrap();
+
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php82".to_string(),
+                host_port: 9000,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+
+        let env = ConfigGenerator::generate_env(&config, Some(&existing_env), temp.path());
+        let map = env.to_map();
+
+        assert!(!map.contains_key("MONGODBDEFAULT_VERSION"));
+        assert!(!map.contains_key("MONGODBDEFAULT_HOST_PORT"));
+        assert!(!map.contains_key("MONGODBDEFAULT_DATA_DIR"));
+        assert_eq!(map.get("APP_VERSION").unwrap(), "9");
+        assert!(map.contains_key("PHP82_VERSION"));
+    }
+
+    #[test]
+    fn test_validate_rejects_unknown_version() {
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php_does_not_exist".to_string(),
+                host_port: 9000,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+        let err = ConfigGenerator::validate(&config, None).unwrap_err();
+        assert!(err.contains("Unknown version id"));
+        assert!(err.contains("php_does_not_exist"));
+    }
+
+    #[test]
+    fn test_validate_rejects_missing_required_php() {
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "nginx".to_string(),
+                version: "nginx125".to_string(),
+                host_port: 80,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+        let err = ConfigGenerator::validate(&config, None).unwrap_err();
+        assert!(err.contains("requires at least"));
+        assert!(err.contains("php"));
+    }
+
+    #[test]
+    fn test_validate_rejects_host_port_zero() {
+        let config = EnvConfig {
+            services: vec![ServiceEntry {
+                service_type: "php".to_string(),
+                version: "php82".to_string(),
+                host_port: 0,
+                extensions: None,
+            }],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+        let err = ConfigGenerator::validate(&config, None).unwrap_err();
+        assert!(err.contains("host_port must be > 0"));
+    }
+
+    #[test]
+    fn test_validate_rejects_duplicate_service_dir() {
+        // PHP 允许多实例，但同一 version/service_dir 重复会让 compose 键互相覆盖
+        let config = EnvConfig {
+            services: vec![
+                ServiceEntry {
+                    service_type: "php".to_string(),
+                    version: "php82".to_string(),
+                    host_port: 9000,
+                    extensions: None,
+                },
+                ServiceEntry {
+                    service_type: "php".to_string(),
+                    version: "php82".to_string(),
+                    host_port: 9001,
+                    extensions: None,
+                },
+            ],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+        let err = ConfigGenerator::validate(&config, None).unwrap_err();
+        assert!(err.contains("Duplicate service_dir"));
+        assert!(err.contains("php82"));
+    }
+
+    #[test]
+    fn test_resolve_service_image_tag_uses_override() {
+        use super::resolve_service_image_tag;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join(".user-config");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("version_overrides.json"),
+            r#"{
+              "php": {
+                "php82": {
+                  "entry_kind": "override",
+                  "image_tag": "myregistry/php:8.2-custom"
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let manager = UserOverrideManager::new(temp.path());
+        let manifest = VersionManifest::new();
+        let tag = resolve_service_image_tag(&manager, &manifest, "php", "php82");
+        assert_eq!(tag, "myregistry/php:8.2-custom");
+
+        let fallback = resolve_service_image_tag(&manager, &manifest, "mongodb", "mongo7");
+        assert_eq!(fallback, "mongodb:mongo7");
+    }
+
+    #[test]
     fn test_generate_env_multiple_php() {
         let config = EnvConfig {
             services: vec![
                 ServiceEntry {
-                    service_type: ServiceType::PHP,
+                    service_type: "php".to_string(),
                     version: "php74".to_string(),
                     host_port: 9074,
                     extensions: Some(vec!["pdo_mysql".to_string()]),
                 },
                 ServiceEntry {
-                    service_type: ServiceType::PHP,
+                    service_type: "php".to_string(),
                     version: "php82".to_string(),
                     host_port: 9082,
                     extensions: Some(vec!["gd".to_string(), "curl".to_string()]),
@@ -1625,13 +2053,13 @@ mod tests {
         let config = EnvConfig {
             services: vec![
                 ServiceEntry {
-                    service_type: ServiceType::Redis,
+                    service_type: "redis".to_string(),
                     version: "redis62".to_string(),
                     host_port: 6379,
                     extensions: None,
                 },
                 ServiceEntry {
-                    service_type: ServiceType::Redis,
+                    service_type: "redis".to_string(),
                     version: "redis70".to_string(),
                     host_port: 6380,
                     extensions: None,
@@ -1657,13 +2085,13 @@ mod tests {
         let config = EnvConfig {
             services: vec![
                 ServiceEntry {
-                    service_type: ServiceType::PHP,
+                    service_type: "php".to_string(),
                     version: "php74".to_string(),
                     host_port: 9074,
                     extensions: Some(vec!["pdo_mysql".to_string()]),
                 },
                 ServiceEntry {
-                    service_type: ServiceType::PHP,
+                    service_type: "php".to_string(),
                     version: "php82".to_string(),
                     host_port: 9082,
                     extensions: Some(vec!["gd".to_string()]),
@@ -1695,7 +2123,7 @@ mod tests {
         // 测试自定义MySQL root密码
         let config = EnvConfig {
             services: vec![ServiceEntry {
-                service_type: ServiceType::MySQL,
+                service_type: "mysql".to_string(),
                 version: "mysql80".to_string(),
                 host_port: 3306,
                 extensions: None,
@@ -1717,7 +2145,7 @@ mod tests {
         // 测试默认MySQL root密码（未设置时）
         let config = EnvConfig {
             services: vec![ServiceEntry {
-                service_type: ServiceType::MySQL,
+                service_type: "mysql".to_string(),
                 version: "mysql80".to_string(),
                 host_port: 3306,
                 extensions: None,
@@ -1732,5 +2160,66 @@ mod tests {
         let map = env.to_map();
 
         assert_eq!(map.get("MYSQL_ROOT_PASSWORD").unwrap(), "root");
+    }
+
+    #[test]
+    fn test_service_entry_serde_accepts_legacy_pascal_case() {
+        let json = r#"{
+            "service_type": "PHP",
+            "version": "php82",
+            "host_port": 9000,
+            "extensions": null
+        }"#;
+        let entry: ServiceEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.service_type, "php");
+
+        let json_mysql = r#"{
+            "service_type": "MySQL",
+            "version": "mysql80",
+            "host_port": 3306
+        }"#;
+        let entry: ServiceEntry = serde_json::from_str(json_mysql).unwrap();
+        assert_eq!(entry.service_type, "mysql");
+    }
+
+    #[test]
+    fn test_generate_env_php_nginx_only_omits_mysql() {
+        // 仅 PHP + Nginx 时不应写出 MYSQL_* / mysql 服务相关键
+        let config = EnvConfig {
+            services: vec![
+                ServiceEntry {
+                    service_type: "php".to_string(),
+                    version: "php82".to_string(),
+                    host_port: 9000,
+                    extensions: Some(vec!["pdo_mysql".to_string()]),
+                },
+                ServiceEntry {
+                    service_type: "nginx".to_string(),
+                    version: "nginx125".to_string(),
+                    host_port: 80,
+                    extensions: None,
+                },
+            ],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: Some("should-not-appear".to_string()),
+            sites: vec![],
+        };
+
+        let env = ConfigGenerator::generate_env(&config, None, &std::env::temp_dir());
+        let map = env.to_map();
+        let compose = ConfigGenerator::generate_compose(&config, &std::env::temp_dir());
+
+        assert!(
+            !map.keys().any(|k| k.starts_with("MYSQL")),
+            "env 不应含 MYSQL_*: {map:?}"
+        );
+        assert!(!map.contains_key("MYSQL_ROOT_PASSWORD"));
+        assert!(
+            !compose.contains("mysql"),
+            "compose 不应含 mysql 服务:\n{compose}"
+        );
+        assert!(compose.contains("  php82:"));
+        assert!(compose.contains("  nginx125:"));
     }
 }

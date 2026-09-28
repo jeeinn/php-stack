@@ -27,16 +27,17 @@
 //! - **不阻断 apply**——官方 MySQL/Nginx/Redis 镜像本身有内置默认配置，
 //!   启动时用镜像默认值也能跑
 //!
-//! # 配置映射（硬编码）
+//! # 配置映射
 //!
-//! 不放进 `version_manifest.json` 的原因：4 条映射跨版本基本稳定，放进 manifest
-//! 会让用户改 JSON 的难度上升（多一堆易错字段）。Dockerfile 仍走项目自研
-//! （PUID/PGID/镜像源注入），不碰上游。
+//! - `php` / `nginx`：路径硬编码（含 php major 5 vs 7+）
+//! - 其余 image kind（mysql/redis/自定义）：走 `ServiceCatalog` 的 `extract` 规格
+//!
+//! Dockerfile 仍走项目自研（PUID/PGID/镜像源注入），不碰上游。
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::version_manifest::ServiceType as VmServiceType;
+use super::service_catalog::{normalize_service_kind, ServiceCatalog};
 
 use crate::app_log;
 
@@ -157,13 +158,13 @@ impl ConfigExtractor {
     /// 4. `docker rm {tmp}`（始终执行，包括失败时）
     /// 5. 返回结果
     pub fn extract_config(
-        service_type: &VmServiceType,
+        service_kind: &str,
         service_dir: &str,
         image_tag: &str,
         dest_root: &Path,
     ) -> ExtractOutcome {
         // 1. 决定镜像内路径 + 落盘名
-        let (src_paths, dest_name) = match Self::extract_paths(service_type, image_tag) {
+        let (src_paths, dest_name) = match Self::extract_paths(service_kind, image_tag) {
             Ok(v) => v,
             Err(reason) => return ExtractOutcome::Failed { reason },
         };
@@ -287,13 +288,16 @@ impl ConfigExtractor {
     /// 决定镜像内配置路径 + workspace 落盘名
     ///
     /// 公开便于测试。**主版本号是分支依据**（5/7/8 等跨大版本差异巨大）。
+    /// - `php` / `nginx`：硬编码路径（含 php major 5 vs 7+）
+    /// - 其余 image kind：走 `ServiceCatalog::builtin()` 的 `extract` 规格（含 mysql major 5）
     pub fn extract_paths(
-        service_type: &VmServiceType,
+        service_kind: &str,
         image_tag: &str,
     ) -> Result<(Vec<String>, String), String> {
+        let kind = normalize_service_kind(service_kind);
         let major = Self::major_version_from_tag(image_tag);
-        match service_type {
-            VmServiceType::Php => {
+        match kind.as_str() {
+            "php" => {
                 // 5.x → /usr/local/etc/php/php.ini（无 -production 变体）
                 // 7.x+ → /usr/local/etc/php/php.ini-production
                 let src = if major == 5 {
@@ -303,27 +307,30 @@ impl ConfigExtractor {
                 };
                 Ok((vec![src], "php.ini".to_string()))
             }
-            VmServiceType::Mysql => {
-                // 5.x → /etc/mysql/my.cnf（容器内唯一位置）
-                // 8.x+ → /etc/my.cnf（含 !includedir /etc/mysql/conf.d/）
-                let src = if major == 5 {
-                    "/etc/mysql/my.cnf".to_string()
-                } else {
-                    "/etc/my.cnf".to_string()
-                };
-                Ok((vec![src], "mysql.cnf".to_string()))
-            }
-            VmServiceType::Redis => {
-                // 全部版本统一路径
-                Ok((
-                    vec!["/usr/local/etc/redis/redis.conf".to_string()],
-                    "redis.conf".to_string(),
-                ))
-            }
-            VmServiceType::Nginx => Ok((
+            "nginx" => Ok((
                 vec!["/etc/nginx/nginx.conf".to_string()],
                 "nginx.conf".to_string(),
             )),
+            _ => {
+                let catalog = ServiceCatalog::builtin();
+                let desc = catalog
+                    .get(&kind)
+                    .ok_or_else(|| format!("unknown service kind for extract: {kind}"))?;
+                let extract = desc
+                    .extract
+                    .as_ref()
+                    .ok_or_else(|| format!("no extract spec for service kind: {kind}"))?;
+                let src = if major > 0 {
+                    extract
+                        .paths_by_major
+                        .get(&major.to_string())
+                        .cloned()
+                        .unwrap_or_else(|| extract.default_src.clone())
+                } else {
+                    extract.default_src.clone()
+                };
+                Ok((vec![src], extract.dest_name.clone()))
+            }
         }
     }
 
@@ -380,19 +387,16 @@ mod tests {
     #[test]
     fn test_extract_paths_php() {
         // 5.6 走老路径
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Php, "php:5.6-fpm").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("php", "php:5.6-fpm").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/php/php.ini"]);
         assert_eq!(dest, "php.ini");
 
         // 7.x+ 走 -production
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Php, "php:7.4-fpm").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("php", "php:7.4-fpm").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/php/php.ini-production"]);
         assert_eq!(dest, "php.ini");
 
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Php, "php:8.5-fpm").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("php", "php:8.5-fpm").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/php/php.ini-production"]);
         assert_eq!(dest, "php.ini");
     }
@@ -400,14 +404,12 @@ mod tests {
     #[test]
     fn test_extract_paths_mysql() {
         // 5.x 走 /etc/mysql/my.cnf
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Mysql, "mysql:5.7").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("mysql", "mysql:5.7").unwrap();
         assert_eq!(srcs, vec!["/etc/mysql/my.cnf"]);
         assert_eq!(dest, "mysql.cnf");
 
         // 8.x 走 /etc/my.cnf
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Mysql, "mysql:8.4").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("mysql", "mysql:8.4").unwrap();
         assert_eq!(srcs, vec!["/etc/my.cnf"]);
         assert_eq!(dest, "mysql.cnf");
     }
@@ -415,21 +417,18 @@ mod tests {
     #[test]
     fn test_extract_paths_redis() {
         // 全部版本统一
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Redis, "redis:7.2-alpine").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("redis", "redis:7.2-alpine").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/redis/redis.conf"]);
         assert_eq!(dest, "redis.conf");
 
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Redis, "redis:8.2-alpine").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("redis", "redis:8.2-alpine").unwrap();
         assert_eq!(srcs, vec!["/usr/local/etc/redis/redis.conf"]);
         assert_eq!(dest, "redis.conf");
     }
 
     #[test]
     fn test_extract_paths_nginx() {
-        let (srcs, dest) =
-            ConfigExtractor::extract_paths(&VmServiceType::Nginx, "nginx:1.27-alpine").unwrap();
+        let (srcs, dest) = ConfigExtractor::extract_paths("nginx", "nginx:1.27-alpine").unwrap();
         assert_eq!(srcs, vec!["/etc/nginx/nginx.conf"]);
         assert_eq!(dest, "nginx.conf");
     }
@@ -453,8 +452,7 @@ mod tests {
         let dest_file = dest_dir.join("mysql.cnf");
         fs::write(&dest_file, "user customized content").unwrap();
 
-        let result =
-            ConfigExtractor::extract_config(&VmServiceType::Mysql, svc_dir, "mysql:5.6", &tmp);
+        let result = ConfigExtractor::extract_config("mysql", svc_dir, "mysql:5.6", &tmp);
         match result {
             ExtractOutcome::SkippedExists => {
                 // 验证文件未被覆盖

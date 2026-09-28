@@ -8,6 +8,7 @@ pub mod mirror_config; // 镜像源配置（向后兼容）
 pub mod mirror_config_manager; // 用户镜像源配置管理器
 pub mod mirror_manager; // 统一镜像源管理器
 pub mod restore_engine; // 恢复引擎
+pub mod service_catalog; // 服务目录 / 描述符
 pub mod site_manager; // 站点清单（宿主机路径与容器路径分离）
 pub mod user_config; // 工作区用户配置路径
 pub mod user_override_manager; // 用户版本覆盖管理器

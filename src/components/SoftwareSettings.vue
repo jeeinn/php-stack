@@ -3,13 +3,14 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   getVersionMappings,
+  getServiceCatalog,
   saveUserOverride,
   addCustomVersion,
   removeUserOverride,
   resetAllOverrides as resetAllOverridesApi,
   normalizeError,
 } from '../api';
-import type { VersionMappings, VersionInfo, ServiceTypeLower } from '../types/env-config';
+import type { VersionMappings, VersionInfo, ServiceDescriptor } from '../types/env-config';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
 import UiTabs from './UiTabs.vue';
@@ -17,8 +18,9 @@ import UiTabs from './UiTabs.vue';
 const { t } = useI18n();
 
 const versionMappings = ref<VersionMappings | null>(null);
+const serviceCatalog = ref<ServiceDescriptor[]>([]);
 const loading = ref(false);
-const selectedService = ref<ServiceTypeLower>('mysql');
+const selectedService = ref<string>('mysql');
 
 // 编辑对话框状态
 const showEditDialog = ref(false);
@@ -28,7 +30,7 @@ const editDescription = ref('');
 
 // 新增对话框状态
 const showAddDialog = ref(false);
-const addService = ref<ServiceTypeLower>('mysql');
+const addService = ref<string>('mysql');
 const addId = ref('');
 const addDisplayName = ref('');
 const addImageTag = ref('');
@@ -39,24 +41,31 @@ const addEol = ref(false);
 const addDescription = ref('');
 const addIdTouched = ref(false);
 
-const serviceLabels: Record<ServiceTypeLower, string> = {
-  php: 'PHP',
-  mysql: 'MySQL',
-  redis: 'Redis',
-  nginx: 'Nginx'
-};
+const serviceLabels = computed<Record<string, string>>(() => {
+  const labels: Record<string, string> = {};
+  for (const s of serviceCatalog.value) {
+    labels[s.id] = s.display_name;
+  }
+  if (versionMappings.value) {
+    for (const kind of Object.keys(versionMappings.value)) {
+      if (!labels[kind]) labels[kind] = kind;
+    }
+  }
+  return labels;
+});
 
-const defaultPorts: Record<ServiceTypeLower, number> = {
-  php: 9000,
-  mysql: 3306,
-  redis: 6379,
-  nginx: 80,
-};
+const defaultPorts = computed<Record<string, number>>(() => {
+  const ports: Record<string, number> = {};
+  for (const s of serviceCatalog.value) {
+    ports[s.id] = s.container_port;
+  }
+  return ports;
+});
 
 const serviceTabItems = computed(() =>
-  (Object.keys(serviceLabels) as ServiceTypeLower[]).map((service) => ({
+  Object.keys(serviceLabels.value).map((service) => ({
     id: service,
-    label: serviceLabels[service],
+    label: serviceLabels.value[service],
   })),
 );
 
@@ -78,8 +87,8 @@ const addFormValid = computed(() => {
   );
 });
 
-function applyAddServiceDefaults(service: ServiceTypeLower) {
-  addDefaultPort.value = defaultPorts[service];
+function applyAddServiceDefaults(service: string) {
+  addDefaultPort.value = defaultPorts.value[service] ?? 0;
   addShowPort.value = service !== 'php';
   const versions = versionMappings.value?.[service] || [];
   const dirs = [...new Set(versions.map((v) => v.service_dir).filter(Boolean))];
@@ -93,8 +102,16 @@ async function loadVersionMappings() {
   loading.value = true;
 
   try {
-    const data = await getVersionMappings();
+    const [data, catalog] = await Promise.all([
+      getVersionMappings(),
+      getServiceCatalog(),
+    ]);
     versionMappings.value = data;
+    serviceCatalog.value = catalog;
+    const kinds = Object.keys(serviceLabels.value);
+    if (kinds.length && !kinds.includes(selectedService.value)) {
+      selectedService.value = kinds[0];
+    }
   } catch (e) {
     showToast(t('software.toast.loadFailed', { error: normalizeError(e) }), 'error');
   } finally {
@@ -149,7 +166,7 @@ async function saveOverride() {
 }
 
 /** 从显示名推测 id，如 "Redis 8.4" → redis84 */
-function suggestIdFromDisplayName(displayName: string, service: ServiceTypeLower): string {
+function suggestIdFromDisplayName(displayName: string, service: string): string {
   const digits = displayName.replace(/[^\d.]/g, '').replace(/\./g, '');
   if (!digits) return '';
   return `${service}${digits}`;

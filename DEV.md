@@ -96,12 +96,13 @@ php-stack/
 ├── src-tauri/
 │   ├── src/
 │   │   ├── commands/           # #[tauri::command] 入口，按业务域拆分（docker/env_config/mirror/backup/workspace/app + paths/mod）
-│   │   ├── engine/             # 核心业务引擎（config_generator / version_manifest / user_override_manager / site_manager / user_config / backup_* / restore_engine / config_extractor / ...）
+│   │   ├── engine/             # 核心业务引擎（service_catalog / config_generator / version_manifest / user_override_manager / site_manager / user_config / backup_* / restore_engine / config_extractor / ...）
 │   │   ├── docker/             # Docker 交互层（manager / mirror）
 │   │   ├── logging.rs          # 日志系统（文件轮转 + tracing）
 │   │   └── macros.rs           # app_log! / ui_log! 宏
-│   └── services/               # 服务模板与版本清单
+│   └── services/               # 服务模板、版本清单与服务目录
 │       ├── version_manifest.json   # 版本清单（include_str! 编译进二进制）
+│       └── service_catalog.json    # 服务目录描述符（v0.5）
 │       └── php*/ mysql*/ redis*/ nginx*/   # 各服务模板目录
 ├── scripts/                    # 同步与检查脚本（sync-version-manifest / sync-php-dockerfile / check-i18n-keys / build）
 ├── .github/workflows/          # CI（fmt/clippy/test/build）与 release
@@ -177,14 +178,21 @@ npm run build
 - `override`：映射表「编辑」已有 ID，`image_tag` + 可选 `description`，叠在清单基线上
 - `custom`：映射表「新增」，完整 VersionEntry 字段，可出现在环境配置下拉
 
-### 7.3 新增服务类型（如 PostgreSQL）Checklist
+### 7.3 新增服务类型（如 PostgreSQL / MongoDB）Checklist
 
-当前服务类型写死为 PHP / MySQL / Redis / Nginx。新增一种需同步：
+自 v0.5 起，服务扩展以 **Catalog 描述符** 为主，不再改 `ServiceType` 枚举。
 
-- **后端**: `engine/config_generator.rs` 的 `ServiceType` 枚举与生成分支；`engine/version_manifest.rs` 的 `ServiceType` + `ManifestFile`；`services/version_manifest.json` 新块；`services/<newtype>/` 模板（如有）；集成测试
-- **前端**: `src/types/env-config.ts` 的 `ServiceType` / `ServiceTypeLower` / `VersionMappings`；`EnvConfigPage.vue` 服务面板（长期目标是配置驱动收敛）；`SoftwareSettings.vue` 的 `serviceLabels` 与 tab；i18n `envConfig.<service>.*` / `software.*` 中英 key
+**官方内置（随发版）**：
 
-> **不做**: 远程自动拉取服务定义、通用插件系统（违背「简单」原则）。
+1. 在 [`src-tauri/services/service_catalog.json`](src-tauri/services/service_catalog.json) 增加条目：`id`、`generator`（多数用 `image`；PHP/Nginx 专用）、端口、卷、`short_alias`、`extract` 等
+2. 在 `version_manifest.json` 增加同名顶层键与版本条目（清单已支持动态键）
+3. 准备 `src-tauri/services/<service_dir>/` 模板（或依赖 Phase 3 镜像提取 + `fallback_template_dir`）
+4. （可选）扩展 `scripts/sync-version-manifest.mjs` 的 resolver
+5. 重新构建；补集成测试
+
+**用户侧（无需发版）**：环境配置页 →「添加自定义服务」→ 写入 `.user-config/custom_services.json` + `version_overrides.json`（仅 `generator: image`）。
+
+> **不做**: 远程自动拉取服务定义、自建 Dockerfile 的通用插件（自定义服务本版仅 image 型）。
 
 ### 7.4 版本清单同步（sync-version-manifest）
 

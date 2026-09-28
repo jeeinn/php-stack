@@ -60,3 +60,7 @@ path = "tests/integration/workspace_commands_integration.rs"
 [[test]]
 name = "docker_manager_integration"
 path = "tests/integration/docker_manager_integration.rs"
+
+[[test]]
+name = "service_catalog_custom_integration"
+path = "tests/integration/service_catalog_custom.rs"

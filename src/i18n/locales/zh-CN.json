@@ -35,7 +35,33 @@
     "stoppingEnv": "停止中...",
     "dockerError": {
       "title": "Docker 环境异常",
-      "retry": "重试"
+      "retry": "重试",
+      "open": "打开",
+      "opening": "打开中...",
+      "install": "安装",
+      "notInstalled": {
+        "title": "未检测到 Docker",
+        "description": "本机没有可用的 Docker。请安装 Docker Desktop 后再点「重试」。"
+      },
+      "notRunning": {
+        "title": "Docker 未启动",
+        "description": "已安装 Docker Desktop，但引擎没有响应。可以打开 Docker，等待就绪后再试。"
+      },
+      "engineOnly": {
+        "title": "Docker 引擎未响应",
+        "description": "检测到 Docker 命令行，但没有可打开的 Docker Desktop。请自行启动 Docker 服务后再点「重试」。"
+      },
+      "permissionDenied": {
+        "title": "无权访问 Docker",
+        "description": "Docker 套接字存在，但当前用户无法访问。请将用户加入 docker 组或调整权限后再重试。"
+      },
+      "customHost": {
+        "title": "Docker 地址不可用",
+        "description": "当前 DOCKER_HOST 不是本机默认地址。打开或安装本机 Docker 无法修复这条连接。"
+      },
+      "openStarted": "已尝试打开 Docker Desktop，引擎就绪后会自动恢复",
+      "openFailed": "无法打开 Docker Desktop：{error}",
+      "installFailed": "无法打开安装页面：{error}"
     },
     "noEnvFile": {
       "title": "未检测到环境配置",

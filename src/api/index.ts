@@ -27,6 +27,8 @@ export {
 export { getSupportInfo, type SupportInfo } from './app'
 export {
   checkDocker,
+  inspectDockerHost,
+  openDockerDesktop,
   listContainers,
   listAllRunningContainers,
   startContainer,
@@ -35,6 +37,7 @@ export {
   stopEnvironment,
   restartEnvironment,
   openServiceConfig,
+  type DockerHostReport,
 } from './docker'
 export {
   getVersionMappings,

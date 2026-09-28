@@ -1,8 +1,20 @@
 import { invokeCommand } from './client'
-import type { Container } from '../types/docker'
+import type { Container, DockerHostReport } from '../types/docker'
+
+export type { DockerHostReport }
 
 export function checkDocker(): Promise<void> {
   return invokeCommand<void>('check_docker')
+}
+
+/** 一次往返拿到引擎是否就绪，以及未就绪时该显示打开还是安装。 */
+export function inspectDockerHost(): Promise<DockerHostReport> {
+  return invokeCommand<DockerHostReport>('inspect_docker_host')
+}
+
+/** 启动本机已安装的 Docker Desktop。 */
+export function openDockerDesktop(): Promise<void> {
+  return invokeCommand<void>('open_docker_desktop')
 }
 
 export function listContainers(): Promise<Container[]> {

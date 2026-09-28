@@ -286,7 +286,10 @@ pub fn get_service_catalog() -> Result<Vec<ServiceDescriptor>, String> {
     Ok(catalog.list().to_vec())
 }
 
-const AUTO_CREATED_DESC_PREFIX: &str = "Auto-created for custom service";
+/// 自动创建的 custom version 条目的描述前缀。
+///
+/// 供孤儿清理识别使用；集成测试与实现共用此常量，避免两边文案漂移。
+pub const AUTO_CREATED_DESC_PREFIX: &str = "Auto-created for custom service";
 
 fn is_auto_created_custom(entry: &VersionEntry) -> bool {
     entry
@@ -322,7 +325,13 @@ fn ensure_custom_version_for_service(
     let vid = if autos.is_empty() || autos.iter().any(|id| id == &requested) {
         requested
     } else {
-        autos[0].clone()
+        // 多个 auto 条目时按 id 字典序取最小：list_merged_entries 只保证版本号逆序，
+        // 版本号相同或缺失时底层枚举顺序不确定，不能依赖 autos[0]
+        autos
+            .iter()
+            .min()
+            .cloned()
+            .unwrap_or_else(|| requested.clone())
     };
 
     for orphan in &autos {
@@ -519,5 +528,50 @@ mod tests {
         assert_eq!(customs[0].entry.image_tag, "mongo:8");
         assert_eq!(customs[0].entry.default_port, 27018);
         assert!(!manager.is_custom_entry("mongodb", "mongo8"));
+    }
+
+    #[test]
+    fn ensure_custom_version_picks_deterministic_auto_id() {
+        // 历史/迁移残留：同一 kind 下存在多个 auto-created 条目时，
+        // 选择必须确定（按 id 字典序取最小），不能依赖底层枚举顺序
+        let tmp = tempfile::tempdir().unwrap();
+        let desc = sample_descriptor("mongodb");
+        let mut manager = UserOverrideManager::new(tmp.path());
+        for id in ["mongodbdefault", "aaa-first"] {
+            manager
+                .add_custom_version(
+                    tmp.path(),
+                    "mongodb",
+                    id.to_string(),
+                    VersionEntry {
+                        display_name: format!("MongoDB ({id})"),
+                        image_tag: "mongo:7".to_string(),
+                        service_dir: id.to_string(),
+                        default_port: 27017,
+                        show_port: true,
+                        eol: false,
+                        description: Some(format!("{AUTO_CREATED_DESC_PREFIX} mongodb")),
+                    },
+                )
+                .unwrap();
+        }
+
+        let vid =
+            ensure_custom_version_for_service(tmp.path(), &desc, "mongo:8", Some("zzz"), 27018)
+                .unwrap();
+        assert_eq!(vid, "aaa-first");
+
+        let manager = UserOverrideManager::new(tmp.path());
+        let ids: Vec<String> = manager
+            .list_merged_entries("mongodb")
+            .into_iter()
+            .filter(|i| i.is_custom)
+            .map(|i| i.id)
+            .collect();
+        assert_eq!(ids, vec!["aaa-first".to_string()]);
+        assert_eq!(
+            manager.list_merged_entries("mongodb")[0].entry.image_tag,
+            "mongo:8"
+        );
     }
 }

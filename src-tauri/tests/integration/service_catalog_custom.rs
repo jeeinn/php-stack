@@ -3,6 +3,7 @@
 //! 覆盖 v0.5 NEW-6：内置四类之外的用户自定义服务往返未被集成测试锁住。
 
 use app_lib::commands::parse_env_to_services;
+use app_lib::commands::AUTO_CREATED_DESC_PREFIX;
 use app_lib::engine::config_generator::{ConfigGenerator, EnvConfig, ServiceEntry};
 use app_lib::engine::service_catalog::{
     build_custom_descriptor, persist_custom_from_catalog, CustomServiceForm, ServiceCatalog,
@@ -43,7 +44,7 @@ fn seed_mongodb_custom(root: &std::path::Path) -> (String, String) {
                 default_port: 27017,
                 show_port: true,
                 eol: false,
-                description: Some("Auto-created for custom service mongodb".to_string()),
+                description: Some(format!("{AUTO_CREATED_DESC_PREFIX} mongodb")),
             },
         )
         .expect("add custom version");

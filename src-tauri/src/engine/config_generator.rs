@@ -204,8 +204,8 @@ impl ConfigGenerator {
             // compose 服务键与 .env 前缀都落在 service_dir 上；重复会互相覆盖
             if !seen_service_dirs.insert(entry.service_dir.clone()) {
                 return Err(format!(
-                    "Duplicate service version: {} ({})",
-                    service.version, entry.service_dir
+                    "Duplicate service_dir: {} (service version: {})",
+                    entry.service_dir, service.version
                 ));
             }
 
@@ -1913,7 +1913,7 @@ APP_VERSION=9
             sites: vec![],
         };
         let err = ConfigGenerator::validate(&config, None).unwrap_err();
-        assert!(err.contains("Duplicate service version"));
+        assert!(err.contains("Duplicate service_dir"));
         assert!(err.contains("php82"));
     }
 

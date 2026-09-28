@@ -162,7 +162,7 @@ pub fn validate_env_config(config: EnvConfig) -> Result<(), String> {
 /// **不再**用 `key[3..]` / `key[5..]` / `key[6..]` 这类魔数切片反解前缀（A2）。
 ///
 /// `override_manager` 为 `None` 时仅扫清单；有值时同时扫 custom 条目。
-fn parse_env_to_services(
+pub fn parse_env_to_services(
     env_map: &std::collections::HashMap<String, String>,
     manifest: &VersionManifest,
     override_manager: Option<&UserOverrideManager>,

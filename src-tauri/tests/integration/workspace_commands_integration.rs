@@ -214,7 +214,6 @@ fn test_env_parser_integration() {
 
     // Create a sample .env file
     let env_content = r#"# PHP-Stack Configuration
-SOURCE_DIR=./www
 TZ=Asia/Shanghai
 
 # PHP Settings
@@ -234,7 +233,7 @@ MYSQL_ROOT_PASSWORD=secret123
     let env = EnvFile::parse(&content).expect("Failed to parse .env file");
 
     // Verify values
-    assert_eq!(env.get("SOURCE_DIR"), Some("./www"));
+    assert!(env.get("SOURCE_DIR").is_none());
     assert_eq!(env.get("TZ"), Some("Asia/Shanghai"));
     assert_eq!(env.get("PHP82_VERSION"), Some("8.2-fpm"));
     assert_eq!(env.get("PHP82_HOST_PORT"), Some("9000"));

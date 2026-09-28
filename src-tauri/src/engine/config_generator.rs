@@ -62,10 +62,9 @@ pub struct ServiceEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvConfig {
     pub services: Vec<ServiceEntry>,
-    pub source_dir: String,
     pub timezone: String,
     pub mysql_root_password: Option<String>, // MySQL root密码（可选）
-    /// 启用 Nginx 时的站点清单。空列表保持单一 `SOURCE_DIR` → `/www` 挂载。
+    /// 启用 Nginx 时的站点清单。空列表 = 不挂代码卷。
     #[serde(default)]
     pub sites: Vec<SiteEntry>,
 }
@@ -290,19 +289,13 @@ impl ConfigGenerator {
         let manifest = VersionManifest::new();
         let override_manager = UserOverrideManager::new(project_root);
 
-        // Set global variables. 有站点时宿主机路径以站点为准，并清掉已删除站点的 SITE_* 键。
+        // 站点宿主机路径写入 SITE_*；始终清掉历史 SOURCE_DIR。无站点则不写代码路径键。
         let mut sites = config.sites.clone();
         site_manager::normalize_sites(&mut sites);
-        if sites.is_empty() {
-            env.set(
-                "SOURCE_DIR",
-                &site_manager::normalize_host_path(&config.source_dir),
-            );
-        } else {
-            site_manager::remove_stale_site_keys(&mut env, project_root, &sites);
-            for site in &sites {
-                env.set(&site.env_key, &site.host_path);
-            }
+        site_manager::remove_stale_site_keys(&mut env, project_root, &sites);
+        env.remove(site_manager::LEGACY_SOURCE_DIR_KEY);
+        for site in &sites {
+            env.set(&site.env_key, &site.host_path);
         }
         env.set("TZ", &config.timezone);
         env.set("DATA_DIR", "./data");
@@ -1540,7 +1533,6 @@ mod tests {
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1614,7 +1606,6 @@ mod tests {
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1636,7 +1627,7 @@ mod tests {
         let env = ConfigGenerator::generate_env(&config, None, &temp_dir);
         let map = env.to_map();
 
-        assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
+        assert!(!map.contains_key("SOURCE_DIR"));
         assert_eq!(map.get("TZ").unwrap(), "Asia/Shanghai");
         assert_eq!(map.get("DATA_DIR").unwrap(), "./data");
         // PHP VERSION now contains full image tag (e.g., php:8.2-fpm)
@@ -1676,7 +1667,6 @@ mod tests {
                 host_port: 80,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1688,8 +1678,8 @@ mod tests {
 
         // Custom variable preserved
         assert_eq!(map.get("CUSTOM_VAR").unwrap(), "hello");
-        // Managed variable updated
-        assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
+        // 历史 SOURCE_DIR 应被清除（无站点 = 不写代码路径）
+        assert!(!map.contains_key("SOURCE_DIR"));
         // New managed variable added (uses full image tag from version_manifest.json)
         assert_eq!(map.get("NGINX125_VERSION").unwrap(), "nginx:1.25-alpine");
     }
@@ -1716,7 +1706,6 @@ SOURCE_DIR=./old
                 host_port: 9000,
                 extensions: Some(vec!["pdo_mysql".to_string()]),
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1735,6 +1724,7 @@ SOURCE_DIR=./old
         assert!(!map.contains_key("MYSQL80_LOG_DIR"));
         assert!(!map.contains_key("MYSQL_ROOT_PASSWORD"));
         assert!(!map.contains_key("NGINX_LOG_DIR"));
+        assert!(!map.contains_key("SOURCE_DIR"));
     }
 
     #[test]
@@ -1756,7 +1746,6 @@ CUSTOM_FOO=bar
                 host_port: 9000,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1817,7 +1806,6 @@ APP_VERSION=9
                 host_port: 9000,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1842,7 +1830,6 @@ APP_VERSION=9
                 host_port: 9000,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1861,7 +1848,6 @@ APP_VERSION=9
                 host_port: 80,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1880,7 +1866,6 @@ APP_VERSION=9
                 host_port: 0,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1907,7 +1892,6 @@ APP_VERSION=9
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1964,7 +1948,6 @@ APP_VERSION=9
                     extensions: Some(vec!["gd".to_string(), "curl".to_string()]),
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1995,7 +1978,8 @@ APP_VERSION=9
         assert!(compose.contains("${REDIS70_VERSION}"));
         assert!(compose.contains("${REDIS70_HOST_PORT}"));
         assert!(compose.contains("${NGINX125_HTTP_HOST_PORT}"));
-        assert!(compose.contains("${SOURCE_DIR}"));
+        assert!(!compose.contains("${SOURCE_DIR}"));
+        assert!(!compose.contains(":/www/:rw"));
         assert!(compose.contains("${PHP82_EXTENSIONS}"));
         assert!(compose.contains("${PHP82_PHP_CONF_FILE}"));
         assert!(compose.contains("${TZ}"));
@@ -2049,6 +2033,54 @@ APP_VERSION=9
     }
 
     #[test]
+    fn test_generate_compose_emits_site_volumes_without_source_dir() {
+        use crate::engine::site_manager::SiteEntry;
+
+        let mut config = make_basic_config();
+        config.sites = vec![
+            SiteEntry {
+                id: "cmp".into(),
+                server_name: "cmp.localhost".into(),
+                host_path: "E:/projects/fm-cmp".into(),
+                env_key: String::new(),
+                container_path: String::new(),
+                nginx_service: "nginx125".into(),
+                php_service: "php82".into(),
+                public_dir: "www".into(),
+            },
+            SiteEntry {
+                id: "agent".into(),
+                server_name: "agent.localhost".into(),
+                host_path: "E:/projects/fm-agent".into(),
+                env_key: String::new(),
+                container_path: String::new(),
+                nginx_service: "nginx125".into(),
+                php_service: "php82".into(),
+                public_dir: "www".into(),
+            },
+        ];
+
+        let tmp = tempfile::tempdir().unwrap();
+        let env = ConfigGenerator::generate_env(&config, None, tmp.path());
+        let map = env.to_map();
+        assert_eq!(
+            map.get("SITE_CMP").map(String::as_str),
+            Some("E:/projects/fm-cmp")
+        );
+        assert_eq!(
+            map.get("SITE_AGENT").map(String::as_str),
+            Some("E:/projects/fm-agent")
+        );
+        assert!(!map.contains_key("SOURCE_DIR"));
+
+        let compose = ConfigGenerator::generate_compose(&config, tmp.path());
+        assert!(compose.contains("${SITE_CMP}:/sites/cmp/:rw"));
+        assert!(compose.contains("${SITE_AGENT}:/sites/agent/:rw"));
+        assert!(!compose.contains("${SOURCE_DIR}"));
+        assert!(!compose.contains(":/www/:rw"));
+    }
+
+    #[test]
     fn test_generate_compose_skips_short_alias_when_multi_redis() {
         let config = EnvConfig {
             services: vec![
@@ -2065,7 +2097,6 @@ APP_VERSION=9
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -2097,7 +2128,6 @@ APP_VERSION=9
                     extensions: Some(vec!["gd".to_string()]),
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -2128,7 +2158,6 @@ APP_VERSION=9
                 host_port: 3306,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: Some("mypassword123".to_string()),
             sites: vec![],
@@ -2150,7 +2179,6 @@ APP_VERSION=9
                 host_port: 3306,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -2200,7 +2228,6 @@ APP_VERSION=9
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: Some("should-not-appear".to_string()),
             sites: vec![],

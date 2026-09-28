@@ -39,7 +39,6 @@ const mockCatalog = [
 
 const mockExistingConfig = {
   services: [{ service_type: 'PHP', version: 'php82', host_port: 9000 }],
-  source_dir: './www',
   timezone: 'Asia/Shanghai',
 }
 

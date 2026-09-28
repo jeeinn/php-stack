@@ -20,7 +20,6 @@ fn sample_config() -> EnvConfig {
                 extensions: None,
             },
         ],
-        source_dir: "./www".to_string(),
         timezone: "Asia/Shanghai".to_string(),
         mysql_root_password: None,
         sites: vec![],
@@ -50,7 +49,10 @@ fn test_generate_env_contains_expected_keys() {
     let env = ConfigGenerator::generate_env(&sample_config(), None, tmp.path());
     let formatted = env.format();
 
-    assert!(formatted.contains("SOURCE_DIR=./www"), "应包含 SOURCE_DIR");
+    assert!(
+        !formatted.contains("SOURCE_DIR="),
+        "无站点不应写入 SOURCE_DIR"
+    );
     assert!(formatted.contains("TZ=Asia/Shanghai"), "应包含 TZ");
     assert!(
         formatted.contains("PHP82_VERSION=php:8.2-fpm"),

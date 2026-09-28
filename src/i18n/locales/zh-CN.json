@@ -224,9 +224,6 @@
     "general": {
       "title": "通用设置",
       "workspace": "工作目录",
-      "sourceDir": "项目源码目录",
-      "browse": "选择文件夹",
-      "sourceDirHint": "这是宿主机上的代码目录，会挂载到容器内的 /www。其他磁盘上的目录也可以直接选择。",
       "timezone": "时区",
       "timezonePlaceholder": "选择时区",
       "customTimezonePlaceholder": "例如：Europe/Moscow",
@@ -284,7 +281,7 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "容器路径",
-      "defaultNote": "若 conf.d/default.conf 仍在，Nginx 会同时加载它。不需要默认站时请自行删除或改掉其中的 server_name。"
+      "defaultNote": "站点由托管 conf 提供；模板里的 default.conf 默认已注释。若自行启用，请保证对应代码卷已挂载。"
     },
     "previewModal": {
       "title": "配置预览",

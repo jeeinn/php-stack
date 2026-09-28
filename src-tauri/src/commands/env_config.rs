@@ -306,10 +306,6 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
         return Ok(None);
     }
 
-    let source_dir = env_map
-        .get("SOURCE_DIR")
-        .cloned()
-        .unwrap_or_else(|| "./www".to_string());
     let timezone = env_map
         .get("TZ")
         .cloned()
@@ -318,7 +314,6 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
 
     Ok(Some(EnvConfig {
         services,
-        source_dir,
         timezone,
         mysql_root_password,
         sites: site_manager::load_sites_with_hosts(&project_root, &env_file),
@@ -1574,7 +1569,6 @@ mod tests {
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],

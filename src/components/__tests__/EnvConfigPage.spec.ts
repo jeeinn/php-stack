@@ -35,7 +35,6 @@ const mockExistingConfig = {
     { service_type: 'PHP', version: 'php82', host_port: 9000, extensions: ['pdo_mysql', 'mysqli'] },
     { service_type: 'MySQL', version: 'mysql80', host_port: 3306 },
   ],
-  source_dir: './www',
   timezone: 'Asia/Shanghai',
 }
 

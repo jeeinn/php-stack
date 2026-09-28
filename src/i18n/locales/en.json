@@ -224,9 +224,6 @@
     "general": {
       "title": "General Settings",
       "workspace": "Workspace",
-      "sourceDir": "Source Directory",
-      "browse": "Choose folder",
-      "sourceDirHint": "Host directory mounted into the container at /www. A folder on another drive is fine.",
       "timezone": "Timezone",
       "timezonePlaceholder": "Select timezone",
       "customTimezonePlaceholder": "e.g. Europe/Moscow",
@@ -284,7 +281,7 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "Container path",
-      "defaultNote": "If conf.d/default.conf is still present, Nginx loads it too. Delete it or change its server_name when you no longer want the stock site."
+      "defaultNote": "Managed site confs serve traffic. The stock default.conf is commented out in the template; if you enable it, ensure a matching volume is mounted."
     },
     "previewModal": {
       "title": "Config Preview",

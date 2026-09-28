@@ -12,8 +12,8 @@ use super::env_parser::EnvFile;
 use super::user_config;
 use crate::app_log;
 pub const MANAGED_MARKER_PREFIX: &str = "# php-stack:managed site=";
-pub const PRIMARY_ENV_KEY: &str = "SOURCE_DIR";
-pub const PRIMARY_CONTAINER_PATH: &str = "/www";
+/// 历史遗留键；生成配置时一律清除，不再写入。
+pub const LEGACY_SOURCE_DIR_KEY: &str = "SOURCE_DIR";
 pub const KIND_RELATIVE: &str = "workspace-relative";
 pub const KIND_ABSOLUTE: &str = "absolute";
 
@@ -108,31 +108,26 @@ pub fn sanitize_site_id(id: &str) -> String {
     }
 }
 
-/// 第一条站点固定 `SOURCE_DIR` → `/www`，其余为 `SITE_{ID}` → `/sites/{id}`。
+/// 每站统一 `SITE_{ID}` → `/sites/{id}`（无首站特例）。
 pub fn normalize_sites(sites: &mut [SiteEntry]) {
     for (index, site) in sites.iter_mut().enumerate() {
         site.id = sanitize_site_id(&site.id);
         site.host_path = repair_host_path(&site.host_path);
         site.public_dir = normalize_public_dir(&site.public_dir);
         site.server_name = site.server_name.trim().to_string();
-        if index == 0 {
-            site.env_key = PRIMARY_ENV_KEY.to_string();
-            site.container_path = PRIMARY_CONTAINER_PATH.to_string();
+        let slug: String = site
+            .id
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect::<String>()
+            .to_uppercase();
+        let slug = if slug.is_empty() {
+            format!("SITE{index}")
         } else {
-            let slug: String = site
-                .id
-                .chars()
-                .filter(|c| c.is_ascii_alphanumeric())
-                .collect::<String>()
-                .to_uppercase();
-            let slug = if slug.is_empty() {
-                format!("SITE{index}")
-            } else {
-                slug
-            };
-            site.env_key = format!("SITE_{slug}");
-            site.container_path = format!("/sites/{}", site.id);
-        }
+            slug
+        };
+        site.env_key = format!("SITE_{slug}");
+        site.container_path = format!("/sites/{}", site.id);
     }
 }
 
@@ -335,7 +330,7 @@ pub fn resolve_host_path(project_root: &Path, host_path: &str) -> PathBuf {
 
 pub fn source_volume_lines(sites: &[SiteEntry], role: MountRole, service_dir: &str) -> Vec<String> {
     if sites.is_empty() {
-        return vec!["      - ${SOURCE_DIR}:/www/:rw".to_string()];
+        return Vec::new();
     }
     sites
         .iter()
@@ -365,13 +360,7 @@ pub fn load_sites_with_hosts(project_root: &Path, env: &EnvFile) -> Vec<SiteEntr
                 .get(&record.env_key)
                 .map(normalize_host_path)
                 .filter(|path| !path.is_empty())
-                .unwrap_or_else(|| {
-                    if record.env_key == PRIMARY_ENV_KEY {
-                        "./www".to_string()
-                    } else {
-                        String::new()
-                    }
-                });
+                .unwrap_or_default();
             SiteEntry {
                 host_path: repair_host_path(&host_path),
                 id: record.id,
@@ -434,33 +423,22 @@ fn read_records(project_root: &Path) -> Result<Vec<SiteRecord>, String> {
     Ok(file.sites)
 }
 
-/// 去掉上一版站点写入、这次不再使用的 `SITE_*` 键。`SOURCE_DIR` 由调用方重写。
+/// 去掉上一版站点写入、这次不再使用的站点键（含历史 `SOURCE_DIR`）。
 pub fn remove_stale_site_keys(env: &mut EnvFile, project_root: &Path, sites: &[SiteEntry]) {
     let Ok(previous) = read_records(project_root) else {
         return;
     };
     for record in previous {
-        if record.env_key == PRIMARY_ENV_KEY {
-            continue;
-        }
         if !sites.iter().any(|site| site.env_key == record.env_key) {
             env.remove(&record.env_key);
         }
     }
 }
 
+/// 无 `sites.json` 时返回空列表（无站点 = 不挂代码卷）。
 pub fn collect_manifest_sites(project_root: &Path) -> Vec<ManifestSite> {
     let env = read_env(project_root);
     let records = read_records(project_root).unwrap_or_default();
-    if records.is_empty() {
-        let host = env
-            .as_ref()
-            .and_then(|file| file.get(PRIMARY_ENV_KEY))
-            .map(normalize_host_path)
-            .filter(|path| !path.is_empty())
-            .unwrap_or_else(|| "./www".to_string());
-        return vec![synthetic_site(&host)];
-    }
     records
         .into_iter()
         .map(|record| {
@@ -481,24 +459,6 @@ pub fn collect_manifest_sites(project_root: &Path) -> Vec<ManifestSite> {
             }
         })
         .collect()
-}
-
-pub fn synthetic_site(host_path: &str) -> ManifestSite {
-    let host_path = normalize_host_path(host_path);
-    let host_path = if host_path.is_empty() {
-        "./www".to_string()
-    } else {
-        host_path
-    };
-    ManifestSite {
-        id: "main".to_string(),
-        env_key: PRIMARY_ENV_KEY.to_string(),
-        container_path: PRIMARY_CONTAINER_PATH.to_string(),
-        host_path: repair_host_path(&host_path),
-        kind: path_kind(&repair_host_path(&host_path)).to_string(),
-        server_name: "localhost".to_string(),
-        public_dir: String::new(),
-    }
 }
 
 fn read_env(project_root: &Path) -> Option<EnvFile> {
@@ -659,7 +619,7 @@ mod tests {
     }
 
     #[test]
-    fn first_site_keeps_source_dir_and_www() {
+    fn all_sites_use_site_keys() {
         let mut sites = vec![
             SiteEntry {
                 id: "Main Site".to_string(),
@@ -684,8 +644,8 @@ mod tests {
         ];
         normalize_sites(&mut sites);
         assert_eq!(sites[0].id, "MainSite");
-        assert_eq!(sites[0].env_key, "SOURCE_DIR");
-        assert_eq!(sites[0].container_path, "/www");
+        assert_eq!(sites[0].env_key, "SITE_MAINSITE");
+        assert_eq!(sites[0].container_path, "/sites/MainSite");
         assert_eq!(sites[0].host_path, "./www");
         assert_eq!(sites[1].env_key, "SITE_MYSHOP");
         assert_eq!(sites[1].container_path, "/sites/my-shop");
@@ -730,7 +690,10 @@ mod tests {
         ];
         normalize_sites(&mut sites);
         let php82 = source_volume_lines(&sites, MountRole::Php, "php82");
-        assert_eq!(php82, vec!["      - ${SOURCE_DIR}:/www/:rw".to_string()]);
+        assert_eq!(
+            php82,
+            vec!["      - ${SITE_MAIN}:/sites/main/:rw".to_string()]
+        );
         let php84 = source_volume_lines(&sites, MountRole::Php, "php84");
         assert_eq!(
             php84,
@@ -738,9 +701,7 @@ mod tests {
         );
         let nginx = source_volume_lines(&sites, MountRole::Nginx, "nginx125");
         assert_eq!(nginx.len(), 2);
-        assert!(source_volume_lines(&[], MountRole::Php, "php82")
-            .iter()
-            .any(|line| line.contains("${SOURCE_DIR}:/www/")));
+        assert!(source_volume_lines(&[], MountRole::Php, "php82").is_empty());
     }
 
     #[test]
@@ -772,14 +733,14 @@ mod tests {
         save_sites(root, &sites).unwrap();
         let raw = fs::read_to_string(super::sites_path(root)).unwrap();
         assert!(!raw.contains("D:/code"));
-        assert!(raw.contains("SOURCE_DIR"));
+        assert!(raw.contains("SITE_MAIN"));
 
         sync_managed_confs(root, &sites).unwrap();
         let conf_path = root.join("services/nginx125/conf.d/main.conf");
         assert!(conf_path.exists());
         assert!(fs::read_to_string(&conf_path)
             .unwrap()
-            .contains("root /www;"));
+            .contains("root /sites/main;"));
 
         fs::write(
             root.join("services/nginx125/conf.d/custom.conf"),
@@ -877,7 +838,7 @@ mod tests {
 
     #[test]
     fn old_site_record_without_public_dir_deserializes() {
-        let json = r#"{"sites":[{"id":"main","server_name":"localhost","env_key":"SOURCE_DIR","container_path":"/www","nginx_service":"nginx125","php_service":"php82"}]}"#;
+        let json = r#"{"sites":[{"id":"main","server_name":"localhost","env_key":"SITE_MAIN","container_path":"/sites/main","nginx_service":"nginx125","php_service":"php82"}]}"#;
         let file: UserSitesFile = serde_json::from_str(json).unwrap();
         assert_eq!(file.sites[0].public_dir, "");
     }

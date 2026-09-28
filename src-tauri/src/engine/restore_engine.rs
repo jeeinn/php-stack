@@ -168,31 +168,6 @@ where
     conflicts
 }
 
-/// 旧备份没有 `sites` 时，用 `.env` 的 `SOURCE_DIR` 合成一条默认站。
-fn fill_missing_sites(manifest: &mut BackupManifest, env_text: Option<&str>) {
-    if !manifest.sites.is_empty() {
-        return;
-    }
-    let host = env_text
-        .and_then(|text| EnvFile::parse(text).ok())
-        .and_then(|env| {
-            env.get(site_manager::PRIMARY_ENV_KEY)
-                .map(|value| value.to_string())
-        })
-        .unwrap_or_else(|| "./www".to_string());
-    manifest.sites = vec![site_manager::synthetic_site(&host)];
-}
-
-fn read_entry_string<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
-    name: &str,
-) -> Option<String> {
-    let mut file = archive.by_name(name).ok()?;
-    let mut text = String::new();
-    file.read_to_string(&mut text).ok()?;
-    Some(text)
-}
-
 fn ensure_absolute_paths_mapped(
     sites: &[ManifestSite],
     overrides: &[SitePathOverride],
@@ -289,10 +264,8 @@ impl RestoreEngine {
         validate_archive_entry_names(&mut archive)?;
 
         // Read manifest.json
-        let mut manifest = Self::read_manifest_from_archive(&mut archive)?;
+        let manifest = Self::read_manifest_from_archive(&mut archive)?;
         check_manifest_version(&manifest.version)?;
-        let env_text = read_entry_string(&mut archive, ".env");
-        fill_missing_sites(&mut manifest, env_text.as_deref());
 
         // Count total files in ZIP (excluding manifest.json itself)
         let file_count = (0..archive.len())
@@ -365,10 +338,8 @@ impl RestoreEngine {
 
         // Step 1: Read manifest
         Self::emit_progress(app_handle, "restore.progress.steps.parsing", 5);
-        let mut manifest = Self::read_manifest_from_archive(&mut archive)?;
+        let manifest = Self::read_manifest_from_archive(&mut archive)?;
         check_manifest_version(&manifest.version)?;
-        let env_text = read_entry_string(&mut archive, ".env");
-        fill_missing_sites(&mut manifest, env_text.as_deref());
         ensure_absolute_paths_mapped(&manifest.sites, path_overrides)?;
 
         // Step 2: Extract .env

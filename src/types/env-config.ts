@@ -88,12 +88,11 @@ export interface CustomServiceForm {
 
 export interface EnvConfig {
   services: ServiceEntry[]
-  source_dir: string
   timezone: string
   mysql_root_password?: string // MySQL root密码（可选）
   puid?: number // Host user ID for file permissions (Linux only)
   pgid?: number // Host group ID for file permissions (Linux only)
-  /** 启用 Nginx 时的站点。空数组表示只有一条 SOURCE_DIR 挂载。 */
+  /** 启用 Nginx 时的站点。空数组表示不挂代码卷。 */
   sites?: SiteEntry[]
 }
 

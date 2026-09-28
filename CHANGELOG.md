@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### ⚠ 破坏性变更
+- **站点挂载统一为 `SITE_*`**：移除 `SOURCE_DIR` 与默认 `/www` 代码卷；每站一律 `SITE_{ID}` → `/sites/{id}`。无站点时不挂源码。请重新「应用配置」。Nginx 模板 `default.conf` 默认整段注释，由托管站点 conf 提供 server。
+
 ### ✨ 新增
 - **服务目录（Service Catalog）**：内置 `service_catalog.json` + 工作区 `.user-config/custom_services.json` 合并；生成按 `generator: php|nginx|image` 路由，服务 kind 为字符串（兼容历史 `PHP`/`MySQL` 序列化）
 - **可选中间件**：MySQL 与 Redis 对齐——可删到 0；新工作区默认不启用 MySQL；未选中不写 `.env` / compose

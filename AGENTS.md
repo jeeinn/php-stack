@@ -119,7 +119,7 @@
 
 ### 1. Nginx 站点管理
 - `site_manager.rs` + 环境配置页站点面板：多站点 `server_name`、挂载路径、`public_dir`、绑定 PHP/Nginx 服务
-- 生成托管 Nginx conf 与 compose 卷映射；元数据 `.user-config/sites.json`
+- 生成托管 Nginx conf 与 compose 卷映射（一律 `SITE_{ID}` → `/sites/{id}`；无站点则不挂代码卷）；元数据 `.user-config/sites.json`
 
 ### 2. 跨机恢复与备份增强
 - 恢复预览支持站点路径覆写；备份选项持久化（`.user-config/backup.json`）

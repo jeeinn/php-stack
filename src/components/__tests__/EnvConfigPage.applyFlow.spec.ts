@@ -49,7 +49,6 @@ const baseInvoke: Record<string, unknown> = {
       { service_type: 'php', version: 'php82', host_port: 9000 },
       { service_type: 'mysql', version: 'mysql80', host_port: 3306 },
     ],
-    source_dir: './www',
     timezone: 'Asia/Shanghai',
   },
   get_workspace_info: { workspace_path: '/test/workspace' },

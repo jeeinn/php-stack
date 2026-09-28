@@ -319,9 +319,7 @@ fn ensure_custom_version_for_service(
 
     // 已有 auto-created custom 时锁定 version_id：编辑换 id 不会再新建孤儿条目
     let autos = list_auto_created_custom_ids(&manager, &descriptor.id);
-    let vid = if autos.is_empty() {
-        requested
-    } else if autos.iter().any(|id| id == &requested) {
+    let vid = if autos.is_empty() || autos.iter().any(|id| id == &requested) {
         requested
     } else {
         autos[0].clone()
@@ -505,14 +503,9 @@ mod tests {
         assert_eq!(first, "mongodbdefault");
 
         // 再次保存时改成另一个 version_id → 应锁定到原 auto 条目，不新建孤儿
-        let second = ensure_custom_version_for_service(
-            tmp.path(),
-            &desc,
-            "mongo:8",
-            Some("mongo8"),
-            27018,
-        )
-        .unwrap();
+        let second =
+            ensure_custom_version_for_service(tmp.path(), &desc, "mongo:8", Some("mongo8"), 27018)
+                .unwrap();
         assert_eq!(second, "mongodbdefault");
 
         let manager = UserOverrideManager::new(tmp.path());

@@ -487,6 +487,29 @@ pub async fn apply_env_config(
 
 // ==================== Phase 3: 镜像探测 / 拉取 / 配置提取 ====================
 
+/// 从配置收集待探测镜像 tag（按 tag 去重，避免同镜像多服务重复 docker images / 弹窗重复项）
+fn collect_unique_image_tags(
+    config: &EnvConfig,
+    override_manager: &UserOverrideManager,
+    manifest: &VersionManifest,
+) -> Vec<String> {
+    use crate::engine::config_generator::resolve_service_image_tag;
+    use crate::engine::service_catalog::normalize_service_kind;
+    use std::collections::BTreeSet;
+
+    let mut tags = BTreeSet::new();
+    for service in &config.services {
+        let kind = normalize_service_kind(&service.service_type);
+        tags.insert(resolve_service_image_tag(
+            override_manager,
+            manifest,
+            &kind,
+            &service.version,
+        ));
+    }
+    tags.into_iter().collect()
+}
+
 /// 按 EnvConfig 推算所有服务的 image_tag 并批量探测本地存在性
 ///
 /// 前端流程：
@@ -496,20 +519,10 @@ pub async fn apply_env_config(
 /// 4. 拉取完成 → 调 `apply_env_config`（此时镜像已存在，extract 路径生效）
 #[tauri::command]
 pub fn check_service_images_presence(config: EnvConfig) -> Result<Vec<ImageStatus>, String> {
-    use crate::engine::config_generator::resolve_service_image_tag;
-    use crate::engine::service_catalog::normalize_service_kind;
-
     let project_root = get_project_root()?;
     let override_manager = UserOverrideManager::new(&project_root);
     let manifest = VersionManifest::new();
-    let mut tags: Vec<String> = Vec::new();
-
-    for service in &config.services {
-        let kind = normalize_service_kind(&service.service_type);
-        let tag = resolve_service_image_tag(&override_manager, &manifest, &kind, &service.version);
-        tags.push(tag);
-    }
-
+    let tags = collect_unique_image_tags(&config, &override_manager, &manifest);
     Ok(ConfigExtractor::check_images_batch(&tags))
 }
 
@@ -1529,11 +1542,55 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
 
 #[cfg(test)]
 mod tests {
+    use super::collect_unique_image_tags;
     use super::parse_env_to_services;
     use super::run_blocking_command;
     use super::PullImageResult;
+    use crate::engine::config_generator::{EnvConfig, ServiceEntry};
     use crate::engine::env_parser::EnvFile;
+    use crate::engine::user_override_manager::UserOverrideManager;
     use crate::engine::version_manifest::VersionManifest;
+
+    #[test]
+    fn test_collect_unique_image_tags_dedupes_same_tag() {
+        // 两条服务解析到同一 image_tag 时只保留一条（不依赖 docker）
+        let tmp = tempfile::tempdir().unwrap();
+        let override_manager = UserOverrideManager::new(tmp.path());
+        let manifest = VersionManifest::new();
+        let tag = resolve_expected_mysql80_tag(&manifest);
+
+        let config = EnvConfig {
+            services: vec![
+                ServiceEntry {
+                    service_type: "mysql".to_string(),
+                    version: "mysql80".to_string(),
+                    host_port: 3306,
+                    extensions: None,
+                },
+                ServiceEntry {
+                    service_type: "mysql".to_string(),
+                    version: "mysql80".to_string(),
+                    host_port: 3307,
+                    extensions: None,
+                },
+            ],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+
+        let tags = collect_unique_image_tags(&config, &override_manager, &manifest);
+        assert_eq!(tags, vec![tag]);
+    }
+
+    fn resolve_expected_mysql80_tag(manifest: &VersionManifest) -> String {
+        manifest
+            .get_entry("mysql", "mysql80")
+            .expect("builtin mysql80")
+            .image_tag
+            .clone()
+    }
 
     /// R3: 同步阻塞调用统一走 `run_blocking_command`。
     /// 「在阻塞线程池执行」由 tokio 保证，这里锁住的是对外契约：

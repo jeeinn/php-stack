@@ -176,6 +176,7 @@ impl ConfigGenerator {
         let override_manager = project_root.map(UserOverrideManager::new);
         let mut port_services: HashMap<u16, Vec<String>> = HashMap::new();
         let mut kind_counts: HashMap<String, usize> = HashMap::new();
+        let mut seen_service_dirs: HashSet<String> = HashSet::new();
 
         for service in &config.services {
             let kind = Self::service_kind(service);
@@ -199,6 +200,14 @@ impl ConfigGenerator {
             let Some(entry) = resolved else {
                 return Err(format!("Unknown version id: {}", service.version));
             };
+
+            // compose 服务键与 .env 前缀都落在 service_dir 上；重复会互相覆盖
+            if !seen_service_dirs.insert(entry.service_dir.clone()) {
+                return Err(format!(
+                    "Duplicate service version: {} ({})",
+                    service.version, entry.service_dir
+                ));
+            }
 
             *kind_counts.entry(kind.clone()).or_default() += 1;
 
@@ -1878,6 +1887,34 @@ APP_VERSION=9
         };
         let err = ConfigGenerator::validate(&config, None).unwrap_err();
         assert!(err.contains("host_port must be > 0"));
+    }
+
+    #[test]
+    fn test_validate_rejects_duplicate_service_dir() {
+        // PHP 允许多实例，但同一 version/service_dir 重复会让 compose 键互相覆盖
+        let config = EnvConfig {
+            services: vec![
+                ServiceEntry {
+                    service_type: "php".to_string(),
+                    version: "php82".to_string(),
+                    host_port: 9000,
+                    extensions: None,
+                },
+                ServiceEntry {
+                    service_type: "php".to_string(),
+                    version: "php82".to_string(),
+                    host_port: 9001,
+                    extensions: None,
+                },
+            ],
+            source_dir: "./www".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
+            mysql_root_password: None,
+            sites: vec![],
+        };
+        let err = ConfigGenerator::validate(&config, None).unwrap_err();
+        assert!(err.contains("Duplicate service version"));
+        assert!(err.contains("php82"));
     }
 
     #[test]

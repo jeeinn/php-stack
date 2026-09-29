@@ -170,6 +170,24 @@ impl ConfigGenerator {
             })
     }
 
+    /// 指纹与 build args 共用的有效 PUID/PGID：优先读工作区 `.env`。
+    /// 缺省时用 `(1000, 1000)`，与 compose `${PUID:-1000}` / `${PGID:-1000}` 对齐
+    /// （勿再探测宿主机，否则 Linux 上指纹 UID 与默认 build arg 可能不一致）。
+    pub(crate) fn effective_uid_gid(project_root: &Path) -> (u32, u32) {
+        let env_path = project_root.join(".env");
+        if let Ok(content) = std::fs::read_to_string(&env_path) {
+            if let Ok(env) = EnvFile::parse(&content) {
+                let map = env.to_map();
+                if let (Some(u), Some(g)) = (map.get("PUID"), map.get("PGID")) {
+                    if let (Ok(uid), Ok(gid)) = (u.parse::<u32>(), g.parse::<u32>()) {
+                        return (uid, gid);
+                    }
+                }
+            }
+        }
+        (1000, 1000)
+    }
+
     /// 指纹用的有效镜像源值（与 compose build args 默认值对齐）
     pub(crate) fn effective_mirror_values(project_root: &Path) -> (String, String, String) {
         let mut apt = "deb.debian.org".to_string();
@@ -583,7 +601,7 @@ impl ConfigGenerator {
         let catalog = ServiceCatalog::merged(project_root);
         let override_manager = UserOverrideManager::new(project_root);
         let manifest = VersionManifest::new();
-        let (puid, pgid) = detect_host_uid_gid().unwrap_or((1000, 1000));
+        let (puid, pgid) = Self::effective_uid_gid(project_root);
         let (apt_mirror, composer_mirror, github_proxy) =
             Self::effective_mirror_values(project_root);
         let mut lines: Vec<String> = Vec::new();
@@ -2176,6 +2194,43 @@ APP_VERSION=9
         assert!(
             !mysql_block.contains("pull_policy: never"),
             "mysql 不应有 pull_policy:never，实际段落:\n{mysql_block}"
+        );
+    }
+
+    #[test]
+    fn test_generate_compose_timezone_does_not_change_fingerprint_image() {
+        // TZ 只在运行时 environment，不进指纹；仅改 timezone 时 image: 行应一致
+        let mut a = make_basic_config();
+        a.timezone = "Asia/Shanghai".into();
+        let mut b = make_basic_config();
+        b.timezone = "UTC".into();
+        let root = std::env::temp_dir();
+        let ca = ConfigGenerator::generate_compose(&a, &root);
+        let cb = ConfigGenerator::generate_compose(&b, &root);
+        let image_line = |compose: &str, svc: &str| -> String {
+            compose
+                .split(&format!("\n  {svc}:\n"))
+                .nth(1)
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| l.trim_start().starts_with("image: php-stack/"))
+                        .map(|l| l.trim().to_string())
+                })
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            image_line(&ca, "php82"),
+            image_line(&cb, "php82"),
+            "仅改 TZ 不应改变 PHP 指纹 image"
+        );
+        assert_eq!(
+            image_line(&ca, "nginx125"),
+            image_line(&cb, "nginx125"),
+            "仅改 TZ 不应改变 Nginx 指纹 image"
+        );
+        assert!(
+            !image_line(&ca, "php82").is_empty(),
+            "应写出 php 指纹 image"
         );
     }
 

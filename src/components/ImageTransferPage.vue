@@ -41,9 +41,18 @@ function roleLabel(role: string): string {
 
 function noteLabel(note: string | null | undefined): string {
   if (!note) return '';
-  const key = `images.notes.${note}`;
-  const translated = t(key);
-  return translated === key ? note : translated;
+  switch (note) {
+    case 'missing_local':
+      return t('images.notes.missing_local');
+    case 'base_missing':
+      return t('images.notes.base_missing');
+    case 'built_missing_will_build_on_target':
+      return t('images.notes.built_missing_will_build_on_target');
+    case 'legacy_cache_available':
+      return t('images.notes.legacy_cache_available');
+    default:
+      return note;
+  }
 }
 
 function toggle(refName: string, present: boolean) {
@@ -92,8 +101,19 @@ async function handleExport() {
   exporting.value = true;
   progress.value = { step: 'images.progress.collect', percentage: 0 };
   try {
-    await exportWorkspaceImages(savePath, [...selected.value]);
-    showToast(t('images.toast.exportSuccess', { path: savePath }), 'success');
+    const result = await exportWorkspaceImages(savePath, [...selected.value]);
+    if (result.skipped.length > 0) {
+      showToast(
+        t('images.toast.exportPartial', {
+          path: result.tar_path,
+          exported: result.exported.length,
+          skipped: result.skipped.length,
+        }),
+        'info',
+      );
+    } else {
+      showToast(t('images.toast.exportSuccess', { path: result.tar_path }), 'success');
+    }
     progress.value = { step: 'images.progress.done', percentage: 100 };
   } catch (e) {
     showToast(normalizeError(e), 'error');
@@ -142,7 +162,7 @@ onUnmounted(() => {
     <header class="mb-6">
       <h1 class="text-3xl font-bold text-slate-900 dark:text-slate-200">{{ $t('images.title') }}</h1>
       <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">{{ $t('images.subtitle') }}</p>
-      <p class="text-amber-700 dark:text-amber-400/90 text-xs mt-2">{{ $t('images.hint') }}</p>
+      <p class="text-amber-700 dark:text-amber-400/90 text-xs mt-2">{{ $t('images.hint', { action: $t('envConfig.apply') }) }}</p>
     </header>
 
     <div class="flex-1 overflow-y-auto pr-2 space-y-6">
@@ -254,7 +274,7 @@ onUnmounted(() => {
 
       <section v-if="importResult" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
         <h2 class="text-lg font-bold mb-2 text-slate-900 dark:text-slate-200">{{ $t('images.importResult.title') }}</h2>
-        <p class="text-xs text-slate-500 mb-3">{{ $t('images.importResult.hint') }}</p>
+        <p class="text-xs text-slate-500 mb-3">{{ $t('images.importResult.hint', { action: $t('envConfig.apply') }) }}</p>
         <ul class="text-xs font-mono text-slate-700 dark:text-slate-300 space-y-1 max-h-40 overflow-y-auto">
           <li v-for="refName in importResult" :key="refName">{{ refName }}</li>
         </ul>

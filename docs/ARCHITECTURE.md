@@ -233,9 +233,9 @@ start_environment
 与配置 ZIP **分离**：MigrationPage「镜像包」Tab → `list_workspace_images` / `export_workspace_images` / `import_workspace_images`。
 
 - **Compose**：PHP/Nginx 同时写 `image: php-stack/{service_dir}:{fingerprint}` 与 `pull_policy: never`（已有工作区需重新应用配置）。指纹计入 base tag、扩展、PUID/PGID、镜像源代理、Dockerfile 哈希；不计 TZ/端口/站点/php.ini。
-- **导出**：收集 image 型 tag、构建产物、FROM 基础镜像；缺失构建产物时可从 `php-stack-{dir}` 或运行中容器镜像 retag；`docker save -o` 写临时文件再 rename；旁路 `{stem}.manifest.json`。
+- **导出**：收集 image 型 tag、构建产物、FROM 基础镜像；缺失的构建指纹 tag **不会**从旧名 retag（避免 tag 说谎）；旧 `php-stack-{dir}` / 运行中容器镜像仅作 `build.cache_from`；`docker save -o` 写临时文件再 rename；旁路 `{stem}.manifest.json`。
 - **导入**：`docker load -i`；进度事件 `image-transfer-progress`。
-- **启动复用**：目标指纹已存在 → 仅 `up -d`；缺失 → 临时 override 写入 `build.cache_from` 后 `compose build`（Compose CLI 无 `--cache-from`），尽量命中已导入层（改扩展后新扩展安装仍可能要网）。
+- **启动复用**：目标指纹已存在 → 仅 `up -d`；缺失 → 临时 override 写入已校验存在的 `build.cache_from` 后 `compose build`（Compose CLI 无 `--cache-from`），尽量命中已导入层（改扩展后新扩展安装仍可能要网）。
 
 ## 6. 服务模板体系
 

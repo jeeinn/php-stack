@@ -9,10 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::config_extractor::{ConfigExtractor, ImageStatus};
-use super::config_generator::{
-    resolve_service_image_tag, ConfigGenerator, EnvConfig,
-};
+use super::config_extractor::{DockerImageIndex, ImageStatus};
+use super::config_generator::{ConfigGenerator, EnvConfig};
 use super::image_fingerprint::{
     self, built_image_ref, compose_default_image_name, nginx_fingerprint, php_fingerprint,
     NginxFingerprintInput, PhpFingerprintInput, BUILT_IMAGE_PREFIX,
@@ -44,11 +42,11 @@ pub struct WorkspaceImageEntry {
     pub service_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
-    /// 本地是否已有可导出源（目标 tag 或可 retag 的候选）
+    /// 本地是否已有指纹目标 tag（可导出）；legacy 仅作 cache 提示，不算 present
     pub present: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<String>,
-    /// 若目标 tag 不存在但找到候选源，记录源引用（导出前会 docker tag）
+    /// 指纹 tag 缺失时，本地可用的旧 compose 名 / 容器镜像（仅 cache_from，不 retag）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_ref: Option<String>,
     /// UI 提示（如仅有 base、目标机需 build）
@@ -87,6 +85,39 @@ pub struct ImageImportResult {
     pub message: String,
 }
 
+/// 导出结果（含跳过项，避免 UI 误报「全部成功」）
+#[derive(Debug, Clone, Serialize)]
+pub struct ImageExportResult {
+    pub exported: Vec<String>,
+    pub skipped: Vec<String>,
+    pub tar_path: String,
+    pub manifest_path: String,
+}
+
+/// `add_built_entry` 入参（避免过多位置参数）
+struct BuiltEntryArgs<'a> {
+    built_ref: &'a str,
+    service_dir: &'a str,
+    kind: &'a str,
+    fingerprint: Option<String>,
+    container_images: &'a BTreeMap<String, String>,
+    index: &'a DockerImageIndex,
+    probe_docker: bool,
+}
+
+/// `docker ps` 可能给出 `sha256:…` / 短 ID，不能当作 cache_from 引用
+fn is_image_id_ref(ref_name: &str) -> bool {
+    let lower = ref_name.to_ascii_lowercase();
+    if lower.starts_with("sha256:") {
+        return true;
+    }
+    // 无仓库分隔符的纯 hex（短/长 image id）
+    !ref_name.contains('/')
+        && !ref_name.contains(':')
+        && ref_name.len() >= 12
+        && ref_name.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 pub struct ImageTransferEngine;
 
 impl ImageTransferEngine {
@@ -107,10 +138,16 @@ impl ImageTransferEngine {
         let catalog = ServiceCatalog::merged(project_root);
         let override_manager = UserOverrideManager::new(project_root);
         let manifest = VersionManifest::new();
-        let (puid, pgid) = detect_uid_gid();
+        // 与 compose build args / generate_compose 指纹同源：优先 .env 的 PUID/PGID
+        let (puid, pgid) = ConfigGenerator::effective_uid_gid(project_root);
         let (apt_mirror, composer_mirror, github_proxy) =
             ConfigGenerator::effective_mirror_values(project_root);
 
+        let index = if probe_docker {
+            DockerImageIndex::load()
+        } else {
+            DockerImageIndex::empty()
+        };
         let container_images = if probe_docker {
             Self::ps_container_image_map()
         } else {
@@ -124,20 +161,20 @@ impl ImageTransferEngine {
             let Some(desc) = catalog.get(&kind) else {
                 continue;
             };
-            let entry =
-                ConfigGenerator::lookup_version_entry(&override_manager, &manifest, &kind, &service.version);
-            let service_dir = entry.service_dir.clone();
-            let base_image = resolve_service_image_tag(
+            // 与 generate_compose 同源：lookup_version_entry.image_tag（兜底为 id）
+            let entry = ConfigGenerator::lookup_version_entry(
                 &override_manager,
                 &manifest,
                 &kind,
                 &service.version,
             );
+            let service_dir = entry.service_dir.clone();
+            let base_image = entry.image_tag.clone();
 
             match desc.generator {
                 GeneratorKind::Image => {
                     let present_info = if probe_docker {
-                        ConfigExtractor::check_image_present(&base_image)
+                        index.check(&base_image)
                     } else {
                         ImageStatus::Missing {
                             tag: base_image.clone(),
@@ -191,16 +228,20 @@ impl ImageTransferEngine {
                         &base_image,
                         &service_dir,
                         &kind,
+                        &index,
                         probe_docker,
                     );
                     Self::add_built_entry(
                         &mut by_ref,
-                        &built_ref,
-                        &service_dir,
-                        &kind,
-                        Some(fp),
-                        &container_images,
-                        probe_docker,
+                        BuiltEntryArgs {
+                            built_ref: &built_ref,
+                            service_dir: &service_dir,
+                            kind: &kind,
+                            fingerprint: Some(fp),
+                            container_images: &container_images,
+                            index: &index,
+                            probe_docker,
+                        },
                     );
                 }
                 GeneratorKind::Nginx => {
@@ -222,16 +263,20 @@ impl ImageTransferEngine {
                         &base_image,
                         &service_dir,
                         &kind,
+                        &index,
                         probe_docker,
                     );
                     Self::add_built_entry(
                         &mut by_ref,
-                        &built_ref,
-                        &service_dir,
-                        &kind,
-                        Some(fp),
-                        &container_images,
-                        probe_docker,
+                        BuiltEntryArgs {
+                            built_ref: &built_ref,
+                            service_dir: &service_dir,
+                            kind: &kind,
+                            fingerprint: Some(fp),
+                            container_images: &container_images,
+                            index: &index,
+                            probe_docker,
+                        },
                     );
                 }
             }
@@ -245,10 +290,11 @@ impl ImageTransferEngine {
         base_image: &str,
         service_dir: &str,
         kind: &str,
+        index: &DockerImageIndex,
         probe_docker: bool,
     ) {
         let present_info = if probe_docker {
-            ConfigExtractor::check_image_present(base_image)
+            index.check(base_image)
         } else {
             ImageStatus::Missing {
                 tag: base_image.to_string(),
@@ -278,51 +324,43 @@ impl ImageTransferEngine {
         );
     }
 
+    /// 仅当指纹 tag 真实存在时标记 present。
+    /// 旧 compose 名 / 运行中容器镜像只记入 note + source_ref 作 cache 提示，绝不 retag 到指纹 tag。
     fn add_built_entry(
         by_ref: &mut BTreeMap<String, WorkspaceImageEntry>,
-        built_ref: &str,
-        service_dir: &str,
-        kind: &str,
-        fingerprint: Option<String>,
-        container_images: &BTreeMap<String, String>,
-        probe_docker: bool,
+        args: BuiltEntryArgs<'_>,
     ) {
         let mut present = false;
         let mut size = None;
         let mut source_ref = None;
         let mut note = None;
 
-        if probe_docker {
-            match ConfigExtractor::check_image_present(built_ref) {
+        if args.probe_docker {
+            match args.index.check(args.built_ref) {
                 ImageStatus::Present { size: s, .. } => {
                     present = true;
                     size = s;
                 }
                 ImageStatus::Missing { .. } => {
-                    // 回退：compose 历史名 / 运行中容器镜像
                     let candidates = [
-                        compose_default_image_name(service_dir),
-                        container_images
-                            .get(&format!("ps-{service_dir}"))
+                        compose_default_image_name(args.service_dir),
+                        args.container_images
+                            .get(&format!("ps-{}", args.service_dir))
                             .cloned()
                             .unwrap_or_default(),
                     ];
                     for cand in candidates {
-                        if cand.is_empty() {
+                        if cand.is_empty() || is_image_id_ref(&cand) {
                             continue;
                         }
-                        match ConfigExtractor::check_image_present(&cand) {
-                            ImageStatus::Present { size: s, .. } => {
-                                present = true;
-                                size = s;
-                                source_ref = Some(cand);
-                                note = Some("retag_from_legacy".into());
-                                break;
-                            }
-                            ImageStatus::Missing { .. } => {}
+                        if matches!(args.index.check(&cand), ImageStatus::Present { .. }) {
+                            // 仅作 cache 候选提示，不当作「指纹镜像已就绪」
+                            source_ref = Some(cand);
+                            note = Some("legacy_cache_available".into());
+                            break;
                         }
                     }
-                    if !present {
+                    if note.is_none() {
                         note = Some("built_missing_will_build_on_target".into());
                     }
                 }
@@ -332,11 +370,11 @@ impl ImageTransferEngine {
         Self::upsert(
             by_ref,
             WorkspaceImageEntry {
-                ref_name: built_ref.to_string(),
+                ref_name: args.built_ref.to_string(),
                 role: ImageRole::Built,
-                service_dir: service_dir.to_string(),
-                service_kind: kind.to_string(),
-                fingerprint,
+                service_dir: args.service_dir.to_string(),
+                service_kind: args.kind.to_string(),
+                fingerprint: args.fingerprint,
                 present,
                 size,
                 source_ref,
@@ -348,8 +386,8 @@ impl ImageTransferEngine {
     fn upsert(map: &mut BTreeMap<String, WorkspaceImageEntry>, entry: WorkspaceImageEntry) {
         match map.get(&entry.ref_name) {
             Some(existing) if existing.present && !entry.present => {}
-            Some(existing) if existing.role == ImageRole::Built && entry.role != ImageRole::Built => {
-            }
+            Some(existing)
+                if existing.role == ImageRole::Built && entry.role != ImageRole::Built => {}
             _ => {
                 map.insert(entry.ref_name.clone(), entry);
             }
@@ -395,9 +433,7 @@ impl ImageTransferEngine {
         save_path: &str,
         selected_refs: Option<Vec<String>>,
         app_handle: Option<&tauri::AppHandle>,
-    ) -> Result<(), String> {
-        use tauri::Emitter;
-
+    ) -> Result<ImageExportResult, String> {
         Self::emit_progress(app_handle, "images.progress.collect", 5);
         let entries = Self::list_workspace_images(project_root, config)?;
         if entries.is_empty() {
@@ -418,50 +454,44 @@ impl ImageTransferEngine {
             return Err("no images selected for export".into());
         }
 
-        // 仅导出本地存在的；built 缺失时若有 base 仍导出 base
-        let missing: Vec<_> = to_export
+        let skipped: Vec<String> = to_export
             .iter()
             .filter(|e| !e.present)
             .map(|e| e.ref_name.clone())
             .collect();
-        if !missing.is_empty() {
-            // 允许只导出 present 的子集，但若全部缺失则失败
-            to_export.retain(|e| e.present);
-            if to_export.is_empty() {
-                return Err(format!(
-                    "selected images are not present locally: {}",
-                    missing.join(", ")
-                ));
-            }
+        to_export.retain(|e| e.present);
+        if to_export.is_empty() {
+            return Err(format!(
+                "selected images are not present locally: {}",
+                skipped.join(", ")
+            ));
+        }
+        if !skipped.is_empty() {
             app_log!(
                 warn,
                 "engine::image_transfer",
                 "Skipping missing images: {}",
-                missing.join(", ")
+                skipped.join(", ")
             );
         }
 
-        Self::emit_progress(app_handle, "images.progress.retag", 15);
-        for entry in &to_export {
-            if let Some(src) = &entry.source_ref {
-                if src != &entry.ref_name {
-                    Self::docker_tag(src, &entry.ref_name)?;
-                }
-            }
-        }
-
         let refs: Vec<String> = to_export.iter().map(|e| e.ref_name.clone()).collect();
-        let save_path = PathBuf::from(save_path);
-        let parent = save_path
+        let save_path_buf = PathBuf::from(save_path);
+        let parent = save_path_buf
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let stem = save_path
+        let stem = save_path_buf
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("php-stack-images");
         let tmp_path = parent.join(format!("{stem}.tmp.tar"));
         let manifest_path = parent.join(format!("{stem}.manifest.json"));
+
+        // 失败时尽量清掉可能很大的临时 tar
+        let cleanup_tmp = |tmp: &Path| {
+            let _ = fs::remove_file(tmp);
+        };
 
         Self::emit_progress(app_handle, "images.progress.save", 30);
         app_log!(
@@ -482,15 +512,13 @@ impl ImageTransferEngine {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000200);
         }
-        let status = cmd
-            .status()
-            .map_err(|e| format!("failed to start docker save: {e}"))?;
+        let status = cmd.status().map_err(|e| {
+            cleanup_tmp(&tmp_path);
+            format!("failed to start docker save: {e}")
+        })?;
         if !status.success() {
-            let _ = fs::remove_file(&tmp_path);
-            return Err(format!(
-                "docker save failed (exit {:?})",
-                status.code()
-            ));
+            cleanup_tmp(&tmp_path);
+            return Err(format!("docker save failed (exit {:?})", status.code()));
         }
 
         Self::emit_progress(app_handle, "images.progress.manifest", 85);
@@ -507,30 +535,39 @@ impl ImageTransferEngine {
                 })
                 .collect(),
         };
-        let manifest_json = serde_json::to_string_pretty(&manifest)
-            .map_err(|e| format!("failed to serialize image manifest: {e}"))?;
-        fs::write(&manifest_path, manifest_json)
-            .map_err(|e| format!("failed to write image manifest: {e}"))?;
-
-        // rename 覆盖目标
-        if save_path.exists() {
-            fs::remove_file(&save_path)
-                .map_err(|e| format!("failed to replace existing tar: {e}"))?;
+        let manifest_json = match serde_json::to_string_pretty(&manifest) {
+            Ok(j) => j,
+            Err(e) => {
+                cleanup_tmp(&tmp_path);
+                return Err(format!("failed to serialize image manifest: {e}"));
+            }
+        };
+        if let Err(e) = fs::write(&manifest_path, manifest_json) {
+            cleanup_tmp(&tmp_path);
+            return Err(format!("failed to write image manifest: {e}"));
         }
-        fs::rename(&tmp_path, &save_path)
-            .map_err(|e| format!("failed to finalize tar ({}): {e}", tmp_path.display()))?;
+
+        if save_path_buf.exists() {
+            if let Err(e) = fs::remove_file(&save_path_buf) {
+                cleanup_tmp(&tmp_path);
+                return Err(format!("failed to replace existing tar: {e}"));
+            }
+        }
+        if let Err(e) = fs::rename(&tmp_path, &save_path_buf) {
+            cleanup_tmp(&tmp_path);
+            return Err(format!(
+                "failed to finalize tar ({}): {e}",
+                tmp_path.display()
+            ));
+        }
 
         Self::emit_progress(app_handle, "images.progress.done", 100);
-        if let Some(handle) = app_handle {
-            let _ = handle.emit(
-                "image-transfer-progress",
-                ImageTransferProgress {
-                    step: "images.progress.done".into(),
-                    percentage: 100,
-                },
-            );
-        }
-        Ok(())
+        Ok(ImageExportResult {
+            exported: refs,
+            skipped,
+            tar_path: save_path_buf.to_string_lossy().to_string(),
+            manifest_path: manifest_path.to_string_lossy().to_string(),
+        })
     }
 
     /// 从 .tar 导入镜像
@@ -615,60 +652,79 @@ impl ImageTransferEngine {
         })
     }
 
-    /// 启动前：解析构建型目标镜像是否缺失，并收集 --cache-from 候选。
-    /// 若仅有历史 compose 名 / 容器镜像，会先 `docker tag` 到指纹名。
+    /// 启动前：解析构建型目标镜像是否缺失，并收集 cache_from 候选。
+    /// **绝不**把旧镜像 retag 到指纹 tag（避免 tag 说谎）；旧镜像只进 cache_from。
     pub fn build_plan_for_start(
         project_root: &Path,
         config: &EnvConfig,
     ) -> Result<StartBuildPlan, String> {
         let entries = Self::collect_entries(project_root, config, true)?;
+        let index = DockerImageIndex::load();
+        Ok(Self::plan_from_entries(&entries, Some(&index)))
+    }
+
+    /// 从已收集条目计算启动构建计划。
+    /// `index` 用于过滤 cache_from：只纳入本地确实存在的引用（`None` 时供单测，信任条目字段）。
+    pub fn plan_from_entries(
+        entries: &[WorkspaceImageEntry],
+        index: Option<&DockerImageIndex>,
+    ) -> StartBuildPlan {
         let mut missing_services: Vec<String> = Vec::new();
         let mut cache_from: BTreeSet<String> = BTreeSet::new();
 
-        for e in &entries {
+        let push_cache = |set: &mut BTreeSet<String>, ref_name: &str| {
+            if ref_name.is_empty() || is_image_id_ref(ref_name) {
+                return;
+            }
+            let candidate = if ref_name.contains(':') {
+                ref_name.to_string()
+            } else {
+                format!("{ref_name}:latest")
+            };
+            match index {
+                Some(idx) => {
+                    if matches!(idx.check(ref_name), ImageStatus::Present { .. })
+                        || matches!(idx.check(&candidate), ImageStatus::Present { .. })
+                    {
+                        set.insert(candidate);
+                    }
+                }
+                None => {
+                    set.insert(candidate);
+                }
+            }
+        };
+
+        for e in entries {
             match e.role {
                 ImageRole::Built => {
-                    let target_present = matches!(
-                        ConfigExtractor::check_image_present(&e.ref_name),
-                        ImageStatus::Present { .. }
-                    );
-                    if !target_present {
-                        if let Some(src) = &e.source_ref {
-                            match Self::docker_tag(src, &e.ref_name) {
-                                Ok(()) => {
-                                    // retag 成功则无需 build
-                                }
-                                Err(err) => {
-                                    app_log!(
-                                        warn,
-                                        "engine::image_transfer",
-                                        "retag before start failed: {err}"
-                                    );
-                                    missing_services.push(e.service_dir.clone());
-                                }
+                    if !e.present {
+                        missing_services.push(e.service_dir.clone());
+                    }
+                    let repo = format!("{BUILT_IMAGE_PREFIX}/{}", e.service_dir);
+                    // 同服务指纹仓库下已有 tag：优先走 index（零额外 CLI）；无 index 时再 docker images
+                    match index {
+                        Some(idx) => {
+                            for tag in idx.refs_for_repository(&repo) {
+                                cache_from.insert(tag);
                             }
-                        } else {
-                            missing_services.push(e.service_dir.clone());
+                        }
+                        None => {
+                            for tag in Self::list_local_tags_for_repo(&repo) {
+                                cache_from.insert(tag);
+                            }
                         }
                     }
-                    for tag in Self::list_local_tags_for_repo(&format!(
-                        "{BUILT_IMAGE_PREFIX}/{}",
-                        e.service_dir
-                    )) {
-                        cache_from.insert(tag);
-                    }
-                    // 旧 compose 默认名也可作 cache（如 php-stack-php82:latest）
+                    // 旧 compose 默认名 / source_ref：仅在本地存在时纳入（index=None 时信任条目）
                     let legacy = compose_default_image_name(&e.service_dir);
-                    if matches!(
-                        ConfigExtractor::check_image_present(&legacy),
-                        ImageStatus::Present { .. }
-                    ) {
-                        cache_from.insert(format!("{legacy}:latest"));
+                    push_cache(&mut cache_from, &legacy);
+                    if let Some(src) = &e.source_ref {
+                        push_cache(&mut cache_from, src);
                     }
                 }
                 ImageRole::Base => {
                     if e.present {
-                        cache_from.insert(e.ref_name.clone());
+                        push_cache(&mut cache_from, &e.ref_name);
                     }
                 }
                 ImageRole::Image => {}
@@ -678,10 +734,10 @@ impl ImageTransferEngine {
         missing_services.sort();
         missing_services.dedup();
 
-        Ok(StartBuildPlan {
+        StartBuildPlan {
             services_needing_build: missing_services,
             cache_from: cache_from.into_iter().collect(),
-        })
+        }
     }
 
     /// 写入临时 compose override，用 `build.cache_from`（CLI 无 `--cache-from` 标志）。
@@ -710,12 +766,7 @@ impl ImageTransferEngine {
 
     fn list_local_tags_for_repo(repo: &str) -> Vec<String> {
         let output = Command::new("docker")
-            .args([
-                "images",
-                "--format",
-                "{{.Repository}}:{{.Tag}}",
-                repo,
-            ])
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}}", repo])
             .output();
         match output {
             Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
@@ -725,27 +776,6 @@ impl ImageTransferEngine {
                 .collect(),
             _ => Vec::new(),
         }
-    }
-
-    fn docker_tag(source: &str, target: &str) -> Result<(), String> {
-        app_log!(
-            info,
-            "engine::image_transfer",
-            "docker tag {} -> {}",
-            source,
-            target
-        );
-        let status = Command::new("docker")
-            .args(["tag", source, target])
-            .status()
-            .map_err(|e| format!("failed to start docker tag: {e}"))?;
-        if !status.success() {
-            return Err(format!(
-                "docker tag {source} {target} failed (exit {:?})",
-                status.code()
-            ));
-        }
-        Ok(())
     }
 
     fn emit_progress(app_handle: Option<&tauri::AppHandle>, step: &str, percentage: u8) {
@@ -767,29 +797,6 @@ impl ImageTransferEngine {
 pub struct StartBuildPlan {
     pub services_needing_build: Vec<String>,
     pub cache_from: Vec<String>,
-}
-
-fn detect_uid_gid() -> (u32, u32) {
-    #[cfg(target_os = "linux")]
-    {
-        let uid = std::process::Command::new("id")
-            .arg("-u")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
-            .unwrap_or(1000);
-        let gid = std::process::Command::new("id")
-            .arg("-g")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
-            .unwrap_or(1000);
-        (uid, gid)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        (1000, 1000)
-    }
 }
 
 #[cfg(test)]
@@ -875,5 +882,154 @@ mod tests {
             .ref_name
             .clone();
         assert_eq!(fa, fb);
+    }
+
+    #[test]
+    fn test_plan_from_entries_needs_build_when_fingerprint_missing() {
+        let entries = vec![
+            WorkspaceImageEntry {
+                ref_name: "php-stack/php82:abc".into(),
+                role: ImageRole::Built,
+                service_dir: "php82".into(),
+                service_kind: "php".into(),
+                fingerprint: Some("abc".into()),
+                present: false,
+                size: None,
+                source_ref: Some("php-stack-php82".into()),
+                note: Some("legacy_cache_available".into()),
+            },
+            WorkspaceImageEntry {
+                ref_name: "php:8.2-fpm".into(),
+                role: ImageRole::Base,
+                service_dir: "php82".into(),
+                service_kind: "php".into(),
+                fingerprint: None,
+                present: true,
+                size: Some("691MB".into()),
+                source_ref: None,
+                note: None,
+            },
+        ];
+        // index=None：单测信任条目字段，不探 docker
+        let plan = ImageTransferEngine::plan_from_entries(&entries, None);
+        assert_eq!(plan.services_needing_build, vec!["php82".to_string()]);
+        // 旧镜像只进 cache，不会被当成「已就绪」而跳过 build
+        assert!(
+            plan.cache_from
+                .iter()
+                .any(|c| c.contains("php-stack-php82"))
+                || plan.cache_from.iter().any(|c| c == "php:8.2-fpm"),
+            "cache_from 应包含 base 或 legacy，实际: {:?}",
+            plan.cache_from
+        );
+    }
+
+    #[test]
+    fn test_plan_from_entries_filters_cache_via_index() {
+        let entries = vec![
+            WorkspaceImageEntry {
+                ref_name: "php-stack/php82:abc".into(),
+                role: ImageRole::Built,
+                service_dir: "php82".into(),
+                service_kind: "php".into(),
+                fingerprint: Some("abc".into()),
+                present: false,
+                size: None,
+                source_ref: Some("sha256:deadbeefdeadbeefdeadbeefdeadbeef".into()),
+                note: Some("legacy_cache_available".into()),
+            },
+            WorkspaceImageEntry {
+                ref_name: "php:8.2-fpm".into(),
+                role: ImageRole::Base,
+                service_dir: "php82".into(),
+                service_kind: "php".into(),
+                fingerprint: None,
+                present: true,
+                size: None,
+                source_ref: None,
+                note: None,
+            },
+        ];
+        // 空 index：legacy / sha256 / 未登记 base 均不得进入 cache_from
+        let empty = DockerImageIndex::empty();
+        let plan = ImageTransferEngine::plan_from_entries(&entries, Some(&empty));
+        assert_eq!(plan.services_needing_build, vec!["php82".to_string()]);
+        assert!(
+            plan.cache_from.is_empty(),
+            "空 index 时不应塞入不存在的 cache 源，实际: {:?}",
+            plan.cache_from
+        );
+
+        // 仅 base + 同仓库旧指纹存在：应过滤掉 sha256 / 缺失的 legacy
+        let idx = DockerImageIndex::from_refs(&["php:8.2-fpm", "php-stack/php82:oldfp"]);
+        let plan2 = ImageTransferEngine::plan_from_entries(&entries, Some(&idx));
+        assert!(plan2.cache_from.iter().any(|c| c == "php:8.2-fpm"));
+        assert!(plan2
+            .cache_from
+            .iter()
+            .any(|c| c == "php-stack/php82:oldfp"));
+        assert!(!plan2.cache_from.iter().any(|c| c.contains("sha256")));
+        assert!(!plan2
+            .cache_from
+            .iter()
+            .any(|c| c.contains("php-stack-php82")));
+    }
+
+    #[test]
+    fn test_is_image_id_ref() {
+        assert!(is_image_id_ref("sha256:abc123"));
+        assert!(is_image_id_ref("deadbeefdeadbeef"));
+        assert!(!is_image_id_ref("php-stack-php82"));
+        assert!(!is_image_id_ref("php:8.2-fpm"));
+        assert!(!is_image_id_ref("php-stack/php82:abc"));
+    }
+
+    #[test]
+    fn test_plan_from_entries_skips_build_when_fingerprint_present() {
+        let entries = vec![WorkspaceImageEntry {
+            ref_name: "php-stack/php82:abc".into(),
+            role: ImageRole::Built,
+            service_dir: "php82".into(),
+            service_kind: "php".into(),
+            fingerprint: Some("abc".into()),
+            present: true,
+            size: Some("1GB".into()),
+            source_ref: None,
+            note: None,
+        }];
+        let plan = ImageTransferEngine::plan_from_entries(&entries, None);
+        assert!(plan.services_needing_build.is_empty());
+    }
+
+    #[test]
+    fn test_write_build_cache_override_emits_cache_from() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plan = StartBuildPlan {
+            services_needing_build: vec!["php82".into(), "nginx128".into()],
+            cache_from: vec!["php:8.2-fpm".into(), "php-stack-php82:latest".into()],
+        };
+        let path = ImageTransferEngine::write_build_cache_override(tmp.path(), &plan)
+            .unwrap()
+            .expect("should write override");
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("php82:"));
+        assert!(content.contains("nginx128:"));
+        assert!(content.contains("cache_from:"));
+        assert!(content.contains("- php:8.2-fpm"));
+        assert!(content.contains("- php-stack-php82:latest"));
+    }
+
+    #[test]
+    fn test_write_build_cache_override_none_when_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plan = StartBuildPlan {
+            services_needing_build: vec![],
+            cache_from: vec!["php:8.2-fpm".into()],
+        };
+        assert!(
+            ImageTransferEngine::write_build_cache_override(tmp.path(), &plan)
+                .unwrap()
+                .is_none()
+        );
     }
 }

@@ -45,15 +45,91 @@ use crate::app_log;
 ///
 /// - 精确匹配，或 `library/` 前缀（Docker Hub 官方镜像）
 /// - 期望值无 tag 时，额外匹配 `{name}:latest`（compose 历史默认名常见）
+/// - 「是否带 tag」看最后一个 `/` 之后是否含 `:`，避免把 `localhost:5000/php` 的端口误判为 tag
 pub(crate) fn image_ref_matches(repo_tag: &str, wanted: &str) -> bool {
     if repo_tag == wanted || repo_tag == format!("library/{wanted}") {
         return true;
     }
-    if !wanted.contains(':') {
+    let name_part = wanted.rsplit('/').next().unwrap_or(wanted);
+    if !name_part.contains(':') {
         let with_latest = format!("{wanted}:latest");
         return repo_tag == with_latest || repo_tag == format!("library/{with_latest}");
     }
     false
+}
+
+/// 一次 `docker images` 的本地索引，避免 N 次全量 CLI
+#[derive(Debug, Default, Clone)]
+pub struct DockerImageIndex {
+    /// (repo:tag, size)
+    lines: Vec<(String, Option<String>)>,
+}
+
+impl DockerImageIndex {
+    pub fn load() -> Self {
+        let output = Command::new("docker")
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}} {{.Size}}"])
+            .output();
+        let mut lines = Vec::new();
+        if let Ok(o) = output {
+            if o.status.success() {
+                for line in String::from_utf8_lossy(&o.stdout).lines() {
+                    let line = line.trim();
+                    if let Some((repo_tag, size)) = line.split_once(' ') {
+                        lines.push((repo_tag.to_string(), Some(size.to_string())));
+                    } else if !line.is_empty() {
+                        lines.push((line.to_string(), None));
+                    }
+                }
+            }
+        }
+        Self { lines }
+    }
+
+    pub fn empty() -> Self {
+        Self { lines: Vec::new() }
+    }
+
+    /// 测试 / 单测注入本地镜像列表（`repo:tag`）
+    #[cfg(test)]
+    pub fn from_refs(refs: &[&str]) -> Self {
+        Self {
+            lines: refs.iter().map(|r| ((*r).to_string(), None)).collect(),
+        }
+    }
+
+    /// 返回指定仓库下已有的 `repo:tag`（供 cache_from 复用同服务旧指纹 tag）
+    pub fn refs_for_repository(&self, repository: &str) -> Vec<String> {
+        let prefix = format!("{repository}:");
+        self.lines
+            .iter()
+            .filter_map(|(repo_tag, _)| {
+                if repo_tag == repository || repo_tag.starts_with(&prefix) {
+                    if repo_tag.ends_with(":<none>") {
+                        None
+                    } else {
+                        Some(repo_tag.clone())
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn check(&self, image_tag: &str) -> ImageStatus {
+        for (repo_tag, size) in &self.lines {
+            if image_ref_matches(repo_tag, image_tag) {
+                return ImageStatus::Present {
+                    tag: image_tag.to_string(),
+                    size: size.clone(),
+                };
+            }
+        }
+        ImageStatus::Missing {
+            tag: image_tag.to_string(),
+        }
+    }
 }
 
 /// 镜像本地存在性状态（前端弹窗用）
@@ -92,36 +168,7 @@ impl ConfigExtractor {
     /// 命中条件：输出行精确匹配 `{image_tag}` 或 `library/{image_tag}`
     /// （Docker Hub 默认 namespace 是 `library/`，官方镜像两种形式都常见）
     pub fn check_image_present(image_tag: &str) -> ImageStatus {
-        let output = Command::new("docker")
-            .args(["images", "--format", "{{.Repository}}:{{.Tag}} {{.Size}}"])
-            .output();
-
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                for line in s.lines() {
-                    let line = line.trim();
-                    // 格式: "<repo>:<tag> <size>"，splitn(2, ' ') 拆出 size
-                    if let Some((repo_tag, size)) = line.split_once(' ') {
-                        if image_ref_matches(repo_tag, image_tag) {
-                            return ImageStatus::Present {
-                                tag: image_tag.to_string(),
-                                size: Some(size.to_string()),
-                            };
-                        }
-                    }
-                }
-                ImageStatus::Missing {
-                    tag: image_tag.to_string(),
-                }
-            }
-            Ok(_) | Err(_) => {
-                // daemon 未起 / 命令失败 → 按"不存在"处理（前端会汇总到待拉取列表）
-                ImageStatus::Missing {
-                    tag: image_tag.to_string(),
-                }
-            }
-        }
+        DockerImageIndex::load().check(image_tag)
     }
 
     /// 批量检查
@@ -384,6 +431,15 @@ mod tests {
         assert!(!image_ref_matches(
             "php-stack-php82:latest",
             "php-stack/php82:abc"
+        ));
+        // 仓库端口中的冒号不是 tag
+        assert!(image_ref_matches(
+            "localhost:5000/php:latest",
+            "localhost:5000/php"
+        ));
+        assert!(!image_ref_matches(
+            "localhost:5000/php:8.2",
+            "localhost:5000/php"
         ));
     }
 

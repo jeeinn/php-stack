@@ -69,6 +69,7 @@ export {
   listWorkspaceImages,
   exportWorkspaceImages,
   importWorkspaceImages,
+  type ImageExportResult,
   type ImageImportResult,
   type ImageTransferProgress,
   type WorkspaceImageEntry,

@@ -599,7 +599,7 @@
   "images": {
     "title": "Docker 镜像包",
     "subtitle": "导出/导入当前工作区实际镜像（.tar），便于跨机离线启动",
-    "hint": "请先恢复配置并「应用配置」以对齐指纹 compose；改 PHP 扩展后重建仍可能需要网络安装扩展。备份 ZIP 不含镜像层。",
+    "hint": "请先恢复配置并点「{action}」以对齐指纹 compose；改 PHP 扩展后重建仍可能需要网络安装扩展。备份 ZIP 不含镜像层。",
     "role": {
       "image": "服务镜像",
       "base": "基础镜像",
@@ -608,8 +608,8 @@
     "notes": {
       "missing_local": "本地不存在，请先拉取或启动构建",
       "base_missing": "基础镜像缺失，离线改扩展后重建可能失败",
-      "built_missing_will_build_on_target": "尚未构建；仅导出基础镜像时目标机首次启动会 build",
-      "retag_from_legacy": "将从旧 compose 镜像名重新打标签后导出"
+      "legacy_cache_available": "本地有旧 compose 镜像名，启动时将作为 build cache（不会直接挂到指纹 tag）",
+      "built_missing_will_build_on_target": "尚未构建；仅导出基础镜像时目标机首次启动会 build"
     },
     "list": {
       "title": "当前工作区镜像",
@@ -629,7 +629,6 @@
     "progress": {
       "title": "进度",
       "collect": "收集镜像列表...",
-      "retag": "对齐镜像标签...",
       "save": "导出 tar（可能较大，请耐心等待）...",
       "manifest": "写入清单...",
       "load": "导入 tar...",
@@ -638,7 +637,7 @@
     },
     "importResult": {
       "title": "已加载的镜像",
-      "hint": "若 compose 尚未含指纹 image，请重新「应用配置」后再一键启动。"
+      "hint": "若 compose 尚未含指纹 image，请重新点「{action}」后再一键启动。"
     },
     "action": {
       "export": "导出选中镜像 (.tar)",
@@ -648,6 +647,7 @@
     },
     "toast": {
       "exportSuccess": "镜像已导出到 {path}",
+      "exportPartial": "已导出 {exported} 个镜像到 {path}（跳过缺失 {skipped} 个）",
       "importSuccess": "已导入 {count} 个镜像引用"
     }
   },

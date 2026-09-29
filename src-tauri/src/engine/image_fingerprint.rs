@@ -177,8 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn test_php_fingerprint_ignores_tz_equivalent_fields() {
-        // TZ 不在输入里；同输入应稳定
+    fn test_php_fingerprint_stable_for_same_inputs() {
         let df = b"FROM php:8.2-fpm\n";
         let input = PhpFingerprintInput {
             service_dir: "php82",

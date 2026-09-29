@@ -599,7 +599,7 @@
   "images": {
     "title": "Docker Image Pack",
     "subtitle": "Export/import workspace images as .tar for offline use on another machine",
-    "hint": "Restore config and Apply Config first so compose uses fingerprint image tags. Rebuilding after changing PHP extensions may still need network. Backup ZIP does not include image layers.",
+    "hint": "Restore config and click “{action}” first so compose uses fingerprint image tags. Rebuilding after changing PHP extensions may still need network. Backup ZIP does not include image layers.",
     "role": {
       "image": "Service image",
       "base": "Base image",
@@ -608,8 +608,8 @@
     "notes": {
       "missing_local": "Not on this machine — pull or build first",
       "base_missing": "Base image missing — offline rebuild after extension changes may fail",
-      "built_missing_will_build_on_target": "Not built yet; target will build on first start if only base is exported",
-      "retag_from_legacy": "Will retag from legacy compose image name before export"
+      "legacy_cache_available": "Legacy compose image name found locally; start will use it as build cache (not retagged onto the fingerprint)",
+      "built_missing_will_build_on_target": "Not built yet; target will build on first start if only base is exported"
     },
     "list": {
       "title": "Workspace images",
@@ -629,7 +629,6 @@
     "progress": {
       "title": "Progress",
       "collect": "Collecting images...",
-      "retag": "Aligning image tags...",
       "save": "Saving tar (may be large)...",
       "manifest": "Writing manifest...",
       "load": "Loading tar...",
@@ -638,7 +637,7 @@
     },
     "importResult": {
       "title": "Loaded images",
-      "hint": "If compose lacks fingerprint image tags, Apply Config again before starting."
+      "hint": "If compose lacks fingerprint image tags, click “{action}” again before starting."
     },
     "action": {
       "export": "Export selected (.tar)",
@@ -648,6 +647,7 @@
     },
     "toast": {
       "exportSuccess": "Images exported to {path}",
+      "exportPartial": "Exported {exported} image(s) to {path} (skipped {skipped} missing)",
       "importSuccess": "Loaded {count} image ref(s)"
     }
   },

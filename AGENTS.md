@@ -83,7 +83,7 @@
 - **核心功能**:
   - 环境迁移第三 Tab：按工作区收集 image / base / built 引用并导出/导入 `.tar`
   - PHP/Nginx compose 写出 `image: php-stack/{dir}:{fingerprint}` + `pull_policy: never`
-  - 启动时目标指纹镜像缺失则 `compose build --cache-from`（基础镜像 + 同服务旧 tag）
+  - 启动时目标指纹镜像缺失则 `compose build`（临时 override 注入已存在的 `build.cache_from`：基础镜像 + 同服务旧 tag；旧 tag **仅作 cache，不 retag 到指纹名**）
   - 旁路 `{stem}.manifest.json` 记录角色与指纹
 
 ### 4. 环境恢复（RestorePage）

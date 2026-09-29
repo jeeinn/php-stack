@@ -1,11 +1,17 @@
 import { invokeCommand } from './client'
 import type {
+  ImageExportResult,
   ImageImportResult,
   ImageTransferProgress,
   WorkspaceImageEntry,
 } from '../types/env-config'
 
-export type { ImageImportResult, ImageTransferProgress, WorkspaceImageEntry }
+export type {
+  ImageExportResult,
+  ImageImportResult,
+  ImageTransferProgress,
+  WorkspaceImageEntry,
+}
 
 export function listWorkspaceImages(): Promise<WorkspaceImageEntry[]> {
   return invokeCommand<WorkspaceImageEntry[]>('list_workspace_images')
@@ -14,8 +20,8 @@ export function listWorkspaceImages(): Promise<WorkspaceImageEntry[]> {
 export function exportWorkspaceImages(
   savePath: string,
   selectedRefs?: string[] | null,
-): Promise<void> {
-  return invokeCommand<void>('export_workspace_images', {
+): Promise<ImageExportResult> {
+  return invokeCommand<ImageExportResult>('export_workspace_images', {
     savePath,
     selectedRefs: selectedRefs ?? null,
   })

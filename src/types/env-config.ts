@@ -278,3 +278,10 @@ export interface ImageImportResult {
   loaded_refs: string[]
   message: string
 }
+
+export interface ImageExportResult {
+  exported: string[]
+  skipped: string[]
+  tar_path: string
+  manifest_path: string
+}

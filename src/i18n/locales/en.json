@@ -35,7 +35,33 @@
     "stoppingEnv": "Stopping...",
     "dockerError": {
       "title": "Docker Unavailable",
-      "retry": "Retry"
+      "retry": "Retry",
+      "open": "Open",
+      "opening": "Opening...",
+      "install": "Install",
+      "notInstalled": {
+        "title": "Docker is not installed",
+        "description": "Docker was not found on this machine. Install Docker Desktop, then click “{action}”."
+      },
+      "notRunning": {
+        "title": "Docker is not running",
+        "description": "Docker Desktop is installed, but the engine is not responding. Open it and wait until it is ready."
+      },
+      "engineOnly": {
+        "title": "Docker engine is not responding",
+        "description": "The Docker CLI is present, but there is no Docker Desktop app to open. Start the Docker service, then click “{action}”."
+      },
+      "permissionDenied": {
+        "title": "Docker access denied",
+        "description": "The Docker socket exists, but this user cannot access it. Join the docker group or fix the socket permissions, then retry."
+      },
+      "customHost": {
+        "title": "Docker host is unreachable",
+        "description": "DOCKER_HOST is not the local default. Opening or installing local Docker Desktop will not fix this connection."
+      },
+      "openStarted": "Docker Desktop is starting. The status will recover when the engine is ready.",
+      "openFailed": "Could not open Docker Desktop: {error}",
+      "installFailed": "Could not open the install page: {error}"
     },
     "noEnvFile": {
       "title": "No Environment Configured",

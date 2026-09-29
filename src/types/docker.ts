@@ -20,6 +20,22 @@ export interface Container {
   ports: number[];
 }
 
+/** 与 Rust `DockerHostKind` 的 snake_case 序列化一致。 */
+export type DockerHostKind =
+  | 'ready'
+  | 'not_installed'
+  | 'installed_stopped'
+  | 'permission_denied'
+  | 'custom_host';
+
+/** 仪表盘 Docker 异常横幅用的探测结果。`detail` 是技术原文，主文案按 `kind` 走 i18n。 */
+export interface DockerHostReport {
+  kind: DockerHostKind;
+  detail: string;
+  install_url: string;
+  can_open: boolean;
+}
+
 /** 仅 running 视为运行中；restarting 尚未真正提供服务，不算。 */
 export function isContainerRunning(state: ContainerState): boolean {
   return state === 'running';

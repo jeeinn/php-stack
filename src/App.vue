@@ -2,7 +2,8 @@
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  checkDocker as checkDockerApi,
+  inspectDockerHost,
+  openDockerDesktop,
   listContainers,
   startContainer,
   stopContainer,
@@ -17,11 +18,13 @@ import {
   isPortConflictError,
   stripProtocolPrefix,
   PORT_CONFLICT_PREFIX,
+  type DockerHostReport,
   type WorkspaceInfo,
 } from './api';
 import { listen } from '@tauri-apps/api/event';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { save } from '@tauri-apps/plugin-dialog';
+import { open as openUrl } from '@tauri-apps/plugin-shell';
 import { getVersion } from '@tauri-apps/api/app';
 import EnvConfigPage from './components/EnvConfigPage.vue';
 import SettingsPage from './components/SettingsPage.vue';
@@ -49,6 +52,8 @@ const starting = ref(false); // 启动环境时的加载状态
 const operationType = ref<'start' | 'restart' | 'stop' | null>(null); // 当前操作类型
 const logs = visibleLogs;
 const dockerError = ref<string | null>(null);
+const dockerHost = ref<DockerHostReport | null>(null);
+const openingDocker = ref(false);
 const activeTab = ref('dashboard');
 const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(window.innerWidth < 768); // 控制侧边栏展开/收缩（小屏幕默认收缩）
@@ -89,23 +94,103 @@ const canStop = computed(() => {
   return hasRunningContainers.value;
 });
 
+const dockerErrorCopy = computed(() => {
+  const host = dockerHost.value;
+  const kind = host?.kind;
+  if (kind === 'not_installed') {
+    return {
+      title: t('dashboard.dockerError.notInstalled.title'),
+      description: t('dashboard.dockerError.notInstalled.description', {
+        action: t('dashboard.dockerError.retry'),
+      }),
+    };
+  }
+  if (kind === 'installed_stopped' && host?.can_open) {
+    return {
+      title: t('dashboard.dockerError.notRunning.title'),
+      description: t('dashboard.dockerError.notRunning.description'),
+    };
+  }
+  if (kind === 'installed_stopped') {
+    return {
+      title: t('dashboard.dockerError.engineOnly.title'),
+      description: t('dashboard.dockerError.engineOnly.description', {
+        action: t('dashboard.dockerError.retry'),
+      }),
+    };
+  }
+  if (kind === 'permission_denied') {
+    return {
+      title: t('dashboard.dockerError.permissionDenied.title'),
+      description: t('dashboard.dockerError.permissionDenied.description'),
+    };
+  }
+  if (kind === 'custom_host') {
+    return {
+      title: t('dashboard.dockerError.customHost.title'),
+      description: t('dashboard.dockerError.customHost.description'),
+    };
+  }
+  return {
+    title: t('dashboard.dockerError.title'),
+    description: dockerError.value ?? '',
+  };
+});
+
 const checkDocker = async () => {
   try {
-    await checkDockerApi();
-    // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
-    if (dockerError.value !== null) {
-      addLogKey('dashboard.toast.dockerRestored');
+    const report = await inspectDockerHost();
+    if (report.kind === 'ready') {
+      // Docker 刚恢复可用时才提示——持续不可用时每次轮询都刷一条毫无意义
+      if (dockerError.value !== null) {
+        addLogKey('dashboard.toast.dockerRestored');
+      }
+      dockerError.value = null;
+      dockerHost.value = null;
+      return true;
     }
-    dockerError.value = null;
-    return true;
-  } catch (e) {
     // 只在状态由可用翻转为不可用时记一条，之后静默退避
     const wasAvailable = dockerError.value === null;
-    dockerError.value = e as string;
+    dockerError.value = report.detail || t('dashboard.dockerError.title');
+    dockerHost.value = report;
+    if (wasAvailable) {
+      addLogKey('dashboard.toast.dockerCheckFailed', { error: report.detail }, 'error');
+    }
+    return false;
+  } catch (e) {
+    const wasAvailable = dockerError.value === null;
+    dockerError.value = normalizeError(e);
+    dockerHost.value = null;
     if (wasAvailable) {
       addLogKey('dashboard.toast.dockerCheckFailed', { error: e }, 'error');
     }
     return false;
+  }
+};
+
+const handleOpenDocker = async () => {
+  if (openingDocker.value) return;
+  openingDocker.value = true;
+  try {
+    await openDockerDesktop();
+    showToast(t('dashboard.dockerError.openStarted'), 'info');
+    // 引擎还要几十秒才就绪。先把退避打回 5 秒，让下一次检查尽快发生。
+    consecutiveFailures = 0;
+    startPolling();
+  } catch (e) {
+    showToast(t('dashboard.dockerError.openFailed', { error: normalizeError(e) }), 'error', 6000);
+  } finally {
+    openingDocker.value = false;
+  }
+};
+
+const handleInstallDocker = async () => {
+  const url = dockerHost.value?.install_url;
+  if (!url) return;
+  try {
+    await openUrl(url);
+  } catch (e) {
+    showToast(t('dashboard.dockerError.installFailed', { error: normalizeError(e) }), 'error');
   }
 };
 
@@ -722,20 +807,40 @@ async function exportLogs() {
         </header>
 
         <!-- Docker Error Alert -->
-        <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-4 text-rose-600 dark:text-rose-400">
-          <div class="p-3 bg-rose-500/20 rounded-full text-rose-500">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div v-if="dockerError" class="mb-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex flex-col gap-4 text-rose-600 dark:text-rose-400 sm:flex-row sm:items-center">
+          <div class="flex items-start gap-4 flex-1 min-w-0">
+            <div class="p-3 bg-rose-500/20 rounded-full text-rose-500 shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="font-bold text-lg mb-1 text-rose-600 dark:text-rose-400">{{ dockerErrorCopy.title }}</h3>
+              <p class="text-sm opacity-90">{{ dockerErrorCopy.description }}</p>
+              <p v-if="dockerHost && dockerError" class="text-xs mt-1 opacity-70 break-all">{{ dockerError }}</p>
+            </div>
           </div>
-          <div class="flex-1">
-            <h3 class="font-bold text-lg mb-1 text-rose-600 dark:text-rose-400">{{ $t('dashboard.dockerError.title') }}</h3>
-            <p class="text-sm opacity-90">{{ dockerError }}</p>
+          <div class="flex flex-wrap gap-2 shrink-0">
+            <button
+              v-if="dockerHost?.can_open"
+              @click="handleOpenDocker"
+              :disabled="openingDocker"
+              class="ui-btn-primary disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg transition font-bold text-sm whitespace-nowrap"
+            >
+              {{ openingDocker ? $t('dashboard.dockerError.opening') : $t('dashboard.dockerError.open') }}
+            </button>
+            <button
+              v-if="dockerHost?.kind === 'not_installed'"
+              @click="handleInstallDocker"
+              class="ui-btn-primary px-4 py-2 rounded-lg transition font-bold text-sm whitespace-nowrap"
+            >
+              {{ $t('dashboard.dockerError.install') }}
+            </button>
+            <button
+              @click="() => refreshContainers()"
+              class="ui-btn-danger px-4 py-2 rounded-lg transition font-bold text-sm whitespace-nowrap"
+            >
+              {{ $t('dashboard.dockerError.retry') }}
+            </button>
           </div>
-          <button 
-            @click="() => refreshContainers()"
-            class="ui-btn-danger px-4 py-2 rounded-lg transition font-bold text-sm"
-          >
-            {{ $t('dashboard.dockerError.retry') }}
-          </button>
         </div>
 
         <!-- No Env File Alert -->

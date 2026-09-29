@@ -60,6 +60,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // Dashboard
             commands::check_docker,
+            commands::inspect_docker_host,
+            commands::open_docker_desktop,
             commands::list_containers,
             commands::list_all_running_containers,
             commands::start_container,

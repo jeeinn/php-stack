@@ -391,6 +391,17 @@ mod tests {
     use super::*;
     use crate::engine::user_config;
 
+    /// 写入相对工作区的默认站点（SITE_MAIN → ./www），供按站点打包测试使用。
+    fn seed_main_relative_site(project_root: &Path) {
+        fs::write(project_root.join(".env"), "SITE_MAIN=./www\n").expect("写入 .env 失败");
+        user_config::ensure_dir(project_root).unwrap();
+        fs::write(
+            user_config::path(project_root, user_config::SITES),
+            r#"{"sites":[{"id":"main","server_name":"localhost","env_key":"SITE_MAIN","container_path":"/sites/main","nginx_service":"nginx125","php_service":"php82"}]}"#,
+        )
+        .expect("写入 sites.json 失败");
+    }
+
     /// 流式写入必须跨分块边界算出与全量读取一致的 SHA256。
     ///
     /// 缓冲区是 64KB，这里构造远超一块的内容（含 5 个跨块点），
@@ -405,7 +416,7 @@ mod tests {
         let www = project_root.join("www");
         fs::create_dir_all(&www).expect("创建 www 失败");
         fs::write(www.join("big.bin"), &content).expect("写入大文件失败");
-        fs::write(project_root.join(".env"), "SOURCE_DIR=./www\n").expect("写入 .env 失败");
+        seed_main_relative_site(project_root);
 
         let services_dir = project_root.join("services");
         fs::create_dir_all(&services_dir).expect("创建 services 失败");
@@ -683,7 +694,7 @@ mod tests {
         fs::write(www.join(".env"), b"APP=1\n").unwrap();
         fs::write(www.join("index.php"), b"<?php\n").unwrap();
         fs::write(www.join("local.config.php"), b"<?php return [];\n").unwrap();
-        fs::write(workspace.path().join(".env"), "SOURCE_DIR=./www\n").unwrap();
+        seed_main_relative_site(workspace.path());
 
         let backup_path = workspace.path().join("backup.zip");
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -725,7 +736,7 @@ mod tests {
         fs::create_dir_all(&nested).unwrap();
         fs::write(nested.join("Config.local.php"), b"<?php return [];\n").unwrap();
         fs::write(www.join("index.php"), b"<?php\n").unwrap();
-        fs::write(workspace.path().join(".env"), "SOURCE_DIR=./www\n").unwrap();
+        seed_main_relative_site(workspace.path());
 
         let backup_path = workspace.path().join("backup.zip");
         let rt = tokio::runtime::Builder::new_current_thread()

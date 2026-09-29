@@ -5,7 +5,6 @@ import type { EnvConfig } from '../../types/env-config'
 describe('portChecker', () => {
   it('extracts ports from config', () => {
     const mockConfig: EnvConfig = {
-      source_dir: '/test/path',
       timezone: 'Asia/Shanghai',
       services: [
         {

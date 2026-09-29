@@ -24,7 +24,7 @@ const mockVersionMappings = {
 }
 
 const mockCatalog = [
-  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: null } },
+  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: 'php' } },
   {
     id: 'mongodb',
     display_name: 'MongoDB',
@@ -39,7 +39,6 @@ const mockCatalog = [
 
 const mockExistingConfig = {
   services: [{ service_type: 'PHP', version: 'php82', host_port: 9000 }],
-  source_dir: './www',
   timezone: 'Asia/Shanghai',
 }
 

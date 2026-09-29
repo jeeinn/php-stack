@@ -185,7 +185,6 @@ const customDialogTitle = computed(() =>
     : t('envConfig.customService.dialogTitle'),
 );
 
-const sourceDir = ref('./www');
 const sites = ref<SiteEntry[]>([]);
 const timezone = ref('Asia/Shanghai');
 const customTimezone = ref('');
@@ -374,14 +373,13 @@ async function loadExistingConfig() {
       nginxServices.value = nginxSvcs.length > 0 ? nginxSvcs : [];
       customKindServices.value = extras;
       
-      sourceDir.value = repairHostPath(config.source_dir);
       sites.value = (config.sites ?? []).map(site => ({
         ...site,
         host_path: repairHostPath(site.host_path),
         public_dir: normalizePublicDir(site.public_dir),
       }));
       if (nginxSvcs.length > 0 && sites.value.length === 0) {
-        sites.value = [makeDefaultSite(config.source_dir || './www')];
+        sites.value = [makeDefaultSite('./www')];
       }
       timezone.value = config.timezone;
       
@@ -535,23 +533,23 @@ function makeDefaultSite(hostPath: string): SiteEntry {
     id: 'main',
     server_name: 'localhost',
     host_path: hostPath || './www',
-    env_key: 'SOURCE_DIR',
-    container_path: '/www',
+    env_key: 'SITE_MAIN',
+    container_path: '/sites/main',
     php_service: php ? serviceDirOf(php.version, phpVersions.value) : '',
     nginx_service: nginx ? serviceDirOf(nginx.version, nginxVersions.value) : '',
     public_dir: '',
   };
 }
 
-function siteDerived(site: SiteEntry, index: number): Pick<SiteEntry, 'id' | 'env_key' | 'container_path' | 'host_path' | 'public_dir'> {
+function siteDerived(site: SiteEntry, _index: number): Pick<SiteEntry, 'id' | 'env_key' | 'container_path' | 'host_path' | 'public_dir'> {
   const id = site.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'main';
   const slug = id.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'SITE';
   return {
     id,
     host_path: repairHostPath(site.host_path),
     public_dir: normalizePublicDir(site.public_dir),
-    env_key: index === 0 ? 'SOURCE_DIR' : `SITE_${slug}`,
-    container_path: index === 0 ? '/www' : `/sites/${id}`,
+    env_key: `SITE_${slug}`,
+    container_path: `/sites/${id}`,
   };
 }
 
@@ -581,11 +579,6 @@ async function pickHostPath(current: string): Promise<string | null> {
     showToast(normalizeError(e), 'error');
     return null;
   }
-}
-
-async function browseSourceDir() {
-  const picked = await pickHostPath(sourceDir.value);
-  if (picked) sourceDir.value = picked;
 }
 
 async function browseSiteDir(index: number) {
@@ -675,7 +668,6 @@ function buildConfig(): EnvConfig {
   const siteList = nginxServices.value.length > 0 ? normalizedSites() : [];
   const config: EnvConfig = {
     services,
-    source_dir: siteList[0]?.host_path || sourceDir.value,
     timezone: timezone.value,
     sites: siteList,
   };
@@ -774,15 +766,15 @@ function addNginxVersion() {
     host_port: available[0].default_port || 80,
   });
   if (sites.value.length === 0) {
-    sites.value = [makeDefaultSite(sourceDir.value || './www')];
+    sites.value = [makeDefaultSite('./www')];
   }
 }
 
 function removeNginxVersion(index: number) {
-  if (nginxServices.value.length === 1 && sites.value[0]?.host_path) {
-    sourceDir.value = sites.value[0].host_path;
-  }
   nginxServices.value.splice(index, 1);
+  if (nginxServices.value.length === 0) {
+    sites.value = [];
+  }
 }
 
 function ensureCustomKindList(kind: string): ServiceEntry[] {
@@ -1706,14 +1698,6 @@ async function openNginxConfigDir(serviceDir?: string) {
               readonly
               class="w-full bg-slate-100 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 cursor-not-allowed"
             />
-          </div>
-          <div v-if="nginxServices.length === 0">
-            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.sourceDir') }}</label>
-            <div class="flex gap-2">
-              <input v-model="sourceDir" type="text" placeholder="./www" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-              <button type="button" @click="browseSourceDir" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.general.browse') }}</button>
-            </div>
-            <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.general.sourceDirHint') }}</p>
           </div>
           <div>
             <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.general.timezone') }}</label>

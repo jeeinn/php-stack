@@ -224,9 +224,6 @@
     "general": {
       "title": "General Settings",
       "workspace": "Workspace",
-      "sourceDir": "Source Directory",
-      "browse": "Choose folder",
-      "sourceDirHint": "Host directory mounted into the container at /www. A folder on another drive is fine.",
       "timezone": "Timezone",
       "timezonePlaceholder": "Select timezone",
       "customTimezonePlaceholder": "e.g. Europe/Moscow",
@@ -284,7 +281,7 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "Container path",
-      "defaultNote": "If conf.d/default.conf is still present, Nginx loads it too. Delete it or change its server_name when you no longer want the stock site."
+      "defaultNote": "The default server always mounts ./www → /www and serves the welcome page (PHP via short alias php). Each site is served by its own managed conf; requests with unmatched host names fall back to the welcome page."
     },
     "previewModal": {
       "title": "Config Preview",

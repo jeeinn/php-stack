@@ -62,10 +62,9 @@ pub struct ServiceEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvConfig {
     pub services: Vec<ServiceEntry>,
-    pub source_dir: String,
     pub timezone: String,
     pub mysql_root_password: Option<String>, // MySQL root密码（可选）
-    /// 启用 Nginx 时的站点清单。空列表保持单一 `SOURCE_DIR` → `/www` 挂载。
+    /// 启用 Nginx 时的站点清单。空列表 = 不挂代码卷。
     #[serde(default)]
     pub sites: Vec<SiteEntry>,
 }
@@ -290,19 +289,17 @@ impl ConfigGenerator {
         let manifest = VersionManifest::new();
         let override_manager = UserOverrideManager::new(project_root);
 
-        // Set global variables. 有站点时宿主机路径以站点为准，并清掉已删除站点的 SITE_* 键。
+        // 默认欢迎页目录（`SOURCE_DIR=./www` → `/www`）始终保留，与站点键共存；
+        // 站点一律 `SITE_*` → `/sites/{id}`。仅清理「上一版有、这一版没有」的站点键。
         let mut sites = config.sites.clone();
         site_manager::normalize_sites(&mut sites);
-        if sites.is_empty() {
-            env.set(
-                "SOURCE_DIR",
-                &site_manager::normalize_host_path(&config.source_dir),
-            );
-        } else {
-            site_manager::remove_stale_site_keys(&mut env, project_root, &sites);
-            for site in &sites {
-                env.set(&site.env_key, &site.host_path);
-            }
+        site_manager::remove_stale_site_keys(&mut env, project_root, &sites);
+        env.set(
+            site_manager::PRIMARY_ENV_KEY,
+            site_manager::DEFAULT_SOURCE_DIR,
+        );
+        for site in &sites {
+            env.set(&site.env_key, &site.host_path);
         }
         env.set("TZ", &config.timezone);
         env.set("DATA_DIR", "./data");
@@ -654,8 +651,8 @@ impl ConfigGenerator {
                     // 这样改 .env 里的时区后只需 recreate，不必重建镜像。
                     lines.push("    environment:".to_string());
                     lines.push("      TZ: \"${TZ}\"".to_string());
-                    // PHP 服务名本身已是 php82 等，无需额外短别名
-                    Self::push_compose_network(&mut lines, &[]);
+                    // 单实例时挂短别名 php，供 default.conf / 应用用稳定主机名
+                    Self::push_compose_network(&mut lines, &aliases);
                     lines.push(String::new());
                 }
                 GeneratorKind::Nginx => {
@@ -831,6 +828,46 @@ impl ConfigGenerator {
             })
     }
 
+    /// 定位默认欢迎页模板（`src-tauri/www/index.html`）。
+    ///
+    /// 与 `services/` 模板同级：`template_base_candidates()` 返回的是 `*/services`，
+    /// 取其上级的 `www/index.html`。模板缺失时返回 `None`（发布包未附带时跳过释放）。
+    fn locate_default_page_template() -> Option<PathBuf> {
+        Self::template_base_candidates()
+            .into_iter()
+            .filter_map(|base| base.parent().map(|parent| parent.to_path_buf()))
+            .map(|root| root.join("www").join("index.html"))
+            .find(|path| path.exists())
+    }
+
+    /// 释放默认欢迎页到工作区 `www/index.html`。
+    ///
+    /// 目标已存在时跳过（用户可能已放自己的 index）；模板缺失时仅告警，不阻断配置生成。
+    fn release_default_page(root: &Path) -> Result<(), String> {
+        let Some(template) = Self::locate_default_page_template() else {
+            app_log!(
+                warn,
+                "engine::config_generator",
+                "default page template not found, skip www/index.html"
+            );
+            return Ok(());
+        };
+        let dest = root.join("www").join("index.html");
+        if dest.exists() {
+            return Ok(());
+        }
+        std::fs::create_dir_all(root.join("www"))
+            .map_err(|e| format!("failed to create www/ dir: {e}"))?;
+        std::fs::copy(&template, &dest).map_err(|e| {
+            format!(
+                "failed to copy {} to {}: {e}",
+                template.display(),
+                dest.display()
+            )
+        })?;
+        Ok(())
+    }
+
     /// Copy template file from the services template directory to the project
     /// services directory (user workspace).
     ///
@@ -1000,6 +1037,9 @@ impl ConfigGenerator {
             .map_err(|e| format!("failed to create data/ dir: {e}"))?;
         std::fs::create_dir_all(root.join("logs"))
             .map_err(|e| format!("failed to create logs/ dir: {e}"))?;
+
+        // 默认欢迎页目录（无自定义站点时挂载到 /www）
+        Self::release_default_page(root)?;
 
         let catalog = ServiceCatalog::merged(root);
         let override_manager = UserOverrideManager::new(root);
@@ -1540,7 +1580,6 @@ mod tests {
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1614,7 +1653,6 @@ mod tests {
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1636,6 +1674,7 @@ mod tests {
         let env = ConfigGenerator::generate_env(&config, None, &temp_dir);
         let map = env.to_map();
 
+        // 无站点：默认欢迎页目录 ./www → /www
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
         assert_eq!(map.get("TZ").unwrap(), "Asia/Shanghai");
         assert_eq!(map.get("DATA_DIR").unwrap(), "./data");
@@ -1676,7 +1715,6 @@ mod tests {
                 host_port: 80,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1688,7 +1726,7 @@ mod tests {
 
         // Custom variable preserved
         assert_eq!(map.get("CUSTOM_VAR").unwrap(), "hello");
-        // Managed variable updated
+        // 无站点：托管键被重写为默认欢迎页目录，历史值 ./old 不保留
         assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
         // New managed variable added (uses full image tag from version_manifest.json)
         assert_eq!(map.get("NGINX125_VERSION").unwrap(), "nginx:1.25-alpine");
@@ -1716,7 +1754,6 @@ SOURCE_DIR=./old
                 host_port: 9000,
                 extensions: Some(vec!["pdo_mysql".to_string()]),
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1735,6 +1772,8 @@ SOURCE_DIR=./old
         assert!(!map.contains_key("MYSQL80_LOG_DIR"));
         assert!(!map.contains_key("MYSQL_ROOT_PASSWORD"));
         assert!(!map.contains_key("NGINX_LOG_DIR"));
+        // 无站点：SOURCE_DIR 是托管键，被重写为默认欢迎页目录
+        assert_eq!(map.get("SOURCE_DIR").unwrap(), "./www");
     }
 
     #[test]
@@ -1756,7 +1795,6 @@ CUSTOM_FOO=bar
                 host_port: 9000,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1817,7 +1855,6 @@ APP_VERSION=9
                 host_port: 9000,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1842,7 +1879,6 @@ APP_VERSION=9
                 host_port: 9000,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1861,7 +1897,6 @@ APP_VERSION=9
                 host_port: 80,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1880,7 +1915,6 @@ APP_VERSION=9
                 host_port: 0,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1907,7 +1941,6 @@ APP_VERSION=9
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1964,7 +1997,6 @@ APP_VERSION=9
                     extensions: Some(vec!["gd".to_string(), "curl".to_string()]),
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -1995,7 +2027,8 @@ APP_VERSION=9
         assert!(compose.contains("${REDIS70_VERSION}"));
         assert!(compose.contains("${REDIS70_HOST_PORT}"));
         assert!(compose.contains("${NGINX125_HTTP_HOST_PORT}"));
-        assert!(compose.contains("${SOURCE_DIR}"));
+        // 无站点：挂默认欢迎页目录 ./www → /www
+        assert!(compose.contains("${SOURCE_DIR}:/www/:rw"));
         assert!(compose.contains("${PHP82_EXTENSIONS}"));
         assert!(compose.contains("${PHP82_PHP_CONF_FILE}"));
         assert!(compose.contains("${TZ}"));
@@ -2042,10 +2075,83 @@ APP_VERSION=9
             nginx_block.contains("aliases:") && nginx_block.contains("- nginx"),
             "单 Nginx 应有 alias nginx，实际段落:\n{nginx_block}"
         );
+        let php_block = compose
+            .split("php82:")
+            .nth(1)
+            .and_then(|s| s.split("\n  mysql").next())
+            .unwrap_or("");
+        assert!(
+            php_block.contains("aliases:") && php_block.contains("- php"),
+            "单 PHP 应有 alias php，实际段落:\n{php_block}"
+        );
 
         // Should NOT contain hardcoded values for versions/ports
         assert!(!compose.contains("image: mysql:8.0"));
         assert!(!compose.contains("\"3306:3306\""));
+    }
+
+    #[test]
+    fn test_generate_compose_emits_site_volumes_alongside_default_page() {
+        use crate::engine::site_manager::SiteEntry;
+
+        let mut config = make_basic_config();
+        config.sites = vec![
+            SiteEntry {
+                id: "cmp".into(),
+                server_name: "cmp.localhost".into(),
+                host_path: "E:/projects/fm-cmp".into(),
+                env_key: String::new(),
+                container_path: String::new(),
+                nginx_service: "nginx125".into(),
+                php_service: "php82".into(),
+                public_dir: "www".into(),
+            },
+            SiteEntry {
+                id: "agent".into(),
+                server_name: "agent.localhost".into(),
+                host_path: "E:/projects/fm-agent".into(),
+                env_key: String::new(),
+                container_path: String::new(),
+                nginx_service: "nginx125".into(),
+                php_service: "php82".into(),
+                public_dir: "www".into(),
+            },
+        ];
+
+        let tmp = tempfile::tempdir().unwrap();
+        let env = ConfigGenerator::generate_env(&config, None, tmp.path());
+        let map = env.to_map();
+        assert_eq!(
+            map.get("SITE_CMP").map(String::as_str),
+            Some("E:/projects/fm-cmp")
+        );
+        assert_eq!(
+            map.get("SITE_AGENT").map(String::as_str),
+            Some("E:/projects/fm-agent")
+        );
+        // 默认欢迎页键与站点键共存：未匹配域名的请求仍可访问默认站
+        assert_eq!(map.get("SOURCE_DIR").map(String::as_str), Some("./www"));
+
+        let compose = ConfigGenerator::generate_compose(&config, tmp.path());
+        assert!(compose.contains("${SITE_CMP}:/sites/cmp/:rw"));
+        assert!(compose.contains("${SITE_AGENT}:/sites/agent/:rw"));
+        assert!(compose.contains("${SOURCE_DIR}:/www/:rw"));
+    }
+
+    #[test]
+    fn test_release_default_page_copies_template_and_keeps_existing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("www").join("index.html");
+
+        ConfigGenerator::release_default_page(tmp.path()).unwrap();
+        assert!(dest.exists(), "模板存在时应释放 www/index.html");
+        let released = std::fs::read_to_string(&dest).unwrap();
+        assert!(released.contains("<html"), "释放的应是 HTML 欢迎页");
+
+        // 用户已放自己的首页：不得覆盖
+        std::fs::write(&dest, "custom").unwrap();
+        ConfigGenerator::release_default_page(tmp.path()).unwrap();
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "custom");
     }
 
     #[test]
@@ -2065,7 +2171,6 @@ APP_VERSION=9
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -2097,7 +2202,6 @@ APP_VERSION=9
                     extensions: Some(vec!["gd".to_string()]),
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -2116,6 +2220,12 @@ APP_VERSION=9
         // Each should reference its own variables
         assert!(compose.contains("${PHP74_EXTENSIONS}"));
         assert!(compose.contains("${PHP82_EXTENSIONS}"));
+
+        // 多 PHP 时不挂短别名 php（与 mysql/redis 规则一致）
+        assert!(
+            !compose.contains("- php\n") && !compose.contains("- php\r"),
+            "多 PHP 不应挂 alias php，实际:\n{compose}"
+        );
     }
 
     #[test]
@@ -2128,7 +2238,6 @@ APP_VERSION=9
                 host_port: 3306,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: Some("mypassword123".to_string()),
             sites: vec![],
@@ -2150,7 +2259,6 @@ APP_VERSION=9
                 host_port: 3306,
                 extensions: None,
             }],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: None,
             sites: vec![],
@@ -2200,7 +2308,6 @@ APP_VERSION=9
                     extensions: None,
                 },
             ],
-            source_dir: "./www".to_string(),
             timezone: "Asia/Shanghai".to_string(),
             mysql_root_password: Some("should-not-appear".to_string()),
             sites: vec![],

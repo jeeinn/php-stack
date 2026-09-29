@@ -11,12 +11,12 @@
       "builtin": true,
       "container_port": 9000,
       "host_port_env_suffix": "HOST_PORT",
-      "short_alias": null,
+      "short_alias": "php",
       "conf_key_file": "Dockerfile",
       "fallback_template_dir": "php85",
       "connect": {
         "container_port": 9000,
-        "short_name": null
+        "short_name": "php"
       }
     },
     {

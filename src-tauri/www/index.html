@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>php-stack · 欢迎</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+  }
+  .card {
+    width: 100%;
+    max-width: 720px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 36px 32px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+  }
+  h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 24px; color: #64748b; font-size: 14px; }
+  .ok {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #ecfdf5; color: #047857;
+    border: 1px solid #a7f3d0; border-radius: 999px;
+    padding: 4px 12px; font-size: 13px; margin-bottom: 20px;
+  }
+  .ok::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+  h2 { font-size: 15px; margin: 24px 0 10px; }
+  ul { margin: 0; padding-left: 20px; }
+  li { margin-bottom: 8px; font-size: 14px; }
+  li strong { font-weight: 600; }
+  code {
+    background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 5px;
+    padding: 1px 6px; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .note {
+    margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;
+    color: #64748b; font-size: 13px;
+  }
+  .note code { background: #f8fafc; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>php-stack 环境已就绪</h1>
+    <p class="sub">Welcome — your local PHP environment is up and running.</p>
+
+    <div class="ok">Nginx 正在运行，本页由默认站点提供</div>
+
+    <h2>当前状态</h2>
+    <ul>
+      <li>本文件位于工作区的 <code>./www</code> 目录，已挂载到容器内 <code>/www</code>。</li>
+      <li>尚未配置自定义站点，因此所有请求都由这个默认站点响应。</li>
+    </ul>
+
+    <h2>接下来可以做什么</h2>
+    <ul>
+      <li><strong>添加站点</strong>：在 php-stack 的「环境配置」页添加站点（域名 + 宿主机目录），点「应用配置」后重启环境。站点目录会挂载到 <code>/sites/{站点 ID}</code>。</li>
+      <li><strong>验证 PHP</strong>：把本文件改名为 <code>index.php</code> 并写入 <code>&lt;?php phpinfo();</code>，刷新即可看到 PHP 信息。</li>
+      <li><strong>放到别处</strong>：本目录可直接替换为你自己的项目，或删除后在配置页指定站点目录。</li>
+    </ul>
+
+    <p class="note">
+      若你已添加站点却仍看到本页，说明请求的域名没有匹配到任何站点的 <code>server_name</code>——
+      请检查站点的域名拼写，以及是否已把该域名解析到本机（例如写入 hosts 文件）。
+    </p>
+  </main>
+</body>
+</html>

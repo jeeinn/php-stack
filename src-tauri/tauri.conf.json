@@ -37,7 +37,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "services/**/*"
+      "services/**/*",
+      "www/**/*"
     ],
     "createUpdaterArtifacts": true
   },

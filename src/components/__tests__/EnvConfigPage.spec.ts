@@ -35,12 +35,11 @@ const mockExistingConfig = {
     { service_type: 'PHP', version: 'php82', host_port: 9000, extensions: ['pdo_mysql', 'mysqli'] },
     { service_type: 'MySQL', version: 'mysql80', host_port: 3306 },
   ],
-  source_dir: './www',
   timezone: 'Asia/Shanghai',
 }
 
 const mockCatalog = [
-  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: null } },
+  { id: 'php', display_name: 'PHP', builtin: true, generator: 'php', container_port: 9000, connect: { container_port: 9000, short_name: 'php' } },
   { id: 'mysql', display_name: 'MySQL', builtin: true, generator: 'image', container_port: 3306, connect: { container_port: 3306, short_name: 'mysql' } },
   { id: 'redis', display_name: 'Redis', builtin: true, generator: 'image', container_port: 6379, connect: { container_port: 6379, short_name: 'redis' } },
   { id: 'nginx', display_name: 'Nginx', builtin: true, generator: 'nginx', container_port: 80, connect: { container_port: 80, short_name: 'nginx' } },

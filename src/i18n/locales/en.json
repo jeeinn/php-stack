@@ -41,7 +41,7 @@
       "install": "Install",
       "notInstalled": {
         "title": "Docker is not installed",
-        "description": "Docker was not found on this machine. Install Docker Desktop, then retry."
+        "description": "Docker was not found on this machine. Install Docker Desktop, then click “{action}”."
       },
       "notRunning": {
         "title": "Docker is not running",
@@ -49,7 +49,7 @@
       },
       "engineOnly": {
         "title": "Docker engine is not responding",
-        "description": "The Docker CLI is present, but there is no Docker Desktop app to open. Start the Docker service, then retry."
+        "description": "The Docker CLI is present, but there is no Docker Desktop app to open. Start the Docker service, then click “{action}”."
       },
       "permissionDenied": {
         "title": "Docker access denied",

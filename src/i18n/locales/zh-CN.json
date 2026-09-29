@@ -41,7 +41,7 @@
       "install": "安装",
       "notInstalled": {
         "title": "未检测到 Docker",
-        "description": "本机没有可用的 Docker。请安装 Docker Desktop 后再点「重试」。"
+        "description": "本机没有可用的 Docker。请安装 Docker Desktop 后再点「{action}」。"
       },
       "notRunning": {
         "title": "Docker 未启动",
@@ -49,7 +49,7 @@
       },
       "engineOnly": {
         "title": "Docker 引擎未响应",
-        "description": "检测到 Docker 命令行，但没有可打开的 Docker Desktop。请自行启动 Docker 服务后再点「重试」。"
+        "description": "检测到 Docker 命令行，但没有可打开的 Docker Desktop。请自行启动 Docker 服务后再点「{action}」。"
       },
       "permissionDenied": {
         "title": "无权访问 Docker",

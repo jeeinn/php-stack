@@ -100,7 +100,9 @@ const dockerErrorCopy = computed(() => {
   if (kind === 'not_installed') {
     return {
       title: t('dashboard.dockerError.notInstalled.title'),
-      description: t('dashboard.dockerError.notInstalled.description'),
+      description: t('dashboard.dockerError.notInstalled.description', {
+        action: t('dashboard.dockerError.retry'),
+      }),
     };
   }
   if (kind === 'installed_stopped' && host?.can_open) {
@@ -112,7 +114,9 @@ const dockerErrorCopy = computed(() => {
   if (kind === 'installed_stopped') {
     return {
       title: t('dashboard.dockerError.engineOnly.title'),
-      description: t('dashboard.dockerError.engineOnly.description'),
+      description: t('dashboard.dockerError.engineOnly.description', {
+        action: t('dashboard.dockerError.retry'),
+      }),
     };
   }
   if (kind === 'permission_denied') {

@@ -2,6 +2,7 @@ mod app;
 mod backup;
 mod docker;
 mod env_config;
+mod image_transfer;
 mod mirror;
 pub mod paths;
 mod workspace;
@@ -11,6 +12,7 @@ pub use app::*;
 pub use backup::*;
 pub use docker::*;
 pub use env_config::*;
+pub use image_transfer::*;
 pub use mirror::*;
 pub use workspace::*;
 

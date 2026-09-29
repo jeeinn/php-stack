@@ -4,6 +4,8 @@ pub mod backup_options_store; // 备份选项持久化（.user-config/backup.jso
 pub mod config_extractor; // 运行时配置基线提取器（Phase 3）
 pub mod config_generator; // 可视化配置生成器
 pub mod env_parser; // Env 解析器/格式化器
+pub mod image_fingerprint; // PHP/Nginx 构建镜像指纹
+pub mod image_transfer; // Docker 镜像 tar 导入导出
 pub mod mirror_config; // 镜像源配置（向后兼容）
 pub mod mirror_config_manager; // 用户镜像源配置管理器
 pub mod mirror_manager; // 统一镜像源管理器

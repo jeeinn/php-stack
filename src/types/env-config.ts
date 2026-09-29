@@ -252,3 +252,29 @@ export interface PullImageResultItem {
   success: boolean
   error?: string
 }
+
+// ==================== 镜像包导入导出 ====================
+
+export type ImageRole = 'image' | 'base' | 'built'
+
+export interface WorkspaceImageEntry {
+  ref_name: string
+  role: ImageRole
+  service_dir: string
+  service_kind: string
+  fingerprint?: string | null
+  present: boolean
+  size?: string | null
+  source_ref?: string | null
+  note?: string | null
+}
+
+export interface ImageTransferProgress {
+  step: string
+  percentage: number
+}
+
+export interface ImageImportResult {
+  loaded_refs: string[]
+  message: string
+}

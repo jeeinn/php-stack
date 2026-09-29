@@ -106,6 +106,10 @@ pub fn run() {
             commands::preview_restore,
             commands::verify_backup,
             commands::execute_restore,
+            // 镜像包导入导出
+            commands::list_workspace_images,
+            commands::export_workspace_images,
+            commands::import_workspace_images,
             // 工作目录管理
             commands::get_workspace_info,
             commands::set_workspace_path,

@@ -592,7 +592,63 @@
     "title": "环境迁移",
     "tabs": {
       "backup": "环境备份",
-      "restore": "环境恢复"
+      "restore": "环境恢复",
+      "images": "镜像包"
+    }
+  },
+  "images": {
+    "title": "Docker 镜像包",
+    "subtitle": "导出/导入当前工作区实际镜像（.tar），便于跨机离线启动",
+    "hint": "请先恢复配置并「应用配置」以对齐指纹 compose；改 PHP 扩展后重建仍可能需要网络安装扩展。备份 ZIP 不含镜像层。",
+    "role": {
+      "image": "服务镜像",
+      "base": "基础镜像",
+      "built": "构建产物"
+    },
+    "notes": {
+      "missing_local": "本地不存在，请先拉取或启动构建",
+      "base_missing": "基础镜像缺失，离线改扩展后重建可能失败",
+      "built_missing_will_build_on_target": "尚未构建；仅导出基础镜像时目标机首次启动会 build",
+      "retag_from_legacy": "将从旧 compose 镜像名重新打标签后导出"
+    },
+    "list": {
+      "title": "当前工作区镜像",
+      "refresh": "刷新",
+      "refreshing": "刷新中...",
+      "selectAll": "全选已存在",
+      "empty": "未找到工作区配置或服务。请先在环境配置中应用配置。",
+      "ref": "镜像引用",
+      "role": "角色",
+      "service": "服务目录",
+      "size": "大小",
+      "status": "状态",
+      "present": "本地已有",
+      "missing": "缺失",
+      "fromSource": "来源：{source}"
+    },
+    "progress": {
+      "title": "进度",
+      "collect": "收集镜像列表...",
+      "retag": "对齐镜像标签...",
+      "save": "导出 tar（可能较大，请耐心等待）...",
+      "manifest": "写入清单...",
+      "load": "导入 tar...",
+      "done": "完成",
+      "doNotClose": "大文件传输中，请勿关闭窗口"
+    },
+    "importResult": {
+      "title": "已加载的镜像",
+      "hint": "若 compose 尚未含指纹 image，请重新「应用配置」后再一键启动。"
+    },
+    "action": {
+      "export": "导出选中镜像 (.tar)",
+      "exporting": "导出中...",
+      "import": "从 .tar 导入镜像",
+      "importing": "导入中..."
+    },
+    "toast": {
+      "exportSuccess": "镜像已导出到 {path}",
+      "importSuccess": "已导入 {count} 个镜像引用"
     }
   },
   "backup": {

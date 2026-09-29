@@ -21,6 +21,8 @@
     - `backup_manifest.rs`: **备份清单数据模型**（v0.1.0）
     - `backup_engine.rs`: **增强备份引擎**（v0.1.0）
     - `restore_engine.rs`: **恢复引擎**（v0.1.0，zip-slip 防护/回滚包）
+    - `image_fingerprint.rs`: **PHP/Nginx 构建镜像指纹**（v0.5）
+    - `image_transfer.rs`: **Docker 镜像 tar 导入导出**（v0.5）
     - `version_manifest.rs`: **服务版本清单管理器**（v0.2.0；v0.5 动态 kind 键）
     - `user_override_manager.rs`: **用户版本覆盖管理器**（v0.2.0，entry_kind: override/custom）
     - `mirror_config_manager.rs`: **用户镜像源配置管理器**（v0.2.0）
@@ -35,6 +37,7 @@
     - `env_config.rs`: 环境配置生成、应用、启动/重启/停止环境。
     - `mirror.rs`: 镜像源预设管理、自定义配置、连接测试。
     - `backup.rs`: 备份创建、恢复预览/验证/执行、路径转换。
+    - `image_transfer.rs`: 工作区镜像列表、导出/导入 `.tar`。
     - `workspace.rs`: 工作区管理、版本映射、用户覆盖、服务目录 CRUD、日志导出。
     - `app.rs`: 应用信息与更新相关命令。
   - `lib.rs`: 插件注册与指令分发中心。
@@ -73,6 +76,15 @@
   - Tauri 事件进度通知
   - 部分失败容错处理
   - ⚠️ 数据库导出（mysqldump）尚未实现，属待完善项
+  - ⚠️ **不含 Docker 镜像层**；跨机镜像请用迁移页「镜像包」Tab
+
+### 3b. Docker 镜像包（ImageTransferPage）
+- **实现状态**: ✅ v0.5
+- **核心功能**:
+  - 环境迁移第三 Tab：按工作区收集 image / base / built 引用并导出/导入 `.tar`
+  - PHP/Nginx compose 写出 `image: php-stack/{dir}:{fingerprint}` + `pull_policy: never`
+  - 启动时目标指纹镜像缺失则 `compose build --cache-from`（基础镜像 + 同服务旧 tag）
+  - 旁路 `{stem}.manifest.json` 记录角色与指纹
 
 ### 4. 环境恢复（RestorePage）
 - **需求覆盖**: 需求 4.1-4.10
@@ -228,6 +240,12 @@
   - 路径遍历防护（zip-slip）
   - 配置文件、项目文件还原（SQL 导入执行待完善；端口冲突仅预览提示、不自动改写）
 
+### 6b. 镜像指纹与镜像包（v0.5）
+- 位置：`image_fingerprint.rs` / `image_transfer.rs` / `commands/image_transfer.rs`
+- 指纹计入：service_dir、base tag、规范化扩展、PUID/PGID、APT/Composer/GitHub 代理、Dockerfile 哈希（不计 TZ/端口/站点/php.ini）
+- 导出：`docker save` 多镜像合一 tar + 旁路 manifest；导入：`docker load`
+- 与备份 ZIP 分离（体积与校验模型不同）
+
 ### 7. 备份清单（v0.1.0 新增）
 - 位置：`src-tauri/src/engine/backup_manifest.rs`
 - 功能：记录备份元数据和文件校验和
@@ -314,6 +332,7 @@
 ✅ **Nginx 站点管理** - 多站点挂载与托管 conf
 ✅ **关于页与自动更新** - 日志等级/导出、GitHub Releases 更新
 ✅ **服务目录与可选中间件** - Catalog 描述符；MySQL 可选；自定义 image 服务
+✅ **Docker 镜像包** - 环境迁移第三 Tab；指纹 image + tar 导入导出；启动 cache-from
 ✅ **测试框架** - 单元测试 + 集成测试 + 组件测试
 
 ### 当前版本定位（v0.5.0）
@@ -325,6 +344,7 @@
 - ✅ Nginx 多站点挂载与托管 conf
 - ✅ 镜像源统一管理（加速国内开发体验）
 - ✅ 环境备份与恢复（含跨机路径重映射）
+- ✅ Docker 镜像包跨机离线迁移（与配置 ZIP 分离）
 - ✅ 国际化与主题（中英双语 + 明暗主题）
 - ✅ 工作区与版本管理（清单 + 用户 override/custom）
 - ✅ 关于页与自动更新

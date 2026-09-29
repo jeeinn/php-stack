@@ -41,6 +41,21 @@ use super::service_catalog::{normalize_service_kind, ServiceCatalog};
 
 use crate::app_log;
 
+/// 判断 `docker images` 输出的 `repo:tag` 是否匹配期望引用。
+///
+/// - 精确匹配，或 `library/` 前缀（Docker Hub 官方镜像）
+/// - 期望值无 tag 时，额外匹配 `{name}:latest`（compose 历史默认名常见）
+pub(crate) fn image_ref_matches(repo_tag: &str, wanted: &str) -> bool {
+    if repo_tag == wanted || repo_tag == format!("library/{wanted}") {
+        return true;
+    }
+    if !wanted.contains(':') {
+        let with_latest = format!("{wanted}:latest");
+        return repo_tag == with_latest || repo_tag == format!("library/{with_latest}");
+    }
+    false
+}
+
 /// 镜像本地存在性状态（前端弹窗用）
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
@@ -88,7 +103,7 @@ impl ConfigExtractor {
                     let line = line.trim();
                     // 格式: "<repo>:<tag> <size>"，splitn(2, ' ') 拆出 size
                     if let Some((repo_tag, size)) = line.split_once(' ') {
-                        if repo_tag == image_tag || repo_tag == format!("library/{image_tag}") {
+                        if image_ref_matches(repo_tag, image_tag) {
                             return ImageStatus::Present {
                                 tag: image_tag.to_string(),
                                 size: Some(size.to_string()),
@@ -357,6 +372,20 @@ impl ConfigExtractor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_image_ref_matches_untagged_legacy_latest() {
+        assert!(image_ref_matches(
+            "php-stack-php82:latest",
+            "php-stack-php82"
+        ));
+        assert!(image_ref_matches("php:8.2-fpm", "php:8.2-fpm"));
+        assert!(image_ref_matches("library/php:8.2-fpm", "php:8.2-fpm"));
+        assert!(!image_ref_matches(
+            "php-stack-php82:latest",
+            "php-stack/php82:abc"
+        ));
+    }
 
     #[test]
     fn test_major_version_from_tag() {

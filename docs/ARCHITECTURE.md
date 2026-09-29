@@ -47,6 +47,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 │  ├── MirrorPanel.vue       (镜像源管理)                     │
 │  ├── BackupPage.vue        (环境备份)                       │
 │  ├── RestorePage.vue       (环境恢复向导)                   │
+│  ├── ImageTransferPage.vue (镜像包导入导出)                 │
 │  ├── SoftwareSettings.vue  (版本映射/用户覆盖)              │
 │  ├── AboutPage.vue         (关于/日志等级/导出)             │
 │  └── SettingsPage.vue / MigrationPage.vue / ...            │
@@ -60,7 +61,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 ├─────────────────────────────────────────────────────────────┤
 │  commands/ (API 入口，按业务域拆分)                          │
 │  ├── docker.rs / env_config.rs / mirror.rs                   │
-│  ├── backup.rs / workspace.rs / app.rs                       │
+│  ├── backup.rs / image_transfer.rs / workspace.rs / app.rs  │
 │  └── paths.rs (路径解析单一模块) / mod.rs                    │
 ├─────────────────────────────────────────────────────────────┤
 │  engine/ (核心业务引擎)                                      │
@@ -72,6 +73,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 │  ├── mirror_manager.rs + mirror_config_manager.rs + mirror_config.rs(兼容层) │
 │  ├── workspace_manager.rs    (工作目录管理)                  │
 │  ├── backup_engine.rs / restore_engine.rs / backup_manifest.rs │
+│  ├── image_fingerprint.rs / image_transfer.rs (镜像指纹与 tar 迁移) │
 │  ├── config_extractor.rs     (运行时配置提取 Phase 3)        │
 │  ├── site_manager.rs / user_config.rs / backup_options_store.rs │
 ├─────────────────────────────────────────────────────────────┤
@@ -103,6 +105,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 | `workspace_manager.rs` | 管理 `workspace.json`（app_data_dir），解耦软件本体与业务数据 |
 | `backup_engine.rs` / `backup_manifest.rs` | ZIP 备份（manifest + SHA256 + 64KB 分块流式写入） |
 | `restore_engine.rs` | 备份验证与还原：zip-slip 防护、预览端口冲突检测、恢复前自动回滚包、返回完整明细 |
+| `image_fingerprint.rs` / `image_transfer.rs` | PHP/Nginx 构建指纹；工作区镜像 tar 导出/导入（与备份 ZIP 分离） |
 | `config_extractor.rs` | 运行时按需配置提取（Phase 3）：路径表读 catalog（php/nginx 仍按主版本硬编码） |
 | `site_manager.rs` / `user_config.rs` / `backup_options_store.rs` | 站点定义 / 用户配置收纳（含 `custom_services.json`） / 备份选项持久化 |
 
@@ -114,6 +117,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 | `SoftwareSettings.vue` | 版本映射表格、用户 Override 编辑（override/custom） |
 | `MirrorPanel.vue` | 镜像源预设、独立配置、连接测试 |
 | `BackupPage.vue` / `RestorePage.vue` | 备份选项与分步恢复向导（预览→校验→确认→明细结果） |
+| `ImageTransferPage.vue` | 环境迁移「镜像包」Tab：列表 / 导出 tar / 导入 load |
 | `AboutPage.vue` / `SettingsPage.vue` | 关于/日志等级/导出；应用设置 |
 | `CustomSelect.vue` / `UiTabs.vue` / `ConfirmDialog.vue` / `Toast.vue` | 通用 UI 组件 |
 | `VersionHelpModal.vue` / `ImagePullConfirmModal.vue` | 版本帮助弹窗 / 镜像拉取确认弹窗（Phase 3 配套） |
@@ -210,7 +214,8 @@ start_environment
     → docker compose down --remove-orphans（清理旧容器）
     → 等待 ps- 容器完全停止（循环检测，最多 10 次 × 1s）
     → 检查端口冲突（PORT_CONFLICT → 前端 ConfirmDialog：忽略并继续 / 取消）
-    → docker compose up -d（后台启动）
+    → 若 PHP/Nginx 指纹镜像缺失：临时 override `build.cache_from` + `docker compose build`
+    → docker compose up -d（后台启动；已有指纹镜像时不强制 --build）
     → 智能等待容器就绪（每 2s 检查 running，无硬超时；logs -f 进程异常退出视为失败）
 ```
 
@@ -218,10 +223,19 @@ start_environment
 
 ### 5.3 备份与恢复
 
-**备份**：选择选项（项目本地配置 / 全树 / 日志 / 站点范围等，偏好持久化到 `.user-config/backup.json`）→ `BackupEngine.create_backup` → 打包 `.env`、`docker-compose.yml`、`services/`、`.user-config/`（不含 `backup.json` UI 偏好）→ 生成 `manifest.json`（含站点路径元数据）→ SHA256 校验 → 流式写入 ZIP → 进度事件。**不包含**数据库 mysqldump。
+**备份**：选择选项（项目本地配置 / 全树 / 日志 / 站点范围等，偏好持久化到 `.user-config/backup.json`）→ `BackupEngine.create_backup` → 打包 `.env`、`docker-compose.yml`、`services/`、`.user-config/`（不含 `backup.json` UI 偏好）→ 生成 `manifest.json`（含站点路径元数据）→ SHA256 校验 → 流式写入 ZIP → 进度事件。**不包含**数据库 mysqldump，**不包含** Docker 镜像层。
 
 **恢复**（分步向导）：
 1. 选择备份文件 → 2. 预览（manifest 解析 + 端口冲突检测 + **站点路径覆写**）→ 3. SHA256 完整性校验 → 4. 确认恢复（自动生成回滚包 → 解压 .env / compose / services / 其他 → 返回明细结果）。
+
+### 5.4 Docker 镜像包（跨机离线）
+
+与配置 ZIP **分离**：MigrationPage「镜像包」Tab → `list_workspace_images` / `export_workspace_images` / `import_workspace_images`。
+
+- **Compose**：PHP/Nginx 同时写 `image: php-stack/{service_dir}:{fingerprint}` 与 `pull_policy: never`（已有工作区需重新应用配置）。指纹计入 base tag、扩展、PUID/PGID、镜像源代理、Dockerfile 哈希；不计 TZ/端口/站点/php.ini。
+- **导出**：收集 image 型 tag、构建产物、FROM 基础镜像；缺失构建产物时可从 `php-stack-{dir}` 或运行中容器镜像 retag；`docker save -o` 写临时文件再 rename；旁路 `{stem}.manifest.json`。
+- **导入**：`docker load -i`；进度事件 `image-transfer-progress`。
+- **启动复用**：目标指纹已存在 → 仅 `up -d`；缺失 → 临时 override 写入 `build.cache_from` 后 `compose build`（Compose CLI 无 `--cache-from`），尽量命中已导入层（改扩展后新扩展安装仍可能要网）。
 
 ## 6. 服务模板体系
 

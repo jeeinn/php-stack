@@ -10,6 +10,9 @@
 ### ⚠ 破坏性变更
 - **站点挂载统一为 `SITE_*`**：移除「首站特例」，每站一律 `SITE_{ID}` → `/sites/{id}`。请重新「应用配置」。
 
+### 🐛 修复
+- **PHP `register_argc_argv`**：精简 `php.ini` 未显式关闭该选项时 FPM 默认为 On，查询串会写入 `$_SERVER['argv']`，导致依赖「无 argv 才走 PATHINFO」的框架误判为 CLI 。各版本模板现默认 `register_argc_argv = Off`（与 dnmp 一致；CLI SAPI 仍强制 On）
+
 ### ✨ 新增
 - **默认欢迎页**：工作区 `SOURCE_DIR=./www` → `/www` **始终挂载**（与站点卷共存）；Nginx `default.conf` 以 `default_server` + `server_name _` 提供欢迎页，`fastcgi_pass` 使用短别名 `php`；模板 `src-tauri/www/index.html` 在应用配置时释放（已存在同名文件不覆盖）。未匹配域名的请求回落到该页
 - **服务目录（Service Catalog）**：内置 `service_catalog.json` + 工作区 `.user-config/custom_services.json` 合并；生成按 `generator: php|nginx|image` 路由，服务 kind 为字符串（兼容历史 `PHP`/`MySQL` 序列化）

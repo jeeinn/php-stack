@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+---
+
+## [0.5.1] - 2026-09-30
+
 ### 🐛 修复
 - **Windows 镜像包页黑框闪烁**：进入「镜像包」Tab 时列表探测会跑 `docker images` / `docker ps`，未隐藏控制台窗口；统一走 `docker_cli()`（`CREATE_NO_WINDOW`）
 

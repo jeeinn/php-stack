@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { invoke } from '@tauri-apps/api/core'
 import { getToasts } from '../composables/useToast'
+import { setPendingUpdateVersion } from '../composables/useUpdater'
 import App from '../App.vue'
 
 const open = vi.fn(async () => {})
@@ -55,6 +56,28 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
 describe('App 仪表盘 Docker 可用性检查', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setPendingUpdateVersion('')
+  })
+
+  it('点「查看」后收起更新横幅，点「关闭」同样收起', async () => {
+    setPendingUpdateVersion('0.5.2')
+    const wrapper = mount(App)
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="update-available-banner"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="update-banner-view"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="update-available-banner"]').exists()).toBe(false)
+
+    setPendingUpdateVersion('0.5.3')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="update-available-banner"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="update-banner-dismiss"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="update-available-banner"]').exists()).toBe(false)
+
+    wrapper.unmount()
   })
 
   // Feature: dashboard-docker-check, Property: 挂载后必须真实调用后端 inspect_docker_host，

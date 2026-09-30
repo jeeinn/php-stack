@@ -36,7 +36,7 @@ import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import WorkspaceMissingDialog from './components/WorkspaceMissingDialog.vue';
 import { addLog, addLogKey, clearLogs, showToast, UI_LOG_LIMIT, visibleLogs, formatLogLine } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
-import { pendingUpdateVersion, setPendingUpdateVersion } from './composables/useUpdater';
+import { pendingUpdateVersion, setPendingUpdateVersion, showUpdateBanner, dismissUpdateBanner } from './composables/useUpdater';
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
 import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
@@ -472,6 +472,12 @@ function openWorkspaceMissingOrConfig() {
   activeTab.value = 'env-config';
 }
 
+/** 顶栏「查看」：进入关于页并收起横幅（版本提示仍保留在关于页） */
+function openUpdateFromBanner() {
+  dismissUpdateBanner();
+  activeTab.value = 'about';
+}
+
 // 监听 tab 切换，回到 dashboard 时刷新 .env 检测状态
 watch(activeTab, async (newTab) => {
   if (newTab === 'dashboard') {
@@ -745,18 +751,30 @@ async function exportLogs() {
       </div>
 
       <div
-        v-if="pendingUpdateVersion"
+        v-if="showUpdateBanner"
         data-testid="update-available-banner"
         class="flex-shrink-0 mb-3 sm:mb-4 p-3 sm:p-4 ui-hint-box rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3"
       >
         <p class="flex-1 min-w-0 text-sm">{{ $t('about.update.banner', { version: pendingUpdateVersion }) }}</p>
-        <button
-          type="button"
-          class="flex-shrink-0 ui-btn-primary px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition"
-          @click="activeTab = 'about'"
-        >
-          {{ $t('about.update.bannerAction') }}
-        </button>
+        <div class="flex flex-shrink-0 items-center gap-2">
+          <button
+            type="button"
+            data-testid="update-banner-view"
+            class="ui-btn-primary px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition"
+            @click="openUpdateFromBanner"
+          >
+            {{ $t('about.update.bannerAction') }}
+          </button>
+          <button
+            type="button"
+            data-testid="update-banner-dismiss"
+            class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            :aria-label="$t('common.close')"
+            @click="dismissUpdateBanner"
+          >
+            {{ $t('common.close') }}
+          </button>
+        </div>
       </div>
 
       <!-- 1. 环境管理 (Dashboard) -->

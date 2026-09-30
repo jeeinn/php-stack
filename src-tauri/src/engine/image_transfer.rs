@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::config_extractor::{DockerImageIndex, ImageStatus};
 use super::config_generator::{ConfigGenerator, EnvConfig};
@@ -19,6 +18,7 @@ use super::service_catalog::{normalize_service_kind, GeneratorKind, ServiceCatal
 use super::user_override_manager::UserOverrideManager;
 use super::version_manifest::VersionManifest;
 use crate::app_log;
+use crate::docker::docker_cli;
 
 /// 镜像在包中的角色
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -397,7 +397,7 @@ impl ImageTransferEngine {
     fn ps_container_image_map() -> BTreeMap<String, String> {
         let mut map = BTreeMap::new();
         // 用 CLI 避免在已有 tokio runtime 内 block_on bollard
-        let output = Command::new("docker")
+        let output = docker_cli()
             .args([
                 "ps",
                 "-a",
@@ -502,15 +502,10 @@ impl ImageTransferEngine {
             tmp_path.display()
         );
 
-        let mut cmd = Command::new("docker");
+        let mut cmd = docker_cli();
         cmd.arg("save").arg("-o").arg(&tmp_path);
         for r in &refs {
             cmd.arg(r);
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000200);
         }
         let status = cmd.status().map_err(|e| {
             cleanup_tmp(&tmp_path);
@@ -590,13 +585,8 @@ impl ImageTransferEngine {
             tar_path
         );
 
-        let mut cmd = Command::new("docker");
+        let mut cmd = docker_cli();
         cmd.args(["load", "-i", tar_path]);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000200);
-        }
         let output = cmd
             .output()
             .map_err(|e| format!("failed to start docker load: {e}"))?;
@@ -765,7 +755,7 @@ impl ImageTransferEngine {
     }
 
     fn list_local_tags_for_repo(repo: &str) -> Vec<String> {
-        let output = Command::new("docker")
+        let output = docker_cli()
             .args(["images", "--format", "{{.Repository}}:{{.Tag}}", repo])
             .output();
         match output {

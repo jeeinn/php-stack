@@ -35,11 +35,11 @@
 //! Dockerfile 仍走项目自研（PUID/PGID/镜像源注入），不碰上游。
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::service_catalog::{normalize_service_kind, ServiceCatalog};
 
 use crate::app_log;
+use crate::docker::docker_cli;
 
 /// 判断 `docker images` 输出的 `repo:tag` 是否匹配期望引用。
 ///
@@ -67,7 +67,7 @@ pub struct DockerImageIndex {
 
 impl DockerImageIndex {
     pub fn load() -> Self {
-        let output = Command::new("docker")
+        let output = docker_cli()
             .args(["images", "--format", "{{.Repository}}:{{.Tag}} {{.Size}}"])
             .output();
         let mut lines = Vec::new();
@@ -189,7 +189,7 @@ impl ConfigExtractor {
             "Pulling image: {}",
             image_tag
         );
-        let status = Command::new("docker")
+        let status = docker_cli()
             .args(["pull", image_tag])
             .status()
             .map_err(|e| format!("failed to start docker pull: {e}"))?;
@@ -254,7 +254,7 @@ impl ConfigExtractor {
                 .unwrap_or(0)
         );
 
-        let create_status = Command::new("docker")
+        let create_status = docker_cli()
             .args(["create", "--name", &container_name, image_tag])
             .status();
 
@@ -283,7 +283,7 @@ impl ConfigExtractor {
                     continue;
                 }
             }
-            let cp_status = Command::new("docker")
+            let cp_status = docker_cli()
                 .args([
                     "cp",
                     &format!("{container_name}:{src}"),
@@ -340,7 +340,7 @@ impl ConfigExtractor {
 
     /// 清理临时容器（容错，不返回错误）
     fn cleanup_container(name: &str) -> Result<(), ()> {
-        Command::new("docker")
+        docker_cli()
             .args(["rm", name])
             .status()
             .map(|_| ())

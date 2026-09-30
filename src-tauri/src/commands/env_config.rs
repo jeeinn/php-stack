@@ -85,6 +85,105 @@ async fn get_compose_logs(
     .await
 }
 
+/// 同步执行 `docker compose build`（含临时 cache_from override）。
+/// 必须在 `spawn_blocking` 内调用；stdout/stderr 均排空，避免管道堵死。
+fn run_compose_build_with_cache(
+    project_root: &std::path::Path,
+    plan: &crate::engine::image_transfer::StartBuildPlan,
+    app_handle: &tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::ui_log;
+    use std::process::Command;
+    use tauri::Emitter;
+
+    let cache_override =
+        crate::engine::image_transfer::ImageTransferEngine::write_build_cache_override(
+            project_root,
+            plan,
+        )?;
+
+    let mut build_cmd = Command::new("docker");
+    build_cmd.arg("compose").arg("-f").arg("docker-compose.yml");
+    if let Some(ref override_path) = cache_override {
+        build_cmd.arg("-f").arg(override_path);
+    }
+    build_cmd.arg("build").current_dir(project_root);
+    for svc in &plan.services_needing_build {
+        build_cmd.arg(svc);
+    }
+    build_cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        build_cmd.creation_flags(0x08000200);
+    }
+
+    let mut build_child = build_cmd.spawn().map_err(|e| {
+        if let Some(p) = &cache_override {
+            let _ = std::fs::remove_file(p);
+        }
+        format!("failed to run docker compose build: {e}")
+    })?;
+
+    let build_stdout = build_child.stdout.take();
+    let build_stderr = build_child.stderr.take();
+    let app_out = app_handle.clone();
+    let app_err = app_handle.clone();
+
+    let stdout_thread = build_stdout.map(|stdout| {
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Some(msg) = parse_docker_progress(&line) {
+                    ui_log!(&app_out, info, "commands::start_environment", "{}", msg);
+                } else if !line.is_empty() {
+                    ui_log!(&app_out, info, "commands::start_environment", "   {}", line);
+                }
+            }
+        })
+    });
+    let stderr_thread = build_stderr.map(|stderr| {
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Some(msg) = parse_docker_progress(&line) {
+                    ui_log!(&app_err, info, "commands::start_environment", "{}", msg);
+                } else if !line.is_empty() {
+                    ui_log!(&app_err, info, "commands::start_environment", "   {}", line);
+                }
+            }
+        })
+    });
+
+    let build_status = build_child.wait().map_err(|e| {
+        if let Some(p) = &cache_override {
+            let _ = std::fs::remove_file(p);
+        }
+        format!("failed to wait for compose build: {e}")
+    })?;
+    if let Some(t) = stdout_thread {
+        let _ = t.join();
+    }
+    if let Some(t) = stderr_thread {
+        let _ = t.join();
+    }
+    if let Some(p) = &cache_override {
+        let _ = std::fs::remove_file(p);
+    }
+    if !build_status.success() {
+        return Err(format!(
+            "docker compose build failed (exit {:?})",
+            build_status.code()
+        ));
+    }
+    Ok(())
+}
+
 /// 解析 Docker Compose 输出，提取关键进度信息
 /// 返回格式化后的进度消息，如果不是进度相关的行则返回 None
 fn parse_docker_progress(line: &str) -> Option<String> {
@@ -894,7 +993,71 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     }
     ui_log!(app_handle, info, "commands::start_environment", "");
 
-    // 第二步：后台启动容器（spawn 模式，实时读取 build/pull 进度）
+    // 构建型服务：目标指纹镜像缺失时先 compose build（临时 override cache_from），再 up
+    if let Some(config) = load_existing_config()? {
+        let root_for_plan = project_root.clone();
+        let plan_result = run_blocking_command(move || {
+            crate::engine::image_transfer::ImageTransferEngine::build_plan_for_start(
+                &root_for_plan,
+                &config,
+            )
+        })
+        .await;
+
+        match plan_result {
+            Ok(plan) if !plan.services_needing_build.is_empty() => {
+                ui_log!(
+                    app_handle,
+                    info,
+                    "commands::start_environment",
+                    "Building missing images: {}",
+                    plan.services_needing_build.join(", ")
+                );
+                if !plan.cache_from.is_empty() {
+                    ui_log!(
+                        app_handle,
+                        info,
+                        "commands::start_environment",
+                        "Using cache-from: {}",
+                        plan.cache_from.join(", ")
+                    );
+                }
+
+                let root = project_root.clone();
+                let app_build = app_handle.clone();
+                run_blocking_command(move || {
+                    run_compose_build_with_cache(&root, &plan, &app_build)
+                })
+                .await?;
+
+                ui_log!(
+                    app_handle,
+                    info,
+                    "commands::start_environment",
+                    "Image build finished"
+                );
+            }
+            Ok(_) => {
+                ui_log!(
+                    app_handle,
+                    info,
+                    "commands::start_environment",
+                    "Built images present; skipping compose build"
+                );
+            }
+            Err(e) => {
+                ui_log!(
+                    app_handle,
+                    warn,
+                    "commands::start_environment",
+                    "Build plan skipped: {}",
+                    e
+                );
+            }
+        }
+    }
+
+    // 后台启动容器（spawn 模式，实时读取 build/pull 进度）
     ui_log!(
         app_handle,
         info,

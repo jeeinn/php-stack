@@ -3,17 +3,19 @@ import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BackupPage from './BackupPage.vue';
 import RestorePage from './RestorePage.vue';
+import ImageTransferPage from './ImageTransferPage.vue';
 import UiTabs from './UiTabs.vue';
 
 const { t } = useI18n();
 
-type TabType = 'backup' | 'restore';
+type TabType = 'backup' | 'restore' | 'images';
 
 const activeTab = ref<TabType>('backup');
 
 const tabItems = computed(() => [
   { id: 'backup', label: t('migration.tabs.backup') },
   { id: 'restore', label: t('migration.tabs.restore') },
+  { id: 'images', label: t('migration.tabs.images') },
 ]);
 </script>
 
@@ -34,6 +36,9 @@ const tabItems = computed(() => [
       </div>
       <div v-if="activeTab === 'restore'" class="p-3 sm:p-6">
         <RestorePage />
+      </div>
+      <div v-if="activeTab === 'images'" class="p-3 sm:p-6">
+        <ImageTransferPage />
       </div>
     </div>
   </div>

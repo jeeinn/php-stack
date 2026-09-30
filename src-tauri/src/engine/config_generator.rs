@@ -7,6 +7,10 @@ use zip::write::FileOptions;
 
 use super::config_extractor::{ConfigExtractor, ExtractOutcome};
 use super::env_parser::EnvFile;
+use super::image_fingerprint::{
+    self, built_image_ref, nginx_fingerprint, php_fingerprint, NginxFingerprintInput,
+    PhpFingerprintInput,
+};
 use super::mirror_config_manager::UserMirrorConfig;
 use super::service_catalog::{
     normalize_service_kind, GeneratorKind, ServiceCatalog, ServiceDescriptor,
@@ -164,6 +168,49 @@ impl ConfigGenerator {
                         description: None,
                     })
             })
+    }
+
+    /// 指纹与 build args 共用的有效 PUID/PGID：优先读工作区 `.env`。
+    /// 缺省时用 `(1000, 1000)`，与 compose `${PUID:-1000}` / `${PGID:-1000}` 对齐
+    /// （勿再探测宿主机，否则 Linux 上指纹 UID 与默认 build arg 可能不一致）。
+    pub(crate) fn effective_uid_gid(project_root: &Path) -> (u32, u32) {
+        let env_path = project_root.join(".env");
+        if let Ok(content) = std::fs::read_to_string(&env_path) {
+            if let Ok(env) = EnvFile::parse(&content) {
+                let map = env.to_map();
+                if let (Some(u), Some(g)) = (map.get("PUID"), map.get("PGID")) {
+                    if let (Ok(uid), Ok(gid)) = (u.parse::<u32>(), g.parse::<u32>()) {
+                        return (uid, gid);
+                    }
+                }
+            }
+        }
+        (1000, 1000)
+    }
+
+    /// 指纹用的有效镜像源值（与 compose build args 默认值对齐）
+    pub(crate) fn effective_mirror_values(project_root: &Path) -> (String, String, String) {
+        let mut apt = "deb.debian.org".to_string();
+        let mut composer = "https://packagist.org".to_string();
+        let mut github = String::new();
+        if let Ok(cfg) = UserMirrorConfig::load(project_root) {
+            if let Some(c) = cfg.get_category("apt") {
+                if c.enabled && !c.source.is_empty() {
+                    apt = c.source.clone();
+                }
+            }
+            if let Some(c) = cfg.get_category("composer") {
+                if c.enabled && !c.source.is_empty() {
+                    composer = c.source.clone();
+                }
+            }
+            if let Some(c) = cfg.get_category("github_proxy") {
+                if c.enabled && !c.source.is_empty() {
+                    github = c.source.clone();
+                }
+            }
+        }
+        (apt, composer, github)
     }
 
     /// Validate config: port conflicts, unknown versions, required_min / multi_instance.
@@ -553,6 +600,10 @@ impl ConfigGenerator {
         site_manager::normalize_sites(&mut sites);
         let catalog = ServiceCatalog::merged(project_root);
         let override_manager = UserOverrideManager::new(project_root);
+        let manifest = VersionManifest::new();
+        let (puid, pgid) = Self::effective_uid_gid(project_root);
+        let (apt_mirror, composer_mirror, github_proxy) =
+            Self::effective_mirror_values(project_root);
         let mut lines: Vec<String> = Vec::new();
         // Note: 'version' attribute is obsolete in modern Docker Compose, omit it
         lines.push("name: php-stack".to_string());
@@ -584,11 +635,10 @@ impl ConfigGenerator {
                 continue;
             };
 
-            let service_dir = override_manager
-                .get_merged_entry(&kind, id)
-                .map(|entry| entry.service_dir)
-                .unwrap_or_else(|| id.clone());
+            let entry = Self::lookup_version_entry(&override_manager, &manifest, &kind, id);
+            let service_dir = entry.service_dir.clone();
             let env_prefix = service_dir.to_uppercase();
+            let base_image = entry.image_tag.clone();
 
             let aliases: Vec<&str> = if let Some(alias) = desc.short_alias.as_deref() {
                 let count = kind_counts.get(&kind).copied().unwrap_or(0);
@@ -605,7 +655,30 @@ impl ConfigGenerator {
 
             match desc.generator {
                 GeneratorKind::Php => {
+                    let dockerfile_bytes = image_fingerprint::read_dockerfile_bytes(
+                        project_root,
+                        &service_dir,
+                        |rel| Self::locate_template_file(rel).ok(),
+                    );
+                    let empty_ext: Vec<String> = Vec::new();
+                    let extensions = service.extensions.as_ref().unwrap_or(&empty_ext);
+                    let fp = php_fingerprint(&PhpFingerprintInput {
+                        service_dir: &service_dir,
+                        base_image: &base_image,
+                        extensions,
+                        puid,
+                        pgid,
+                        apt_mirror: &apt_mirror,
+                        composer_mirror: &composer_mirror,
+                        github_proxy: &github_proxy,
+                        dockerfile_bytes: &dockerfile_bytes,
+                    });
+                    let image_ref = built_image_ref(&service_dir, &fp);
+
                     lines.push(format!("  {service_dir}:"));
+                    // 显式 image + pull_policy:never：导入 tar 后可直接 up，不向 registry 拉同名 tag
+                    lines.push(format!("    image: {image_ref}"));
+                    lines.push("    pull_policy: never".to_string());
                     lines.push("    build:".to_string());
                     lines.push(format!("      context: ./services/{service_dir}"));
                     lines.push("      args:".to_string());
@@ -656,7 +729,23 @@ impl ConfigGenerator {
                     lines.push(String::new());
                 }
                 GeneratorKind::Nginx => {
+                    let dockerfile_bytes = image_fingerprint::read_dockerfile_bytes(
+                        project_root,
+                        &service_dir,
+                        |rel| Self::locate_template_file(rel).ok(),
+                    );
+                    let fp = nginx_fingerprint(&NginxFingerprintInput {
+                        service_dir: &service_dir,
+                        base_image: &base_image,
+                        puid,
+                        pgid,
+                        dockerfile_bytes: &dockerfile_bytes,
+                    });
+                    let image_ref = built_image_ref(&service_dir, &fp);
+
                     lines.push(format!("  {service_dir}:"));
+                    lines.push(format!("    image: {image_ref}"));
+                    lines.push("    pull_policy: never".to_string());
                     lines.push("    build:".to_string());
                     lines.push(format!("      context: ${{{env_prefix}_BUILD_CONTEXT}}"));
                     lines.push("      args:".to_string());
@@ -809,7 +898,7 @@ impl ConfigGenerator {
     }
 
     /// 在所有候选目录中定位模板文件，返回第一个命中的完整路径。
-    fn locate_template_file(template_name: &str) -> Result<PathBuf, String> {
+    pub(crate) fn locate_template_file(template_name: &str) -> Result<PathBuf, String> {
         let candidates = Self::template_base_candidates();
         let searched: Vec<String> = candidates
             .iter()
@@ -2034,12 +2123,13 @@ APP_VERSION=9
         assert!(compose.contains("${TZ}"));
 
         // 各服务均应运行时注入 TZ（Nginx/Redis 此前缺失，日志会落 UTC）
+        // 注意：image: php-stack/{dir}:fp 也含 `{dir}:`，必须按服务键切分
         assert!(
             compose.contains("nginx125:") && compose.contains("TZ: \"${TZ}\""),
             "nginx 服务应注入运行时 TZ"
         );
         let nginx_block = compose
-            .split("nginx125:")
+            .split("\n  nginx125:\n")
             .nth(1)
             .and_then(|s| s.split("\nnetworks:").next())
             .unwrap_or("");
@@ -2048,9 +2138,9 @@ APP_VERSION=9
             "nginx 应有 environment.TZ，实际段落:\n{nginx_block}"
         );
         let redis_block = compose
-            .split("redis70:")
+            .split("\n  redis70:\n")
             .nth(1)
-            .and_then(|s| s.split("\n  nginx").next())
+            .and_then(|s| s.split("\n  nginx125:\n").next())
             .unwrap_or("");
         assert!(
             redis_block.contains("environment:") && redis_block.contains("TZ: \"${TZ}\""),
@@ -2063,9 +2153,9 @@ APP_VERSION=9
             "单 Redis 应有 alias redis，实际段落:\n{redis_block}"
         );
         let mysql_block = compose
-            .split("mysql80:")
+            .split("\n  mysql80:\n")
             .nth(1)
-            .and_then(|s| s.split("\n  redis").next())
+            .and_then(|s| s.split("\n  redis70:\n").next())
             .unwrap_or("");
         assert!(
             mysql_block.contains("aliases:") && mysql_block.contains("- mysql"),
@@ -2076,9 +2166,9 @@ APP_VERSION=9
             "单 Nginx 应有 alias nginx，实际段落:\n{nginx_block}"
         );
         let php_block = compose
-            .split("php82:")
+            .split("\n  php82:\n")
             .nth(1)
-            .and_then(|s| s.split("\n  mysql").next())
+            .and_then(|s| s.split("\n  mysql80:\n").next())
             .unwrap_or("");
         assert!(
             php_block.contains("aliases:") && php_block.contains("- php"),
@@ -2088,6 +2178,60 @@ APP_VERSION=9
         // Should NOT contain hardcoded values for versions/ports
         assert!(!compose.contains("image: mysql:8.0"));
         assert!(!compose.contains("\"3306:3306\""));
+
+        // PHP/Nginx 构建型服务应写出带指纹的 image + pull_policy: never
+        assert!(
+            php_block.contains("image: php-stack/php82:")
+                && php_block.contains("pull_policy: never"),
+            "php 应有指纹 image 与 pull_policy:never，实际段落:\n{php_block}"
+        );
+        assert!(
+            nginx_block.contains("image: php-stack/nginx125:")
+                && nginx_block.contains("pull_policy: never"),
+            "nginx 应有指纹 image 与 pull_policy:never，实际段落:\n{nginx_block}"
+        );
+        // Image 型服务不应强制 pull_policy: never（仍可在线 pull）
+        assert!(
+            !mysql_block.contains("pull_policy: never"),
+            "mysql 不应有 pull_policy:never，实际段落:\n{mysql_block}"
+        );
+    }
+
+    #[test]
+    fn test_generate_compose_timezone_does_not_change_fingerprint_image() {
+        // TZ 只在运行时 environment，不进指纹；仅改 timezone 时 image: 行应一致
+        let mut a = make_basic_config();
+        a.timezone = "Asia/Shanghai".into();
+        let mut b = make_basic_config();
+        b.timezone = "UTC".into();
+        let root = std::env::temp_dir();
+        let ca = ConfigGenerator::generate_compose(&a, &root);
+        let cb = ConfigGenerator::generate_compose(&b, &root);
+        let image_line = |compose: &str, svc: &str| -> String {
+            compose
+                .split(&format!("\n  {svc}:\n"))
+                .nth(1)
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| l.trim_start().starts_with("image: php-stack/"))
+                        .map(|l| l.trim().to_string())
+                })
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            image_line(&ca, "php82"),
+            image_line(&cb, "php82"),
+            "仅改 TZ 不应改变 PHP 指纹 image"
+        );
+        assert_eq!(
+            image_line(&ca, "nginx125"),
+            image_line(&cb, "nginx125"),
+            "仅改 TZ 不应改变 Nginx 指纹 image"
+        );
+        assert!(
+            !image_line(&ca, "php82").is_empty(),
+            "应写出 php 指纹 image"
+        );
     }
 
     #[test]

@@ -12,8 +12,12 @@
 
 ### 🐛 修复
 - **PHP `register_argc_argv`**：精简 `php.ini` 未显式关闭该选项时 FPM 默认为 On，查询串会写入 `$_SERVER['argv']`，导致依赖「无 argv 才走 PATHINFO」的框架误判为 CLI 。各版本模板现默认 `register_argc_argv = Off`（与 dnmp 一致；CLI SAPI 仍强制 On）
+- **指纹 PUID 兜底**：`.env` 缺 PUID/PGID 时与 compose `${PUID:-1000}` 对齐为 `(1000, 1000)`，避免指纹与默认 build arg 不一致
+- **`build.cache_from` 过滤**：仅纳入 `DockerImageIndex` 中确实存在的引用；跳过 `sha256:…` / 镜像 ID
 
 ### ✨ 新增
+- **Docker 镜像包（环境迁移）**：第三 Tab 导出/导入工作区实际镜像 `.tar`（image 型 tag + PHP/Nginx 构建产物与基础镜像）；旁路 `{stem}.manifest.json`。备份 ZIP **仍不含**镜像层
+- **构建指纹 image**：PHP/Nginx compose 写出 `image: php-stack/{dir}:{fingerprint}` + `pull_policy: never`（已有工作区需重新「应用配置」）；启动时目标指纹缺失则经临时 compose override 的 `build.cache_from` 重建（`docker compose build` 不支持 CLI `--cache-from`）；**禁止**把旧 compose 默认名 retag 到指纹 tag（避免扩展变更后 tag 说谎）
 - **Docker 未就绪时的打开与安装**：运行状态横幅按本机探测区分未安装、已安装未启动、权限不足和自定义 `DOCKER_HOST`；可打开已安装的 Docker Desktop，或跳转对应平台的官方安装页
 - **默认欢迎页**：工作区 `SOURCE_DIR=./www` → `/www` **始终挂载**（与站点卷共存）；Nginx `default.conf` 以 `default_server` + `server_name _` 提供欢迎页，`fastcgi_pass` 使用短别名 `php`；模板 `src-tauri/www/index.html` 在应用配置时释放（已存在同名文件不覆盖）。未匹配域名的请求回落到该页
 - **服务目录（Service Catalog）**：内置 `service_catalog.json` + 工作区 `.user-config/custom_services.json` 合并；生成按 `generator: php|nginx|image` 路由，服务 kind 为字符串（兼容历史 `PHP`/`MySQL` 序列化）

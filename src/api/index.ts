@@ -65,3 +65,12 @@ export {
   removeUserMirrorCategory,
   resetAllMirrorOverrides,
 } from './mirror'
+export {
+  listWorkspaceImages,
+  exportWorkspaceImages,
+  importWorkspaceImages,
+  type ImageExportResult,
+  type ImageImportResult,
+  type ImageTransferProgress,
+  type WorkspaceImageEntry,
+} from './imageTransfer'

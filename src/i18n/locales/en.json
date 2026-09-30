@@ -868,7 +868,7 @@
       "available": "Update available: {version}",
       "download": "Download and install",
       "downloading": "Downloading… {percent}%",
-      "failed": "Update check failed: {error}",
+      "failed": "Update failed: {error}",
       "devHint": "Update checks may fail in development mode.",
       "banner": "Version {version} is available",
       "bannerAction": "View"

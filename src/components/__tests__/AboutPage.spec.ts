@@ -99,7 +99,7 @@ describe('AboutPage', () => {
   it('shows available update and can start install', async () => {
     const downloadAndInstall = vi.fn().mockResolvedValue(undefined)
     check.mockResolvedValueOnce({
-      version: '0.5.1',
+      version: '0.5.2',
       body: 'fixes',
       downloadAndInstall,
     })
@@ -107,10 +107,36 @@ describe('AboutPage', () => {
     await flushPromises()
     await wrapper.get('[data-testid="about-check-update"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="about-update-available"]').text()).toContain('0.5.1')
+    expect(wrapper.get('[data-testid="about-update-available"]').text()).toContain('0.5.2')
     await wrapper.get('[data-testid="about-install-update"]').trigger('click')
     await flushPromises()
     expect(downloadAndInstall).toHaveBeenCalled()
+    expect(relaunch).toHaveBeenCalled()
+  })
+
+  it('keeps Update out of Vue reactivity so private fields still work on install', async () => {
+    // 复现：Update 含 #private；若被 ref() Proxy 包裹，downloadAndInstall 内读私有字段会抛
+    // TypeError: Cannot read private member from an object whose class did not declare it
+    class FakeUpdate {
+      #alive = true
+      version = '0.5.2'
+      body = 'private-field fix'
+      downloadAndInstall = vi.fn(async function (this: FakeUpdate) {
+        if (!this.#alive) {
+          throw new Error('private field unreachable')
+        }
+      })
+    }
+    const update = new FakeUpdate()
+    check.mockResolvedValueOnce(update)
+    const wrapper = mount(AboutPage)
+    await flushPromises()
+    await wrapper.get('[data-testid="about-check-update"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="about-install-update"]').trigger('click')
+    await flushPromises()
+    expect(update.downloadAndInstall).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="about-update-error"]').exists()).toBe(false)
     expect(relaunch).toHaveBeenCalled()
   })
 

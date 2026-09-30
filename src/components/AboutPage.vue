@@ -26,7 +26,10 @@ const logLevels: LogLevel[] = ['info', 'warn', 'error'];
 
 const updateStatus = ref<'idle' | 'checking' | 'upToDate' | 'available' | 'downloading' | 'error'>('idle');
 const updateError = ref('');
-const foundUpdate = ref<Update | null>(null);
+/** 仅展示用；Update 含 #private，不可放入 Vue 响应式 Proxy */
+const updateInfo = ref<{ version: string; body: string } | null>(null);
+/** 非响应式句柄，供 downloadAndInstall */
+let updateHandle: Update | null = null;
 const downloadPercent = ref(0);
 
 const supportText = computed(() => {
@@ -81,7 +84,8 @@ async function openProject() {
 async function checkForUpdate() {
   updateStatus.value = 'checking';
   updateError.value = '';
-  foundUpdate.value = null;
+  updateInfo.value = null;
+  updateHandle = null;
   try {
     const update = await check();
     if (!update) {
@@ -89,7 +93,12 @@ async function checkForUpdate() {
       updateStatus.value = 'upToDate';
       return;
     }
-    foundUpdate.value = update;
+    // 必须保留原始实例；ref()/Proxy 会破坏 #private 字段访问
+    updateHandle = update;
+    updateInfo.value = {
+      version: update.version,
+      body: update.body ?? '',
+    };
     setPendingUpdateVersion(update.version);
     updateStatus.value = 'available';
   } catch (e) {
@@ -99,7 +108,7 @@ async function checkForUpdate() {
 }
 
 async function installUpdate() {
-  const update = foundUpdate.value;
+  const update = updateHandle;
   if (!update) return;
   updateStatus.value = 'downloading';
   downloadPercent.value = 0;
@@ -238,11 +247,11 @@ const updatePercentLabel = computed(() =>
         <p v-if="updateStatus === 'upToDate'" class="mt-3 text-sm text-emerald-600 dark:text-emerald-400" data-testid="about-update-uptodate">
           {{ $t('about.update.upToDate') }}
         </p>
-        <div v-else-if="updateStatus === 'available' && foundUpdate" class="mt-3 text-sm" data-testid="about-update-available">
+        <div v-else-if="updateStatus === 'available' && updateInfo" class="mt-3 text-sm" data-testid="about-update-available">
           <p class="text-blue-600 dark:text-blue-400 font-medium">
-            {{ $t('about.update.available', { version: foundUpdate.version }) }}
+            {{ $t('about.update.available', { version: updateInfo.version }) }}
           </p>
-          <p v-if="foundUpdate.body" class="mt-2 text-xs text-slate-500 whitespace-pre-wrap">{{ foundUpdate.body }}</p>
+          <p v-if="updateInfo.body" class="mt-2 text-xs text-slate-500 whitespace-pre-wrap">{{ updateInfo.body }}</p>
         </div>
         <p v-else-if="updateStatus === 'downloading'" class="mt-3 text-sm text-slate-600 dark:text-slate-300">
           {{ updatePercentLabel }}

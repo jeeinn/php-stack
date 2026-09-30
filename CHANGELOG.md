@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### 🐛 修复
+- **自动更新「下载并安装」失败**：`Update` 实例含 JS `#private` 字段，被放入 Vue `ref` 后经 Proxy 调用 `downloadAndInstall` 会抛 `Cannot read private member…`；改为非响应式句柄 + 仅展示元数据
+
 ---
 
 ## [0.5.1] - 2026-09-30

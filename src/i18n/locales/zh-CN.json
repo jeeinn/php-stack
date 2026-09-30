@@ -868,7 +868,7 @@
       "available": "发现新版本 {version}",
       "download": "下载并安装",
       "downloading": "正在下载… {percent}%",
-      "failed": "检查更新失败: {error}",
+      "failed": "更新失败: {error}",
       "devHint": "开发模式下可能无法检查更新。",
       "banner": "新版本 {version} 可用",
       "bannerAction": "查看"

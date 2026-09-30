@@ -148,18 +148,28 @@
 ### 5. 运行时配置提取（Phase 3）
 - 应用配置前镜像存在性检测 / 拉取确认 / `docker create + cp` 提取默认配置
 
-## ✅ v0.5.0 新增功能（进行中 / Unreleased）
+## ✅ v0.5.0 新增功能
 
 ### 1. 服务目录（Service Catalog）
 - `service_catalog.rs` + 内置 `service_catalog.json`；用户自定义落盘 `.user-config/custom_services.json`
 - `ServiceEntry.service_type` 为字符串 kind；生成按 `generator: php|nginx|image` 路由
 - `version_manifest` 顶层动态键；`get_version_mappings` / 连接提示 / SoftwareSettings 读 catalog
 
-### 2. 可选中间件
-- MySQL 默认可关（同 Redis）；新工作区默认不启用 MySQL；未选中不写配置
-
-### 3. 自定义服务（高级）
+### 2. 可选中间件与自定义服务
+- MySQL 与 Redis 对齐——可删到 0；新工作区默认不启用 MySQL；未选中不写配置
 - 环境配置页可添加 image 型自定义服务（MongoDB / Memcached 等）；不内置官方条目
+- 容器内连接主机名提示；单实例短别名由 catalog `short_alias` 驱动
+
+### 3. 站点挂载统一与默认欢迎页
+- 每站一律 `SITE_{ID}` → `/sites/{id}`（破坏性：需重新应用配置）
+- `SOURCE_DIR=./www` → `/www` 始终挂载；未匹配域名回落欢迎页
+
+### 4. Docker 镜像包与构建指纹
+- 环境迁移第三 Tab：按工作区导出/导入 `.tar` + 旁路 manifest
+- PHP/Nginx 写出指纹 `image:` + `pull_policy: never`；缺失时 `cache_from` 重建（不 retag）
+
+### 5. Docker 未就绪引导
+- 横幅区分未安装 / 未启动 / 权限不足 / 自定义 `DOCKER_HOST`；可打开 Desktop 或跳转安装页
 
 ## 🛠️ 开发规范
 
@@ -380,7 +390,7 @@
 - 自动更新已完成（`tauri-plugin-updater` + GitHub Releases）；正式发版流水线需配置 `TAURI_SIGNING_PRIVATE_KEY` 签名密钥
 
 ### 开发建议
-1. **稳定优先**: v0.4.x 重点是稳定性、站点/版本映射体验与发版质量
+1. **稳定优先**: v0.5.x 重点是稳定性、catalog/镜像包边界情况与发版质量
 2. **Bug 修复**: 优先处理用户反馈的问题和边界情况
 3. **性能优化**: 大文件备份的流式处理已落地；可评估增量备份
 4. **文档同步**: 变更进 CHANGELOG、架构进 ARCHITECTURE、过时直接删（见「文档规范」）

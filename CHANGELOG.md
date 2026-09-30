@@ -7,13 +7,12 @@
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] - 2026-09-30
+
 ### ⚠ 破坏性变更
 - **站点挂载统一为 `SITE_*`**：移除「首站特例」，每站一律 `SITE_{ID}` → `/sites/{id}`。请重新「应用配置」。
-
-### 🐛 修复
-- **PHP `register_argc_argv`**：精简 `php.ini` 未显式关闭该选项时 FPM 默认为 On，查询串会写入 `$_SERVER['argv']`，导致依赖「无 argv 才走 PATHINFO」的框架误判为 CLI 。各版本模板现默认 `register_argc_argv = Off`（与 dnmp 一致；CLI SAPI 仍强制 On）
-- **指纹 PUID 兜底**：`.env` 缺 PUID/PGID 时与 compose `${PUID:-1000}` 对齐为 `(1000, 1000)`，避免指纹与默认 build arg 不一致
-- **`build.cache_from` 过滤**：仅纳入 `DockerImageIndex` 中确实存在的引用；跳过 `sha256:…` / 镜像 ID
 
 ### ✨ 新增
 - **Docker 镜像包（环境迁移）**：第三 Tab 导出/导入工作区实际镜像 `.tar`（image 型 tag + PHP/Nginx 构建产物与基础镜像）；旁路 `{stem}.manifest.json`。备份 ZIP **仍不含**镜像层
@@ -25,6 +24,11 @@
 - **添加自定义服务**：环境配置页高级区可自建 image 型服务（如 MongoDB / Memcached），落盘自定义描述符 + 版本映射；不删用户 `data/`
 - **容器内连接主机名提示**：环境配置页每个服务卡片展示推荐主机名（可复制）；同类多实例时警告短名不可用；应用配置后汇总连接地址
 - 单实例短主机名别名由 catalog `short_alias` 驱动（内置 php/mysql/redis/nginx；自定义服务可指定）
+
+### 🐛 修复
+- **PHP `register_argc_argv`**：精简 `php.ini` 未显式关闭该选项时 FPM 默认为 On，查询串会写入 `$_SERVER['argv']`，导致依赖「无 argv 才走 PATHINFO」的框架误判为 CLI 。各版本模板现默认 `register_argc_argv = Off`（与 dnmp 一致；CLI SAPI 仍强制 On）
+- **指纹 PUID 兜底**：`.env` 缺 PUID/PGID 时与 compose `${PUID:-1000}` 对齐为 `(1000, 1000)`，避免指纹与默认 build arg 不一致
+- **`build.cache_from` 过滤**：仅纳入 `DockerImageIndex` 中确实存在的引用；跳过 `sha256:…` / 镜像 ID
 
 ### 待完善（未纳入本版）
 - 恢复时按建议端口自动改写 `.env` / compose（`port_overrides`）

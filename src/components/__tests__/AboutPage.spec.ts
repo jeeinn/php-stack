@@ -51,7 +51,7 @@ describe('AboutPage', () => {
     vi.clearAllMocks()
     localStorage.removeItem(LOG_LEVEL_STORAGE_KEY)
     getSupportInfo.mockResolvedValue({
-      app_version: '0.4.0',
+      app_version: '0.5.0',
       os: 'Windows',
       os_version: '10.0.26120',
       arch: 'x86_64',
@@ -61,13 +61,13 @@ describe('AboutPage', () => {
   it('renders support info and copies it', async () => {
     const wrapper = mount(AboutPage)
     await flushPromises()
-    expect(wrapper.get('[data-testid="about-version"]').text()).toBe('0.4.0')
+    expect(wrapper.get('[data-testid="about-version"]').text()).toBe('0.5.0')
     expect(wrapper.get('[data-testid="about-os"]').text()).toContain('Windows')
     expect(wrapper.get('[data-testid="about-arch"]').text()).toBe('x86_64')
 
     await wrapper.get('[data-testid="about-copy-support"]').trigger('click')
     expect(writeText).toHaveBeenCalledWith(
-      'Version: 0.4.0\nOS: Windows 10.0.26120\nArch: x86_64',
+      'Version: 0.5.0\nOS: Windows 10.0.26120\nArch: x86_64',
     )
   })
 
@@ -99,7 +99,7 @@ describe('AboutPage', () => {
   it('shows available update and can start install', async () => {
     const downloadAndInstall = vi.fn().mockResolvedValue(undefined)
     check.mockResolvedValueOnce({
-      version: '0.4.0',
+      version: '0.5.0',
       body: 'fixes',
       downloadAndInstall,
     })
@@ -107,7 +107,7 @@ describe('AboutPage', () => {
     await flushPromises()
     await wrapper.get('[data-testid="about-check-update"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="about-update-available"]').text()).toContain('0.4.0')
+    expect(wrapper.get('[data-testid="about-update-available"]').text()).toContain('0.5.0')
     await wrapper.get('[data-testid="about-install-update"]').trigger('click')
     await flushPromises()
     expect(downloadAndInstall).toHaveBeenCalled()

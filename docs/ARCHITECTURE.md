@@ -1,7 +1,7 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: v0.4.0
-> **最后更新**: 2026-09-24
+> **版本**: v0.5.0
+> **最后更新**: 2026-09-30
 > **配套文档**: [README.md](../README.md)（用户视角）、[DEV.md](../DEV.md)（开发者指南）、[AGENTS.md](../AGENTS.md)（AI Agent 协作规范）
 
 ---
@@ -25,11 +25,13 @@
 PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可视化管理工具。
 
 **核心价值**：
-- 🎯 **可视化配置** — GUI 替代手动编辑 `.env` 和 `docker-compose.yml`
-- 🌐 **站点挂载** — 多站点 Nginx conf + PHP/Nginx 卷映射，支持跨机路径重映射
+- 🎯 **可视化配置** — GUI 替代手动编辑 `.env` 和 `docker-compose.yml`；中间件可选
+- 🧩 **服务目录** — Catalog 描述符驱动扩展；用户可添加 image 型自定义服务
+- 🌐 **站点挂载** — 多站点 Nginx conf + `SITE_*` 卷映射 + 默认欢迎页；支持跨机路径重映射
 - 🌐 **镜像源加速** — 统一管理 Docker/APT/Composer/NPM 镜像源
 - 💾 **环境备份恢复** — ZIP 打包 + SHA256 校验 + 恢复前自动回滚包
-- 🔧 **多版本管理** — PHP/MySQL/Redis/Nginx 多版本共存；清单 + 用户 override/custom
+- 📦 **Docker 镜像包** — 工作区镜像 tar 导出/导入（与配置 ZIP 分离）；构建指纹 image
+- 🔧 **多版本管理** — 动态 kind 清单 + 用户 override/custom
 - 🌍 **国际化与主题** — 中/英双语、自动/明亮/暗黑三种模式
 - 🐳 **权限映射** — PUID/PGID 用户映射，解决挂载目录权限问题
 - 🔄 **关于与更新** — 日志等级/导出、GitHub Releases 自动更新

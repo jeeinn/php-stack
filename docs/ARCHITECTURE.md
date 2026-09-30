@@ -1,6 +1,6 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: v0.5.1
+> **版本**: v0.5.2
 > **最后更新**: 2026-09-30
 > **配套文档**: [README.md](../README.md)（用户视角）、[DEV.md](../DEV.md)（开发者指南）、[AGENTS.md](../AGENTS.md)（AI Agent 协作规范）
 

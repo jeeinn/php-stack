@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+---
+
+## [0.5.3] - 2026-10-08
+
 ### 🐛 修复
 - **macOS 镜像包导入失败（`os error 2`）**：从 Dock/Finder 启动时 GUI 的 `PATH` 常不含 `/usr/local/bin`，裸调 `docker` 找不到可执行文件；`docker_cli()` 现按 PATH + 常见安装位置解析绝对路径（含 Docker.app / Homebrew / `~/.docker/bin`），环境启停等 compose 调用一并走该入口
 

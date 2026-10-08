@@ -1011,7 +1011,7 @@ mod tests {
         let manifest = BackupManifest {
             version: "1.0.0".to_string(),
             timestamp: "t".to_string(),
-            app_version: "0.5.2".to_string(),
+            app_version: "0.5.3".to_string(),
             os_info: "test".to_string(),
             services: vec![
                 ManifestService {

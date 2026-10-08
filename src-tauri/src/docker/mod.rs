@@ -20,12 +20,17 @@ pub fn docker_cli() -> Command {
             "docker"
         })
     });
-    let mut cmd = Command::new(program);
+
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        let mut cmd = Command::new(program);
         // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
         cmd.creation_flags(0x08000200);
+        cmd
     }
-    cmd
+    #[cfg(not(windows))]
+    {
+        Command::new(program)
+    }
 }

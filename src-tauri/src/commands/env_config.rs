@@ -46,18 +46,10 @@ async fn get_compose_logs(
     let project_root = project_root.to_path_buf();
 
     run_blocking_command(move || {
-        use std::process::Command;
-
-        let mut logs_cmd = Command::new("docker");
+        let mut logs_cmd = crate::docker::docker_cli();
         logs_cmd
             .args(["compose", "logs", "--tail", "100"])
             .current_dir(&project_root);
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            logs_cmd.creation_flags(0x08000200);
-        }
 
         let output = logs_cmd
             .output()
@@ -93,7 +85,6 @@ fn run_compose_build_with_cache(
     app_handle: &tauri::AppHandle,
 ) -> Result<(), String> {
     use crate::ui_log;
-    use std::process::Command;
     use tauri::Emitter;
 
     let cache_override =
@@ -102,7 +93,7 @@ fn run_compose_build_with_cache(
             plan,
         )?;
 
-    let mut build_cmd = Command::new("docker");
+    let mut build_cmd = crate::docker::docker_cli();
     build_cmd.arg("compose").arg("-f").arg("docker-compose.yml");
     if let Some(ref override_path) = cache_override {
         build_cmd.arg("-f").arg(override_path);
@@ -114,12 +105,6 @@ fn run_compose_build_with_cache(
     build_cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        build_cmd.creation_flags(0x08000200);
-    }
 
     let mut build_child = build_cmd.spawn().map_err(|e| {
         if let Some(p) = &cache_override {
@@ -700,7 +685,6 @@ pub fn extract_service_config(
 #[tauri::command]
 pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
     use crate::ui_log;
-    use std::process::Command;
     use tauri::Emitter;
 
     ui_log!(
@@ -745,17 +729,10 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
         "commands::start_environment",
         "Removing old containers..."
     );
-    let mut down_cmd = Command::new("docker");
+    let mut down_cmd = crate::docker::docker_cli();
     down_cmd
         .args(["compose", "down", "--remove-orphans"])
         .current_dir(&project_root);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
-        down_cmd.creation_flags(0x08000200);
-    }
 
     // R3: docker compose down 是同步阻塞调用，挪到阻塞线程池
     let down_output = run_blocking_command(move || {
@@ -1072,18 +1049,12 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     );
     ui_log!(app_handle, info, "commands::start_environment", "");
 
-    let mut compose_cmd = Command::new("docker");
+    let mut compose_cmd = crate::docker::docker_cli();
     compose_cmd
         .args(["compose", "up", "-d"])
         .current_dir(&project_root)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        compose_cmd.creation_flags(0x08000200);
-    }
 
     // 使用 spawn 而非 output，这样 build/pull 过程中可以实时读取 stderr 进度
     let mut child = compose_cmd.spawn().map_err(|e| {
@@ -1466,7 +1437,6 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
 #[tauri::command]
 pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
     use crate::ui_log;
-    use std::process::Command;
     use tauri::Emitter;
 
     ui_log!(
@@ -1512,17 +1482,10 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
         "Running: docker compose up -d --force-recreate"
     );
 
-    let mut restart_cmd = Command::new("docker");
+    let mut restart_cmd = crate::docker::docker_cli();
     restart_cmd
         .args(["compose", "up", "-d", "--force-recreate"])
         .current_dir(&project_root);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
-        restart_cmd.creation_flags(0x08000200);
-    }
 
     let output = restart_cmd.output().map_err(|e| {
         let err_msg = format!("failed to run docker compose up: {e}");
@@ -1584,7 +1547,6 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
 #[tauri::command]
 pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, String> {
     use crate::ui_log;
-    use std::process::Command;
     use tauri::Emitter;
 
     ui_log!(
@@ -1630,17 +1592,10 @@ pub async fn stop_environment(app_handle: tauri::AppHandle) -> Result<String, St
         "Running: docker compose stop"
     );
 
-    let mut stop_cmd = Command::new("docker");
+    let mut stop_cmd = crate::docker::docker_cli();
     stop_cmd
         .args(["compose", "stop"])
         .current_dir(&project_root);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // CREATE_NEW_PROCESS_GROUP (0x00000200) | CREATE_NO_WINDOW (0x08000000)
-        stop_cmd.creation_flags(0x08000200);
-    }
 
     let output = stop_cmd.output().map_err(|e| {
         let err_msg = format!("failed to run docker compose stop: {e}");

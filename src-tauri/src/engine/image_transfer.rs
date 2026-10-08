@@ -509,7 +509,14 @@ impl ImageTransferEngine {
         }
         let status = cmd.status().map_err(|e| {
             cleanup_tmp(&tmp_path);
-            format!("failed to start docker save: {e}")
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!(
+                    "failed to start docker save: docker CLI not found \
+                     (install Docker Desktop or ensure `docker` is on PATH): {e}"
+                )
+            } else {
+                format!("failed to start docker save: {e}")
+            }
         })?;
         if !status.success() {
             cleanup_tmp(&tmp_path);
@@ -587,9 +594,16 @@ impl ImageTransferEngine {
 
         let mut cmd = docker_cli();
         cmd.args(["load", "-i", tar_path]);
-        let output = cmd
-            .output()
-            .map_err(|e| format!("failed to start docker load: {e}"))?;
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!(
+                    "failed to start docker load: docker CLI not found \
+                         (install Docker Desktop or ensure `docker` is on PATH): {e}"
+                )
+            } else {
+                format!("failed to start docker load: {e}")
+            }
+        })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("docker load failed: {stderr}"));

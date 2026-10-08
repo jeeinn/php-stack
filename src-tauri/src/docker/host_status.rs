@@ -232,14 +232,22 @@ fn linux_desktop_candidates() -> Vec<PathBuf> {
 }
 
 fn docker_cli_exists(os: HostOs) -> bool {
+    resolve_docker_binary(os).is_some()
+}
+
+/// 解析 `docker` CLI 绝对路径：先查 `PATH`，再回退常见安装位置。
+///
+/// macOS / Linux 下从 Dock / Finder 启动的 GUI 进程 `PATH` 往往不含
+/// `/usr/local/bin`，裸 `Command::new("docker")` 会得到 `os error 2`。
+pub(crate) fn resolve_docker_binary(os: HostOs) -> Option<PathBuf> {
     let names: &[&str] = match os {
         HostOs::Windows => &["docker.exe"],
         HostOs::Macos | HostOs::Linux | HostOs::Other => &["docker"],
     };
-    if find_on_path(names).is_some() {
-        return true;
+    if let Some(found) = find_on_path(names) {
+        return Some(found);
     }
-    cli_candidates(os).iter().any(|path| path.is_file())
+    cli_candidates(os).into_iter().find(|path| path.is_file())
 }
 
 fn cli_candidates(os: HostOs) -> Vec<PathBuf> {
@@ -250,11 +258,22 @@ fn cli_candidates(os: HostOs) -> Vec<PathBuf> {
             .join("resources")
             .join("bin")
             .join("docker.exe")],
-        HostOs::Macos => vec![
-            PathBuf::from("/usr/local/bin/docker"),
-            PathBuf::from("/opt/homebrew/bin/docker"),
-            PathBuf::from("/Applications/Docker.app/Contents/Resources/bin/docker"),
-        ],
+        HostOs::Macos => {
+            let mut paths = vec![
+                PathBuf::from("/usr/local/bin/docker"),
+                PathBuf::from("/opt/homebrew/bin/docker"),
+                PathBuf::from("/Applications/Docker.app/Contents/Resources/bin/docker"),
+            ];
+            if let Some(home) = std::env::var_os("HOME") {
+                paths.push(
+                    PathBuf::from(home)
+                        .join(".docker")
+                        .join("bin")
+                        .join("docker"),
+                );
+            }
+            paths
+        }
         HostOs::Linux => vec![
             PathBuf::from("/usr/bin/docker"),
             PathBuf::from("/usr/local/bin/docker"),
@@ -513,5 +532,23 @@ mod tests {
         assert_eq!(report.kind, DockerHostKind::Ready);
         assert!(!report.can_open);
         assert!(!report.install_url.is_empty());
+    }
+
+    // Feature: docker-cli-resolve, Property: macOS 候选路径覆盖常见 Desktop / Homebrew / 用户 CLI 落点。
+    #[test]
+    fn macos_cli_candidates_cover_desktop_and_homebrew() {
+        let paths = cli_candidates(HostOs::Macos);
+        let as_str: Vec<_> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        assert!(as_str.iter().any(|p| p == "/usr/local/bin/docker"));
+        assert!(as_str.iter().any(|p| p == "/opt/homebrew/bin/docker"));
+        assert!(as_str
+            .iter()
+            .any(|p| p.ends_with("/Applications/Docker.app/Contents/Resources/bin/docker")));
+        if std::env::var_os("HOME").is_some() {
+            assert!(as_str.iter().any(|p| p.ends_with("/.docker/bin/docker")));
+        }
     }
 }

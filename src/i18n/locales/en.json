@@ -157,7 +157,7 @@
       "browse": "Choose folder",
       "apply": "Apply and continue",
       "cancel": "Cancel start",
-      "pathRequired": "Enter a path for sites set to map",
+      "pathRequired": "Enter a path for sites set to “{action}”",
       "emptyRows": "No site entries to fix. Close this dialog and check site mounts on the Environment Config page."
     },
     "startTooltip": {
@@ -751,7 +751,7 @@
       "deferHint": "Deferred sites skip Compose volumes and managed Nginx conf; the hostname falls back to the welcome page. The site definition remains for later mapping.",
       "publicDir": "Public directory {dir}, relative to the mount. It travels with the config and does not need a new path.",
       "browse": "Choose folder",
-      "required": "An absolute path is set to map but has no folder yet",
+      "required": "An absolute path is set to “{action}” but has no folder yet",
       "kindRelative": "Workspace-relative",
       "kindAbsolute": "Absolute path",
       "warnings": "Backup Warnings",

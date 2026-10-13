@@ -157,7 +157,7 @@
       "browse": "选择文件夹",
       "apply": "应用并继续启动",
       "cancel": "取消启动",
-      "pathRequired": "请为「挂到本机目录」的站点填写路径",
+      "pathRequired": "请为「{action}」的站点填写路径",
       "emptyRows": "没有可处理的站点条目，请关闭后到环境配置页检查站点挂载。"
     },
     "startTooltip": {
@@ -751,7 +751,7 @@
       "deferHint": "暂缓后不写 Compose 卷与 Nginx conf，该域名会落到默认欢迎页；站点配置仍保留，可稍后补映射。",
       "publicDir": "对外目录 {dir}，相对挂载目录，随配置带走，不用重新选择。",
       "browse": "选择文件夹",
-      "required": "还有绝对路径选择了「挂到本机目录」但未填写路径",
+      "required": "还有绝对路径选择了「{action}」但未填写路径",
       "kindRelative": "相对工作区",
       "kindAbsolute": "绝对路径",
       "warnings": "备份时的警告",

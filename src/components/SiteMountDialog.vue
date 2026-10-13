@@ -116,7 +116,12 @@ function handleConfirm() {
     return;
   }
   if (!canConfirm.value) {
-    showToast(t('dashboard.siteMount.pathRequired'), 'error');
+    showToast(
+      t('dashboard.siteMount.pathRequired', {
+        action: t('dashboard.siteMount.choiceMap'),
+      }),
+      'error',
+    );
     return;
   }
   const overrides: SitePathOverride[] = rows.value.map(row => ({

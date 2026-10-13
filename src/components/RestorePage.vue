@@ -563,7 +563,7 @@ function formatTimestamp(ts: string): string {
               </button>
               <div v-if="!canRestore && !restoring" class="mt-3 text-xs text-center text-slate-500 dark:text-slate-500">
                 <span v-if="verified === false">{{ $t('restore.restoreAction.verifyFailed') }}</span>
-                <span v-else-if="absoluteRemapPending">{{ $t('restore.preview.required') }}</span>
+                <span v-else-if="absoluteRemapPending">{{ $t('restore.preview.required', { action: $t('restore.preview.choiceMap') }) }}</span>
               </div>
             </div>
 

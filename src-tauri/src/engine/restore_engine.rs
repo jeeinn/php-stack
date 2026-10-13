@@ -241,10 +241,7 @@ fn override_for<'a>(
     overrides.iter().find(|item| item.env_key == env_key)
 }
 
-fn effective_extract_host(
-    site: &ManifestSite,
-    item: &SitePathOverride,
-) -> Option<String> {
+fn effective_extract_host(site: &ManifestSite, item: &SitePathOverride) -> Option<String> {
     match item.choice {
         SiteMountChoice::Defer => None,
         SiteMountChoice::Park => Some(site_manager::suggested_park_path(&site.id)),

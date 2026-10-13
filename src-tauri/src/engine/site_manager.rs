@@ -102,11 +102,7 @@ pub fn missing_ready_site_mounts(
         .filter(|site| !site.deferred)
         .filter_map(|site| {
             if site.host_path.trim().is_empty() {
-                return Some((
-                    site.id.clone(),
-                    site.server_name.clone(),
-                    String::new(),
-                ));
+                return Some((site.id.clone(), site.server_name.clone(), String::new()));
             }
             let dest = resolve_host_path(project_root, &site.host_path);
             if dest.exists() {
@@ -755,9 +751,9 @@ fn remove_stale_managed_confs(project_root: &Path, sites: &[SiteEntry]) -> Resul
             let Some(id) = managed_site_id(&content) else {
                 continue;
             };
-            let still_here = sites.iter().any(|site| {
-                !site.deferred && site.id == id && site.nginx_service == nginx_dir
-            });
+            let still_here = sites
+                .iter()
+                .any(|site| !site.deferred && site.id == id && site.nginx_service == nginx_dir);
             if !still_here {
                 fs::remove_file(&path).map_err(|e| {
                     format!("failed to remove stale site conf {}: {e}", path.display())
@@ -804,8 +800,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: id.to_string(),
@@ -816,8 +812,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
         if id == "main" {
@@ -851,8 +847,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: "my-shop".to_string(),
@@ -863,8 +859,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
         normalize_sites(&mut sites);
@@ -901,8 +897,8 @@ mod tests {
                 nginx_service: "nginx125".into(),
                 php_service: "php82".into(),
                 public_dir: String::new(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: "shop".into(),
@@ -913,8 +909,8 @@ mod tests {
                 nginx_service: "nginx125".into(),
                 php_service: "php84".into(),
                 public_dir: String::new(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
         normalize_sites(&mut sites);
@@ -1183,10 +1179,7 @@ mod tests {
         ready.noted_host_path = ready.host_path.clone();
         ready.host_path.clear();
         sync_managed_confs(root, std::slice::from_ref(&ready)).unwrap();
-        assert!(
-            !conf.exists(),
-            "暂缓后应删除托管 conf"
-        );
+        assert!(!conf.exists(), "暂缓后应删除托管 conf");
     }
 
     #[test]

@@ -432,10 +432,7 @@ pub fn realign_site_mounts_with_overrides(
                 }
             }
         };
-        if choice == SiteMountChoice::Defer
-            && site.noted_host_path.is_empty()
-            && !host.is_empty()
-        {
+        if choice == SiteMountChoice::Defer && site.noted_host_path.is_empty() && !host.is_empty() {
             site.noted_host_path = site_manager::repair_host_path(&host);
         }
         site_manager::apply_mount_choice(site, choice, &host, project_root)?;
@@ -779,13 +776,7 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
     }
 
     if let Err(e) = ensure_ready_site_mounts(&project_root) {
-        ui_log!(
-            app_handle,
-            error,
-            "commands::start_environment",
-            "{}",
-            e
-        );
+        ui_log!(app_handle, error, "commands::start_environment", "{}", e);
         return Err(e);
     }
 
@@ -1542,13 +1533,7 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
     }
 
     if let Err(e) = ensure_ready_site_mounts(&project_root) {
-        ui_log!(
-            app_handle,
-            error,
-            "commands::restart_environment",
-            "{}",
-            e
-        );
+        ui_log!(app_handle, error, "commands::restart_environment", "{}", e);
         return Err(e);
     }
 

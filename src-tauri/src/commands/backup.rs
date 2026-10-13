@@ -102,10 +102,13 @@ pub async fn execute_restore(
     // 按挂载选择重写 .env / Compose / sites.json / 托管 conf。
     // Compose 是生成物：整份重生，备份里手改的自定义段不保留。
     if !result.restored_files.is_empty() {
-        if let Err(e) =
-            crate::commands::env_config::realign_site_mounts_with_overrides(&project_root, &path_overrides)
-        {
-            result.errors.push(format!("failed to realign site mounts: {e}"));
+        if let Err(e) = crate::commands::env_config::realign_site_mounts_with_overrides(
+            &project_root,
+            &path_overrides,
+        ) {
+            result
+                .errors
+                .push(format!("failed to realign site mounts: {e}"));
             result.success = false;
         }
     }

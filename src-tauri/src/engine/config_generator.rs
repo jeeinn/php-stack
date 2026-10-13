@@ -2285,8 +2285,8 @@ APP_VERSION=9
                 nginx_service: "nginx125".into(),
                 php_service: "php82".into(),
                 public_dir: "www".into(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: "agent".into(),
@@ -2297,8 +2297,8 @@ APP_VERSION=9
                 nginx_service: "nginx125".into(),
                 php_service: "php82".into(),
                 public_dir: "www".into(),
-            deferred: false,
-            noted_host_path: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
 

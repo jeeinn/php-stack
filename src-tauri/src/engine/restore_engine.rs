@@ -6,6 +6,7 @@ use std::path::Path;
 
 use super::backup_engine::BackupEngine;
 use super::backup_manifest::{check_manifest_version, BackupManifest};
+use super::env_parser::EnvFile;
 use super::site_manager::{self, ManifestSite, SiteMountChoice};
 use super::user_config;
 
@@ -256,6 +257,44 @@ fn effective_extract_host(site: &ManifestSite, item: &SitePathOverride) -> Optio
     }
 }
 
+/// 按挂载选择改写 `.env` 中的 `SITE_*`，避免备份里的旧绝对路径残留。
+///
+/// 完整的 sites.json / Compose 重写仍由命令层 `realign_site_mounts_with_overrides` 负责；
+/// 此处保证引擎单独调用时 `.env` 也与 choice 一致。
+fn rewrite_site_mount_env_keys(
+    project_root: &Path,
+    sites: &[ManifestSite],
+    overrides: &[SitePathOverride],
+) -> Result<(), String> {
+    if overrides.is_empty() {
+        return Ok(());
+    }
+    let env_path = project_root.join(".env");
+    if !env_path.exists() {
+        return Ok(());
+    }
+    let content = std::fs::read_to_string(&env_path)
+        .map_err(|e| format!("failed to read .env for site mount rewrite: {e}"))?;
+    let mut env = EnvFile::parse(&content)
+        .map_err(|e| format!("failed to parse .env for site mount rewrite: {e}"))?;
+
+    for site in sites {
+        let Some(item) = override_for(overrides, &site.env_key) else {
+            continue;
+        };
+        match effective_extract_host(site, item) {
+            Some(host) => env.set(&site.env_key, &host),
+            None => {
+                env.remove(&site.env_key);
+            }
+        }
+    }
+
+    std::fs::write(&env_path, env.format())
+        .map_err(|e| format!("failed to write .env after site mount rewrite: {e}"))?;
+    Ok(())
+}
+
 impl RestoreEngine {
     /// Parse backup ZIP and return preview info.
     /// Reads manifest.json from ZIP, detects port conflicts, counts files.
@@ -347,7 +386,7 @@ impl RestoreEngine {
         check_manifest_version(&manifest.version)?;
         ensure_absolute_paths_mapped(&manifest.sites, path_overrides)?;
 
-        // Step 2: Extract .env（挂载键由恢复末尾 / 命令层 realign 按 choice 重写，此处不写空 SITE_*）
+        // Step 2: Extract .env（SITE_* 在 Step 8 按 choice 改写；sites/Compose 由命令层 realign）
         Self::emit_progress(app_handle, "restore.progress.steps.envConfig", 15);
         match Self::restore_env_file(&mut archive, project_root) {
             Ok(()) => {
@@ -442,10 +481,17 @@ impl RestoreEngine {
             Err(e) => errors.push(format!("failed to restore database files: {e}")),
         }
 
-        // Step 8: Done
-        Self::emit_progress(app_handle, "restore.progress.steps.done", 100);
+        // Step 8: 按 choice 改写 SITE_*，避免旧绝对路径残留在 .env
+        if restored_files.iter().any(|f| f == ".env") {
+            if let Err(e) =
+                rewrite_site_mount_env_keys(project_root, &manifest.sites, path_overrides)
+            {
+                errors.push(e);
+            }
+        }
 
-        let _ = manifest; // manifest was used for reading
+        // Step 9: Done
+        Self::emit_progress(app_handle, "restore.progress.steps.done", 100);
 
         Ok(RestoreResult {
             success: errors.is_empty(),

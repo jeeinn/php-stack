@@ -148,6 +148,18 @@
       "continue": "Ignore & Continue",
       "cancel": "Cancel"
     },
+    "siteMount": {
+      "title": "Site directories not ready",
+      "message": "These ready sites have a missing or empty mount directory. Map a local folder, park under workspace www, or defer (no mount; hostname falls back to the welcome page).",
+      "choiceMap": "Map local folder",
+      "choicePark": "Park under www",
+      "choiceDefer": "Defer",
+      "browse": "Choose folder",
+      "apply": "Apply and continue",
+      "cancel": "Cancel start",
+      "pathRequired": "Enter a path for sites set to map",
+      "emptyRows": "No site entries to fix. Close this dialog and check site mounts on the Environment Config page."
+    },
     "startTooltip": {
       "noEnv": "Please configure the environment first",
       "hasRunning": "Containers are running, use Restart All instead"
@@ -307,7 +319,12 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "Container path",
-      "defaultNote": "The default server always mounts ./www → /www and serves the welcome page (PHP via short alias php). Each site is served by its own managed conf; requests with unmatched host names fall back to the welcome page."
+      "defaultNote": "The default server always mounts ./www → /www and serves the welcome page (PHP via short alias php). Each site is served by its own managed conf; requests with unmatched host names fall back to the welcome page.",
+      "deferredBadge": "Not mounted",
+      "deferredHint": "Deferred sites skip Compose volumes and managed conf; the hostname falls back to the welcome page. Uncheck defer and set a path, then apply.",
+      "deferToggle": "Defer mount",
+      "parkWww": "Park under www",
+      "notedPath": "Previous path {path}"
     },
     "previewModal": {
       "title": "Config Preview",
@@ -723,14 +740,18 @@
       "portConflictsHint": "These host ports are already in use. Restore still writes the original config; change ports in .env or stop the occupying process before starting. Suggested ports are for reference only:",
       "portConflictItem": "{service}: {port} → suggest {suggested}",
       "sites": "Site paths",
-      "sitesHint": "Relative paths follow the new workspace. Absolute paths default to ./www/{'site id'}; you can pick another folder or skip.",
+      "sitesHint": "Relative paths follow the new workspace. Absolute paths are deferred by default: site definitions stay, volumes are omitted, and the stack can still start. You can also map a local folder or park under ./www/{'site id'}.",
       "relativeHint": "Project files restore into the new workspace at the original relative location. Changing the path here only changes the container mount.",
-      "absoluteHint": "Original path {path} ({os}). Suggested: {suggested}. You can choose another folder on this machine.",
+      "absoluteHint": "Original path {path} ({os}). Deferred by default; map a local folder or park at {suggested}.",
       "moveAllIntoWww": "Move all into www",
+      "deferAllAbsolute": "Defer all absolute paths",
+      "choiceMap": "Map local folder",
+      "choicePark": "Park under www",
+      "choiceDefer": "Defer (no mount)",
+      "deferHint": "Deferred sites skip Compose volumes and managed Nginx conf; the hostname falls back to the welcome page. The site definition remains for later mapping.",
       "publicDir": "Public directory {dir}, relative to the mount. It travels with the config and does not need a new path.",
       "browse": "Choose folder",
-      "skip": "Leave empty and set it before start",
-      "required": "An absolute path still needs a new folder",
+      "required": "An absolute path is set to map but has no folder yet",
       "kindRelative": "Workspace-relative",
       "kindAbsolute": "Absolute path",
       "warnings": "Backup Warnings",

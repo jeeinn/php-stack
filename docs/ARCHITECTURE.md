@@ -27,7 +27,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 **核心价值**：
 - 🎯 **可视化配置** — GUI 替代手动编辑 `.env` 和 `docker-compose.yml`；中间件可选
 - 🧩 **服务目录** — Catalog 描述符驱动扩展；用户可添加 image 型自定义服务
-- 🌐 **站点挂载** — 多站点 Nginx conf + `SITE_*` 卷映射 + 默认欢迎页；支持跨机路径重映射
+- 🌐 **站点挂载** — 多站点 Nginx conf + `SITE_*` 卷映射 + 默认欢迎页；支持跨机路径重映射与**暂缓挂载**（定义保留、卷与托管 conf 省略）
 - 🌐 **镜像源加速** — 统一管理 Docker/APT/Composer/NPM 镜像源
 - 💾 **环境备份恢复** — ZIP 打包 + SHA256 校验 + 恢复前自动回滚包
 - 📦 **Docker 镜像包** — 工作区镜像 tar 导出/导入（与配置 ZIP 分离）；构建指纹 image
@@ -228,7 +228,9 @@ start_environment
 **备份**：选择选项（项目本地配置 / 全树 / 日志 / 站点范围等，偏好持久化到 `.user-config/backup.json`）→ `BackupEngine.create_backup` → 打包 `.env`、`docker-compose.yml`、`services/`、`.user-config/`（不含 `backup.json` UI 偏好）→ 生成 `manifest.json`（含站点路径元数据）→ SHA256 校验 → 流式写入 ZIP → 进度事件。**不包含**数据库 mysqldump，**不包含** Docker 镜像层。
 
 **恢复**（分步向导）：
-1. 选择备份文件 → 2. 预览（manifest 解析 + 端口冲突检测 + **站点路径覆写**）→ 3. SHA256 完整性校验 → 4. 确认恢复（自动生成回滚包 → 解压 .env / compose / services / 其他 → 返回明细结果）。
+1. 选择备份文件 → 2. 预览（manifest 解析 + 端口冲突检测 + **站点挂载三选一**：map / park / defer，绝对路径默认 defer）→ 3. SHA256 完整性校验 → 4. 确认恢复（自动生成回滚包 → 解压 .env / compose / services / 其他 → **按挂载选择重写 `.env`、整份重生 Compose、sites.json、托管 conf** → 返回明细结果）。
+
+Compose 是生成物：恢复与启动闸门的挂载对齐都会整份重生，手改的自定义段不保留；暂缓站点不参与卷与托管 conf，域名回落到 `/www` 欢迎页。启动前若就绪站点目录缺失，返回 `SITE_MOUNT:` 错误并由前端弹出补映射对话框。
 
 ### 5.4 Docker 镜像包（跨机离线）
 

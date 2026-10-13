@@ -5,6 +5,7 @@ import type {
   ImagePresence,
   PullImageResultItem,
   ServiceDescriptor,
+  SitePathOverride,
   VersionMappings,
 } from '../types/env-config'
 
@@ -114,4 +115,11 @@ export function removeUserOverride(
 
 export function resetAllOverrides(): Promise<void> {
   return invokeCommand<void>('reset_all_overrides')
+}
+
+/** 启动闸门 / 恢复后：按挂载选择重写 .env、Compose、sites.json、托管 conf。 */
+export function applySiteMountOverrides(
+  overrides: SitePathOverride[],
+): Promise<void> {
+  return invokeCommand<void>('apply_site_mount_overrides', { overrides })
 }

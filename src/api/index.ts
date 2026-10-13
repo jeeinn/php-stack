@@ -2,8 +2,11 @@ export {
   invokeCommand,
   normalizeError,
   isPortConflictError,
+  isSiteMountError,
+  parseSiteMountErrorIds,
   stripProtocolPrefix,
   PORT_CONFLICT_PREFIX,
+  SITE_MOUNT_PREFIX,
 } from './client'
 export {
   previewRestore,
@@ -55,6 +58,7 @@ export {
   addCustomVersion,
   removeUserOverride,
   resetAllOverrides,
+  applySiteMountOverrides,
 } from './envConfig'
 export {
   getMergedMirrorList,

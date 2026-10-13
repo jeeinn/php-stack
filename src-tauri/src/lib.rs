@@ -78,6 +78,7 @@ pub fn run() {
             commands::start_environment,
             commands::restart_environment,
             commands::stop_environment,
+            commands::apply_site_mount_overrides,
             // Phase 3: 镜像探测 / 拉取 / 配置提取
             commands::check_service_images_presence,
             commands::pull_service_images,

@@ -106,6 +106,8 @@ fn test_generate_env_keeps_default_source_dir_when_sites_exist() {
         nginx_service: "nginx125".to_string(),
         php_service: "php82".to_string(),
         public_dir: String::new(),
+    deferred: false,
+    noted_host_path: String::new(),
     }];
 
     let formatted = ConfigGenerator::generate_env(&config, Some(&existing), tmp.path()).format();

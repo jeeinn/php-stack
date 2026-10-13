@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizeError,
   isPortConflictError,
+  isSiteMountError,
+  parseSiteMountErrorIds,
   stripProtocolPrefix,
   PORT_CONFLICT_PREFIX,
+  SITE_MOUNT_PREFIX,
 } from '../client'
 
 describe('normalizeError', () => {
@@ -39,5 +42,20 @@ describe('port conflict helpers', () => {
       '80; 3306',
     )
     expect(stripProtocolPrefix('plain', PORT_CONFLICT_PREFIX)).toBe('plain')
+  })
+})
+
+describe('site mount helpers', () => {
+  it('识别 SITE_MOUNT 前缀', () => {
+    expect(isSiteMountError(`${SITE_MOUNT_PREFIX}demo2 (x): missing path`)).toBe(true)
+    expect(isSiteMountError('other')).toBe(false)
+  })
+
+  it('解析站点 id 列表', () => {
+    expect(
+      parseSiteMountErrorIds(
+        `${SITE_MOUNT_PREFIX}demo2 (shop.test): D:/old; demo3 (a.test): missing path`,
+      ),
+    ).toEqual(['demo2', 'demo3'])
   })
 })

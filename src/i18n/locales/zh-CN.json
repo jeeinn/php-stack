@@ -148,6 +148,18 @@
       "continue": "忽略并继续",
       "cancel": "取消启动"
     },
+    "siteMount": {
+      "title": "站点目录未就绪",
+      "message": "以下就绪站点的挂载目录不存在或为空。请选择挂到本机目录、放到工作区 www，或暂缓（不挂载，域名回落欢迎页）。",
+      "choiceMap": "挂到本机目录",
+      "choicePark": "放到工作区 www",
+      "choiceDefer": "暂缓",
+      "browse": "选择文件夹",
+      "apply": "应用并继续启动",
+      "cancel": "取消启动",
+      "pathRequired": "请为「挂到本机目录」的站点填写路径",
+      "emptyRows": "没有可处理的站点条目，请关闭后到环境配置页检查站点挂载。"
+    },
     "startTooltip": {
       "noEnv": "请先在环境配置页面进行配置",
       "hasRunning": "有容器正在运行，请使用一键重启"
@@ -307,7 +319,12 @@
       "php": "PHP",
       "nginx": "Nginx",
       "containerPath": "容器路径",
-      "defaultNote": "默认站始终挂载 ./www → /www 提供欢迎页（PHP 走短别名 php）。站点由各自的托管 conf 服务，未匹配域名的请求回落到欢迎页。"
+      "defaultNote": "默认站始终挂载 ./www → /www 提供欢迎页（PHP 走短别名 php）。站点由各自的托管 conf 服务，未匹配域名的请求回落到欢迎页。",
+      "deferredBadge": "未挂载",
+      "deferredHint": "暂缓站点不写 Compose 卷与托管 conf；域名会落到欢迎页。补上目录后取消暂缓再应用配置。",
+      "deferToggle": "暂缓挂载",
+      "parkWww": "放到工作区 www",
+      "notedPath": "原路径 {path}"
     },
     "previewModal": {
       "title": "配置预览",
@@ -723,14 +740,18 @@
       "portConflictsHint": "以下宿主机端口已被占用。恢复仍会写入原配置；启动环境前请改 .env 端口，或停止占用进程。建议端口仅供参考：",
       "portConflictItem": "{service}：{port} → 建议 {suggested}",
       "sites": "站点路径",
-      "sitesHint": "相对路径会跟着新的工作区走。绝对路径默认建议迁入 ./www/{'站点 id'}，也可另选目录或跳过。",
+      "sitesHint": "相对路径会跟着新的工作区走。绝对路径默认暂缓：保留站点定义，但不挂卷，环境仍可启动。也可挂到本机目录或迁入 ./www/{'站点 id'}。",
       "relativeHint": "项目文件会还原到新工作区里的原相对位置；这里修改的是容器挂载的目录。",
-      "absoluteHint": "原路径 {path}（{os}）。默认建议 {suggested}，也可另选本机目录。",
+      "absoluteHint": "原路径 {path}（{os}）。默认暂缓；也可挂到本机目录，或迁入 {suggested}。",
       "moveAllIntoWww": "全部迁入 www",
+      "deferAllAbsolute": "全部暂缓绝对路径",
+      "choiceMap": "挂到本机目录",
+      "choicePark": "放到工作区 www",
+      "choiceDefer": "暂缓（不挂载）",
+      "deferHint": "暂缓后不写 Compose 卷与 Nginx conf，该域名会落到默认欢迎页；站点配置仍保留，可稍后补映射。",
       "publicDir": "对外目录 {dir}，相对挂载目录，随配置带走，不用重新选择。",
       "browse": "选择文件夹",
-      "skip": "暂不指定，启动前再改",
-      "required": "还有绝对路径没有选择新目录",
+      "required": "还有绝对路径选择了「挂到本机目录」但未填写路径",
       "kindRelative": "相对工作区",
       "kindAbsolute": "绝对路径",
       "warnings": "备份时的警告",

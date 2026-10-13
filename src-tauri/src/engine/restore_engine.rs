@@ -6,8 +6,7 @@ use std::path::Path;
 
 use super::backup_engine::BackupEngine;
 use super::backup_manifest::{check_manifest_version, BackupManifest};
-use super::env_parser::EnvFile;
-use super::site_manager::{self, ManifestSite};
+use super::site_manager::{self, ManifestSite, SiteMountChoice};
 use super::user_config;
 
 /// 恢复预览信息
@@ -34,15 +33,14 @@ pub struct RestoreProgress {
     pub percentage: u8,
 }
 
-/// 恢复时用户为每个站点指定的新宿主机路径。
-///
-/// `skipped` 为真表示明确留空，允许继续恢复，但不会把源码解到该路径。
+/// 恢复时每个站点的挂载选择（跨 Tauri 边界；缺省 `defer` 最安全）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SitePathOverride {
     pub env_key: String,
     pub host_path: String,
+    /// `map` / `park` / `defer`。缺省 `defer`，旧调用方漏字段也不会把路径写回挂载。
     #[serde(default)]
-    pub skipped: bool,
+    pub choice: SiteMountChoice,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoreResult {
@@ -177,8 +175,13 @@ fn ensure_absolute_paths_mapped(
         .filter(|site| site.kind == site_manager::KIND_ABSOLUTE)
         .filter(
             |site| match overrides.iter().find(|item| item.env_key == site.env_key) {
-                Some(item) if item.skipped => false,
-                Some(item) if !item.host_path.trim().is_empty() => false,
+                Some(item) if item.choice == SiteMountChoice::Defer => false,
+                Some(item) if item.choice == SiteMountChoice::Park => false,
+                Some(item)
+                    if item.choice == SiteMountChoice::Map && !item.host_path.trim().is_empty() =>
+                {
+                    false
+                }
                 _ => true,
             },
         )
@@ -194,61 +197,66 @@ fn ensure_absolute_paths_mapped(
     }
 }
 
-fn apply_path_overrides(project_root: &Path, overrides: &[SitePathOverride]) -> Result<(), String> {
-    if overrides.is_empty() {
-        return Ok(());
-    }
-    let path = project_root.join(".env");
-    if !path.exists() {
-        return Ok(());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("failed to read .env: {e}"))?;
-    let mut env = EnvFile::parse(&text).map_err(|e| format!("failed to parse .env: {e}"))?;
-    for item in overrides {
-        if item.skipped {
-            env.set(&item.env_key, "");
-        } else if !item.host_path.trim().is_empty() {
-            env.set(
-                &item.env_key,
-                &site_manager::normalize_host_path(&item.host_path),
-            );
-        }
-    }
-    std::fs::write(&path, env.format()).map_err(|e| format!("failed to write remapped .env: {e}"))
-}
-
-fn warn_missing_absolute_dirs(
+/// 为 park 站点创建 `./www/{id}`；map 不创建目录；defer 只记警告。
+fn prepare_mount_dirs(
     sites: &[ManifestSite],
     project_root: &Path,
     overrides: &[SitePathOverride],
 ) -> Vec<String> {
     let mut warnings = Vec::new();
-    for site in sites
-        .iter()
-        .filter(|site| site.kind == site_manager::KIND_ABSOLUTE)
-    {
+    for site in sites {
         let Some(item) = overrides.iter().find(|item| item.env_key == site.env_key) else {
             continue;
         };
-        if item.skipped || item.host_path.trim().is_empty() {
-            warnings.push(format!(
-                "site {} path left empty; source files were not extracted",
-                site.id
-            ));
-            continue;
-        }
-        let dest = site_manager::resolve_host_path(project_root, &item.host_path);
-        if !dest.exists() {
-            if let Err(e) = std::fs::create_dir_all(&dest) {
+        match item.choice {
+            SiteMountChoice::Defer => {
                 warnings.push(format!(
-                    "site {} failed to create directory {}: {e}",
-                    site.id,
-                    dest.display()
+                    "site {} deferred; source files were not extracted",
+                    site.id
                 ));
+            }
+            SiteMountChoice::Park => {
+                let path = site_manager::suggested_park_path(&site.id);
+                let dest = site_manager::resolve_host_path(project_root, &path);
+                if let Err(e) = std::fs::create_dir_all(&dest) {
+                    warnings.push(format!(
+                        "site {} failed to create park directory {}: {e}",
+                        site.id,
+                        dest.display()
+                    ));
+                }
+            }
+            SiteMountChoice::Map => {
+                // 不创建绝对路径目录——缺目录留给启动闸门处理。
             }
         }
     }
     warnings
+}
+
+fn override_for<'a>(
+    overrides: &'a [SitePathOverride],
+    env_key: &str,
+) -> Option<&'a SitePathOverride> {
+    overrides.iter().find(|item| item.env_key == env_key)
+}
+
+fn effective_extract_host(
+    site: &ManifestSite,
+    item: &SitePathOverride,
+) -> Option<String> {
+    match item.choice {
+        SiteMountChoice::Defer => None,
+        SiteMountChoice::Park => Some(site_manager::suggested_park_path(&site.id)),
+        SiteMountChoice::Map => {
+            let path = site_manager::normalize_host_path(&item.host_path);
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
+        }
+    }
 }
 
 impl RestoreEngine {
@@ -342,15 +350,12 @@ impl RestoreEngine {
         check_manifest_version(&manifest.version)?;
         ensure_absolute_paths_mapped(&manifest.sites, path_overrides)?;
 
-        // Step 2: Extract .env
+        // Step 2: Extract .env（挂载键由恢复末尾 / 命令层 realign 按 choice 重写，此处不写空 SITE_*）
         Self::emit_progress(app_handle, "restore.progress.steps.envConfig", 15);
         match Self::restore_env_file(&mut archive, project_root) {
             Ok(()) => {
                 restored_files.push(".env".to_string());
-                if let Err(e) = apply_path_overrides(project_root, path_overrides) {
-                    errors.push(e);
-                }
-                errors.extend(warn_missing_absolute_dirs(
+                errors.extend(prepare_mount_dirs(
                     &manifest.sites,
                     project_root,
                     path_overrides,
@@ -601,13 +606,13 @@ impl RestoreEngine {
             .iter()
             .filter(|site| site.kind == site_manager::KIND_ABSOLUTE)
         {
-            let Some(item) = overrides.iter().find(|item| item.env_key == site.env_key) else {
+            let Some(item) = override_for(overrides, &site.env_key) else {
                 continue;
             };
-            if item.skipped || item.host_path.trim().is_empty() {
+            let Some(host) = effective_extract_host(site, item) else {
                 continue;
-            }
-            let dest = site_manager::resolve_host_path(project_root, &item.host_path);
+            };
+            let dest = site_manager::resolve_host_path(project_root, &host);
             if let Err(e) = std::fs::create_dir_all(&dest) {
                 return Err(format!(
                     "failed to create site {} directory {}: {e}",
@@ -1322,7 +1327,7 @@ mod tests {
         let overrides = vec![SitePathOverride {
             env_key: "SITE_SHOP".to_string(),
             host_path: new_root.to_string_lossy().replace('\\', "/"),
-            skipped: false,
+            choice: SiteMountChoice::Map,
         }];
         let restored = rt
             .block_on(RestoreEngine::restore(
@@ -1338,5 +1343,32 @@ mod tests {
         let env = fs::read_to_string(restore_dir.join(".env")).unwrap();
         assert!(env.contains("SITE_SHOP="));
         assert!(!env.contains("D:/old/shop"));
+    }
+
+    #[test]
+    fn site_path_override_missing_choice_deserializes_as_defer() {
+        let parsed: SitePathOverride =
+            serde_json::from_str(r#"{"env_key":"SITE_X","host_path":"D:/x"}"#).unwrap();
+        assert_eq!(parsed.choice, SiteMountChoice::Defer);
+        assert_eq!(parsed.host_path, "D:/x");
+    }
+
+    #[test]
+    fn defer_choice_allows_absolute_site_without_host_path() {
+        let sites = vec![crate::engine::site_manager::ManifestSite {
+            id: "shop".into(),
+            env_key: "SITE_SHOP".into(),
+            container_path: "/sites/shop".into(),
+            host_path: "D:/old/shop".into(),
+            kind: site_manager::KIND_ABSOLUTE.into(),
+            server_name: "shop.test".into(),
+            public_dir: String::new(),
+        }];
+        let overrides = vec![SitePathOverride {
+            env_key: "SITE_SHOP".into(),
+            host_path: String::new(),
+            choice: SiteMountChoice::Defer,
+        }];
+        ensure_absolute_paths_mapped(&sites, &overrides).expect("defer 应视为已处理");
     }
 }

@@ -70,7 +70,8 @@ describe('App 仪表盘 Docker 可用性检查', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="update-available-banner"]').exists()).toBe(false)
 
-    setPendingUpdateVersion('0.5.4')
+    // 同版本再 set 不会解除 dismiss；换更新版本号才重新显示
+    setPendingUpdateVersion('0.5.5')
     await flushPromises()
     expect(wrapper.find('[data-testid="update-available-banner"]').exists()).toBe(true)
     await wrapper.get('[data-testid="update-banner-dismiss"]').trigger('click')

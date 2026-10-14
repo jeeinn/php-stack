@@ -18,14 +18,11 @@ import {
   openServiceConfig,
   startEnvironment,
   normalizeError,
-  normalizeMountPath,
-  relativePublicDir,
   isSiteMountError,
   parseSiteMountErrorIds,
   applySiteMountOverrides,
 } from '../api';
 import { open } from '@tauri-apps/plugin-shell';
-import { open as openDirectoryDialog } from '@tauri-apps/plugin-dialog';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import type {
   ServiceEntry,
@@ -46,6 +43,7 @@ import ConnectHostHint from './ConnectHostHint.vue';
 import VersionHelpModal from './VersionHelpModal.vue';
 import ImagePullConfirmModal from './ImagePullConfirmModal.vue';
 import SiteMountDialog from './SiteMountDialog.vue';
+import SiteEditDialog from './SiteEditDialog.vue';
 import { WORKSPACE_CHANGED_EVENT } from '../utils/workspaceEvents';
 import {
   resolveConnectInfo,
@@ -569,12 +567,6 @@ function siteDerived(site: SiteEntry, _index: number): Pick<SiteEntry, 'id' | 'e
   };
 }
 
-function nginxRootOf(site: SiteEntry, index: number): string {
-  const derived = siteDerived(site, index);
-  const base = (derived.container_path || '').replace(/\/$/, '');
-  return derived.public_dir ? `${base}/${derived.public_dir}` : base;
-}
-
 function normalizedSites(): SiteEntry[] {
   return sites.value.map((site, index) => ({
     ...site,
@@ -582,84 +574,16 @@ function normalizedSites(): SiteEntry[] {
   }));
 }
 
-async function pickHostPath(current: string): Promise<string | null> {
-  const selected = await openDirectoryDialog({
-    directory: true,
-    multiple: false,
-    defaultPath: current && !current.startsWith('.') ? current : undefined,
-  });
-  if (!selected || Array.isArray(selected)) return null;
-  try {
-    return await normalizeMountPath(selected);
-  } catch (e) {
-    showToast(normalizeError(e), 'error');
-    return null;
-  }
-}
+const showSiteEditDialog = ref(false);
+/** null = 添加；数字 = 编辑该下标 */
+const editingSiteIndex = ref<number | null>(null);
+const siteDraft = ref<SiteEntry | null>(null);
 
-async function browseSiteDir(index: number) {
-  const site = sites.value[index];
-  if (!site) return;
-  const picked = await pickHostPath(site.host_path || site.noted_host_path || '');
-  if (picked) {
-    site.host_path = picked;
-    site.deferred = false;
-    site.noted_host_path = '';
-  }
-}
-
-function toggleSiteDeferred(index: number, deferred: boolean) {
-  const site = sites.value[index];
-  if (!site) return;
-  if (deferred) {
-    if (!site.noted_host_path && site.host_path) {
-      site.noted_host_path = repairHostPath(site.host_path);
-    }
-    site.host_path = '';
-    site.deferred = true;
-  } else {
-    site.deferred = false;
-    if (!site.host_path && site.noted_host_path) {
-      site.host_path = site.noted_host_path;
-    }
-    site.noted_host_path = '';
-  }
-}
-
-function parkSiteUnderWww(index: number) {
-  const site = sites.value[index];
-  if (!site) return;
-  const id = site.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'main';
-  site.host_path = `./www/${id}`;
-  site.deferred = false;
-  site.noted_host_path = '';
-}
-
-async function browsePublicDir(index: number) {
-  const site = sites.value[index];
-  if (!site) return;
-  if (!site.host_path.trim()) {
-    showToast(t('envConfig.sites.mountFirst'), 'error');
-    return;
-  }
-  const selected = await openDirectoryDialog({
-    directory: true,
-    multiple: false,
-    defaultPath: site.host_path.startsWith('.') ? undefined : site.host_path,
-  });
-  if (!selected || Array.isArray(selected)) return;
-  try {
-    site.public_dir = await relativePublicDir(site.host_path, selected);
-  } catch (e) {
-    showToast(normalizeError(e), 'error');
-  }
-}
-
-function addSite() {
+function newSiteDraft(): SiteEntry {
   const next = sites.value.length + 1;
   const php = phpServices.value[0];
   const nginx = nginxServices.value[0];
-  sites.value.push({
+  return {
     id: `site${next}`,
     server_name: `site${next}.test`,
     host_path: './www',
@@ -670,7 +594,46 @@ function addSite() {
     public_dir: '',
     deferred: false,
     noted_host_path: '',
-  });
+  };
+}
+
+function openAddSite() {
+  editingSiteIndex.value = null;
+  siteDraft.value = newSiteDraft();
+  showSiteEditDialog.value = true;
+}
+
+function openEditSite(index: number) {
+  const site = sites.value[index];
+  if (!site) return;
+  editingSiteIndex.value = index;
+  siteDraft.value = { ...site };
+  showSiteEditDialog.value = true;
+}
+
+function onSiteEditCancel() {
+  showSiteEditDialog.value = false;
+  siteDraft.value = null;
+  editingSiteIndex.value = null;
+}
+
+function onSiteEditConfirm(site: SiteEntry) {
+  if (editingSiteIndex.value === null) {
+    sites.value.push(site);
+  } else {
+    sites.value[editingSiteIndex.value] = site;
+  }
+  onSiteEditCancel();
+}
+
+function siteMountSummary(site: SiteEntry, index: number): string {
+  const derived = siteDerived(site, index);
+  if (derived.deferred) {
+    return derived.noted_host_path
+      ? t('envConfig.sites.notedPath', { path: derived.noted_host_path })
+      : t('envConfig.sites.deferredBadge');
+  }
+  return derived.host_path || '—';
 }
 
 const showSiteMountDialog = ref(false);
@@ -1628,74 +1591,46 @@ async function openNginxConfigDir(serviceDir?: string) {
       <section v-if="nginxServices.length > 0" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6">
         <div class="flex items-center justify-between mb-2">
           <h2 class="text-lg font-bold text-slate-900 dark:text-slate-200">{{ $t('envConfig.sites.title') }}</h2>
-          <button @click="addSite" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">{{ $t('envConfig.sites.add') }}</button>
+          <button type="button" @click="openAddSite" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">{{ $t('envConfig.sites.add') }}</button>
         </div>
         <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">{{ $t('envConfig.sites.hint') }}</p>
-        <div v-for="(site, idx) in sites" :key="idx" class="mb-4 p-3 border border-slate-200 dark:border-slate-800 rounded-lg space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <span
-              v-if="site.deferred"
-              class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-            >{{ $t('envConfig.sites.deferredBadge') }}</span>
-            <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 ml-auto">
-              <input
-                type="checkbox"
-                class="accent-blue-500"
-                :checked="!!site.deferred"
-                @change="(event) => toggleSiteDeferred(idx, (event.target as HTMLInputElement).checked)"
-              />
-              {{ $t('envConfig.sites.deferToggle') }}
-            </label>
-          </div>
-          <p v-if="site.deferred" class="text-[11px] text-amber-600 dark:text-amber-400">{{ $t('envConfig.sites.deferredHint') }}</p>
-          <p v-if="site.deferred && site.noted_host_path" class="text-[11px] text-slate-500 font-mono">{{ $t('envConfig.sites.notedPath', { path: site.noted_host_path }) }}</p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.id') }}</label>
-              <input v-model="site.id" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.serverName') }}</label>
-              <input v-model="site.server_name" type="text" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.php') }}</label>
-              <CustomSelect :modelValue="site.php_service" :options="phpSiteOptions" @change="(value) => site.php_service = String(value)" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.nginx') }}</label>
-              <CustomSelect :modelValue="site.nginx_service" :options="nginxSiteOptions" @change="(value) => site.nginx_service = String(value)" />
-            </div>
-          </div>
-          <div v-if="!site.deferred" class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.hostPath') }}</label>
-              <div class="flex gap-2">
-                <input v-model="site.host_path" type="text" placeholder="./www" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="button" @click="browseSiteDir(idx)" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.browse') }}</button>
-                <button type="button" @click="parkSiteUnderWww(idx)" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.parkWww') }}</button>
+        <div class="space-y-2">
+          <div
+            v-for="(site, idx) in sites"
+            :key="site.env_key || site.id || idx"
+            class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 border border-slate-200 dark:border-slate-800 rounded-lg"
+          >
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">{{ site.id || '—' }}</span>
+                <span class="text-sm text-slate-600 dark:text-slate-300 truncate">{{ site.server_name }}</span>
+                <span
+                  v-if="site.deferred"
+                  class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                >{{ $t('envConfig.sites.deferredBadge') }}</span>
               </div>
-              <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.sites.hostPathHint') }}</p>
+              <p class="text-[11px] text-slate-500 font-mono truncate">{{ siteMountSummary(site, idx) }}</p>
+              <p class="text-[11px] text-slate-500">
+                {{ $t('envConfig.sites.php') }} {{ site.php_service || '—' }}
+                · {{ $t('envConfig.sites.nginx') }} {{ site.nginx_service || '—' }}
+              </p>
             </div>
-            <div>
-              <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">{{ $t('envConfig.sites.publicDir') }}</label>
-              <div class="flex gap-2">
-                <input v-model="site.public_dir" type="text" placeholder="public" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="button" @click="browsePublicDir(idx)" class="shrink-0 px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.browse') }}</button>
-              </div>
-              <p class="text-[11px] text-slate-500 mt-1">{{ $t('envConfig.sites.publicDirHint') }}</p>
+            <div class="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                @click="openEditSite(idx)"
+              >{{ $t('envConfig.sites.edit') }}</button>
+              <button
+                v-if="sites.length > 1"
+                type="button"
+                class="text-sm text-rose-400 hover:text-rose-300"
+                @click="removeSite(idx)"
+              >{{ $t('envConfig.sites.remove') }}</button>
             </div>
-          </div>
-          <div v-else class="flex gap-2">
-            <button type="button" @click="browseSiteDir(idx)" class="px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.browse') }}</button>
-            <button type="button" @click="parkSiteUnderWww(idx)" class="px-3 py-2 text-sm ui-btn-soft rounded-lg">{{ $t('envConfig.sites.parkWww') }}</button>
-          </div>
-          <p class="text-[11px] text-slate-500 font-mono">{{ siteDerived(site, idx).env_key }} → {{ siteDerived(site, idx).container_path }} · {{ $t('envConfig.sites.nginxRoot', { root: nginxRootOf(site, idx) }) }}</p>
-          <div class="flex justify-end" v-if="sites.length > 1">
-            <button @click="removeSite(idx)" class="text-rose-400 hover:text-rose-300 text-sm">{{ $t('envConfig.sites.remove') }}</button>
           </div>
         </div>
-        <p class="text-[11px] text-slate-500 dark:text-slate-500">{{ $t('envConfig.sites.defaultNote') }}</p>
+        <p class="text-[11px] text-slate-500 dark:text-slate-500 mt-4">{{ $t('envConfig.sites.defaultNote') }}</p>
       </section>
 
       <!-- 自定义服务（高级） -->
@@ -1945,6 +1880,16 @@ async function openNginxConfigDir(serviceDir?: string) {
         </div>
       </div>
     </div>
+
+    <SiteEditDialog
+      :visible="showSiteEditDialog"
+      :site="siteDraft"
+      :is-new="editingSiteIndex === null"
+      :php-options="phpSiteOptions"
+      :nginx-options="nginxSiteOptions"
+      @cancel="onSiteEditCancel"
+      @confirm="onSiteEditConfirm"
+    />
 
     <SiteMountDialog
       :visible="showSiteMountDialog"

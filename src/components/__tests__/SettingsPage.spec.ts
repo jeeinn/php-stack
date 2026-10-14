@@ -9,7 +9,7 @@ vi.mock('../../i18n', () => ({
 }))
 
 vi.mock('@tauri-apps/api/app', () => ({
-  getVersion: vi.fn(async () => '0.5.3'),
+  getVersion: vi.fn(async () => '0.5.4'),
 }))
 
 vi.mock('@tauri-apps/plugin-shell', () => ({

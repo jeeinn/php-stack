@@ -27,9 +27,9 @@ describe('useUpdater', () => {
   it('shows banner again when a newer pending version arrives', () => {
     setPendingUpdateVersion('0.5.2')
     dismissUpdateBanner()
-    setPendingUpdateVersion('0.5.3')
+    setPendingUpdateVersion('0.5.4')
     expect(showUpdateBanner.value).toBe(true)
-    expect(pendingUpdateVersion.value).toBe('0.5.3')
+    expect(pendingUpdateVersion.value).toBe('0.5.4')
   })
 
   it('does not re-show banner when the same version is set again', () => {

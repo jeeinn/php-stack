@@ -1,7 +1,7 @@
 # PHP-Stack 系统架构文档
 
-> **版本**: v0.5.3
-> **最后更新**: 2026-10-08
+> **版本**: v0.5.4
+> **最后更新**: 2026-10-14
 > **配套文档**: [README.md](../README.md)（用户视角）、[DEV.md](../DEV.md)（开发者指南）、[AGENTS.md](../AGENTS.md)（AI Agent 协作规范）
 
 ---
@@ -115,7 +115,7 @@ PHP-Stack 是一个基于 **Tauri v2 + Docker** 的跨平台 PHP 开发环境可
 
 | 组件 | 职责 |
 |------|------|
-| `EnvConfigPage.vue` | 服务版本选择、端口配置、PHP 扩展、**多站点挂载**、应用配置 |
+| `EnvConfigPage.vue` | 服务版本选择、端口配置、PHP 扩展、**多站点（列表 + 弹窗编辑 / 暂缓挂载）**、应用配置 |
 | `SoftwareSettings.vue` | 版本映射表格、用户 Override 编辑（override/custom） |
 | `MirrorPanel.vue` | 镜像源预设、独立配置、连接测试 |
 | `BackupPage.vue` / `RestorePage.vue` | 备份选项与分步恢复向导（预览→校验→确认→明细结果） |

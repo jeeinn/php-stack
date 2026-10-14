@@ -37,7 +37,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 vi.mock('@tauri-apps/api/app', () => ({
-  getVersion: vi.fn(async () => '0.5.3'),
+  getVersion: vi.fn(async () => '0.5.4'),
 }))
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
@@ -60,7 +60,7 @@ describe('App 仪表盘 Docker 可用性检查', () => {
   })
 
   it('点「查看」后收起更新横幅，点「关闭」同样收起', async () => {
-    setPendingUpdateVersion('0.5.3')
+    setPendingUpdateVersion('0.5.4')
     const wrapper = mount(App)
     await flushPromises()
     await flushPromises()

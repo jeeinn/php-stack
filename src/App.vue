@@ -16,8 +16,12 @@ import {
   exportLogsTo,
   normalizeError,
   isPortConflictError,
+  isSiteMountError,
+  parseSiteMountErrorIds,
   stripProtocolPrefix,
   PORT_CONFLICT_PREFIX,
+  loadExistingConfig,
+  applySiteMountOverrides,
   type DockerHostReport,
   type WorkspaceInfo,
 } from './api';
@@ -34,11 +38,13 @@ import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import WorkspaceInitDialog from './components/WorkspaceInitDialog.vue';
 import WorkspaceMissingDialog from './components/WorkspaceMissingDialog.vue';
+import SiteMountDialog from './components/SiteMountDialog.vue';
 import { addLog, addLogKey, clearLogs, showToast, UI_LOG_LIMIT, visibleLogs, formatLogLine } from './composables/useToast';
 import { showConfirm } from './composables/useConfirmDialog';
 import { pendingUpdateVersion, setPendingUpdateVersion, showUpdateBanner, dismissUpdateBanner } from './composables/useUpdater';
 import type { Container } from './types/docker';
 import { isContainerRunning } from './types/docker';
+import type { SiteEntry, SitePathOverride } from './types/env-config';
 import { nextPollDelay, POLL_INTERVAL_MS } from './utils/pollBackoff';
 import { WORKSPACE_CHANGED_EVENT } from './utils/workspaceEvents';
 
@@ -59,6 +65,10 @@ const showLogs = ref(false); // 控制日志面板显示隐藏（默认隐藏）
 const sidebarCollapsed = ref(window.innerWidth < 768); // 控制侧边栏展开/收缩（小屏幕默认收缩）
 const showStartConfirm = ref(false); // 控制启动确认弹窗
 const showRestartConfirm = ref(false); // 控制重启确认弹窗
+const showSiteMountDialog = ref(false);
+const siteMountSites = ref<SiteEntry[]>([]);
+const siteMountFocusIds = ref<string[]>([]);
+const siteMountRetryKind = ref<'start' | 'restart'>('start');
 const logPanelRef = ref<HTMLElement | null>(null); // 日志面板引用
 const isUserScrolling = ref(false); // 用户是否正在手动滚动
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null; // 滚动超时定时器
@@ -316,6 +326,53 @@ const handleStopEnvironment = async () => {
   }
 };
 
+async function openSiteMountDialog(errorMsg: string, kind: 'start' | 'restart') {
+  try {
+    const config = await loadExistingConfig();
+    siteMountSites.value = config?.sites ?? [];
+  } catch {
+    siteMountSites.value = [];
+  }
+  siteMountFocusIds.value = parseSiteMountErrorIds(errorMsg);
+  siteMountRetryKind.value = kind;
+  showSiteMountDialog.value = true;
+}
+
+async function onSiteMountConfirm(overrides: SitePathOverride[]) {
+  showSiteMountDialog.value = false;
+  starting.value = true;
+  operationType.value = siteMountRetryKind.value;
+  showLogs.value = true;
+  try {
+    await applySiteMountOverrides(overrides);
+    if (siteMountRetryKind.value === 'restart') {
+      await restartEnvironment();
+      addLogKey('dashboard.toast.envRestarted');
+    } else {
+      await startEnvironment();
+      addLogKey('dashboard.toast.envStarted');
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await refreshContainers();
+  } catch (e: unknown) {
+    const errorMsg = normalizeError(e);
+    if (isSiteMountError(errorMsg)) {
+      await openSiteMountDialog(errorMsg, siteMountRetryKind.value);
+    } else {
+      addLogKey(
+        siteMountRetryKind.value === 'restart'
+          ? 'dashboard.toast.envRestartFailed'
+          : 'dashboard.toast.envStartFailed',
+        { error: e },
+        'error',
+      );
+    }
+  } finally {
+    starting.value = false;
+    operationType.value = null;
+  }
+}
+
 const confirmStart = async () => {
   showStartConfirm.value = false;
   
@@ -336,9 +393,11 @@ const confirmStart = async () => {
     await refreshContainers();
   } catch (e: unknown) {
     const errorMsg = normalizeError(e);
-    
-    // 检查是否是端口冲突错误
-    if (isPortConflictError(errorMsg)) {
+
+    if (isSiteMountError(errorMsg)) {
+      addLogKey('dashboard.toast.envStartFailed', { error: e }, 'warn');
+      await openSiteMountDialog(errorMsg, 'start');
+    } else if (isPortConflictError(errorMsg)) {
       const conflictDetails = stripProtocolPrefix(errorMsg, PORT_CONFLICT_PREFIX);
       const formattedConflicts = conflictDetails.replace(/; /g, '\n• ');
       
@@ -396,8 +455,14 @@ const confirmRestart = async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     await refreshContainers();
-  } catch (e: any) {
-    addLogKey('dashboard.toast.envRestartFailed', { error: e }, 'error');
+  } catch (e: unknown) {
+    const errorMsg = normalizeError(e);
+    if (isSiteMountError(errorMsg)) {
+      addLogKey('dashboard.toast.envRestartFailed', { error: e }, 'warn');
+      await openSiteMountDialog(errorMsg, 'restart');
+    } else {
+      addLogKey('dashboard.toast.envRestartFailed', { error: e }, 'error');
+    }
   } finally {
     starting.value = false;
     operationType.value = null;
@@ -1103,6 +1168,14 @@ async function exportLogs() {
         </div>
       </div>
     </div>
+
+    <SiteMountDialog
+      :visible="showSiteMountDialog"
+      :sites="siteMountSites"
+      :focus-ids="siteMountFocusIds"
+      @cancel="showSiteMountDialog = false"
+      @confirm="onSiteMountConfirm"
+    />
   </div>
 </template>
 

@@ -3,7 +3,7 @@ import { ref, computed, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
-import type { ManifestSite, RestorePreview, RestoreProgress, RestoreResult, SitePathOverride } from '../types/env-config';
+import type { ManifestSite, RestorePreview, RestoreProgress, RestoreResult, SiteMountChoice, SitePathOverride } from '../types/env-config';
 import { previewRestore, verifyBackup, executeRestore, normalizeMountPath, normalizeError } from '../api';
 import { showToast } from '../composables/useToast';
 import { showConfirm } from '../composables/useConfirmDialog';
@@ -65,12 +65,13 @@ const canRestore = computed(() => {
 
 const manifestSites = computed<ManifestSite[]>(() => preview.value?.manifest.sites ?? []);
 
+/** map 且路径为空时拦住；park / defer 都算已处理。 */
 const absoluteRemapPending = computed(() =>
   manifestSites.value.some(site => {
     if (site.kind !== 'absolute') return false;
     const remap = siteRemaps.value.find(item => item.env_key === site.env_key);
     if (!remap) return true;
-    return !remap.skipped && !remap.host_path.trim();
+    return remap.choice === 'map' && !remap.host_path.trim();
   })
 );
 
@@ -82,18 +83,34 @@ function suggestedWwwPath(siteId: string): string {
 function initSiteRemaps() {
   siteRemaps.value = manifestSites.value.map(site => ({
     env_key: site.env_key,
-    host_path: site.kind === 'absolute' ? suggestedWwwPath(site.id) : site.host_path,
-    skipped: false,
+    host_path: site.kind === 'absolute' ? '' : site.host_path,
+    choice: (site.kind === 'absolute' ? 'defer' : 'map') as SiteMountChoice,
   }));
+}
+
+function setChoice(envKey: string, choice: SiteMountChoice) {
+  const remap = remapFor(envKey);
+  if (!remap) return;
+  remap.choice = choice;
+  if (choice === 'park') {
+    const site = manifestSites.value.find(s => s.env_key === envKey);
+    remap.host_path = suggestedWwwPath(site?.id ?? 'main');
+  } else if (choice === 'defer') {
+    remap.host_path = '';
+  }
 }
 
 function moveAllAbsoluteIntoWww() {
   for (const site of manifestSites.value) {
     if (site.kind !== 'absolute') continue;
-    const remap = remapFor(site.env_key);
-    if (!remap) continue;
-    remap.host_path = suggestedWwwPath(site.id);
-    remap.skipped = false;
+    setChoice(site.env_key, 'park');
+  }
+}
+
+function deferAllAbsolute() {
+  for (const site of manifestSites.value) {
+    if (site.kind !== 'absolute') continue;
+    setChoice(site.env_key, 'defer');
   }
 }
 
@@ -109,7 +126,7 @@ async function browseRemap(envKey: string) {
     const remap = remapFor(envKey);
     if (remap) {
       remap.host_path = path;
-      remap.skipped = false;
+      remap.choice = 'map';
     }
   } catch (e) {
     showToast(normalizeError(e), 'error');
@@ -402,14 +419,22 @@ function formatTimestamp(ts: string): string {
               >
                 <div class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ $t('restore.preview.sites') }}</div>
                 <p class="text-xs text-slate-500 dark:text-slate-400">{{ $t('restore.preview.sitesHint') }}</p>
-                <button
-                  v-if="manifestSites.some(s => s.kind === 'absolute')"
-                  type="button"
-                  class="text-xs px-2 py-1 ui-btn-soft rounded"
-                  @click="moveAllAbsoluteIntoWww"
-                >
-                  {{ $t('restore.preview.moveAllIntoWww') }}
-                </button>
+                <div v-if="manifestSites.some(s => s.kind === 'absolute')" class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="text-xs px-2 py-1 ui-btn-soft rounded"
+                    @click="moveAllAbsoluteIntoWww"
+                  >
+                    {{ $t('restore.preview.moveAllIntoWww') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="text-xs px-2 py-1 ui-btn-soft rounded"
+                    @click="deferAllAbsolute"
+                  >
+                    {{ $t('restore.preview.deferAllAbsolute') }}
+                  </button>
+                </div>
                 <div v-for="site in manifestSites" :key="site.env_key" class="space-y-1">
                   <div class="text-xs font-medium text-slate-700 dark:text-slate-300">
                     {{ site.server_name }} · {{ site.kind === 'absolute' ? $t('restore.preview.kindAbsolute') : $t('restore.preview.kindRelative') }}
@@ -421,26 +446,56 @@ function formatTimestamp(ts: string): string {
                     {{ $t('restore.preview.absoluteHint', { path: site.host_path, os: preview.manifest.os_info, suggested: suggestedWwwPath(site.id) }) }}
                   </p>
                   <p v-else class="text-[11px] text-slate-500">{{ $t('restore.preview.relativeHint') }}</p>
-                  <div class="flex gap-2">
+                  <div v-if="site.kind === 'absolute'" class="flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400">
+                    <label class="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        class="accent-blue-500"
+                        :name="`choice-${site.env_key}`"
+                        :checked="remapFor(site.env_key)?.choice === 'map'"
+                        @change="setChoice(site.env_key, 'map')"
+                      />
+                      {{ $t('restore.preview.choiceMap') }}
+                    </label>
+                    <label class="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        class="accent-blue-500"
+                        :name="`choice-${site.env_key}`"
+                        :checked="remapFor(site.env_key)?.choice === 'park'"
+                        @change="setChoice(site.env_key, 'park')"
+                      />
+                      {{ $t('restore.preview.choicePark') }}
+                    </label>
+                    <label class="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        class="accent-blue-500"
+                        :name="`choice-${site.env_key}`"
+                        :checked="remapFor(site.env_key)?.choice === 'defer'"
+                        @change="setChoice(site.env_key, 'defer')"
+                      />
+                      {{ $t('restore.preview.choiceDefer') }}
+                    </label>
+                  </div>
+                  <div v-if="remapFor(site.env_key)?.choice !== 'defer'" class="flex gap-2">
                     <input
                       :value="remapFor(site.env_key)?.host_path ?? ''"
-                      @input="(event) => { const remap = remapFor(site.env_key); if (remap) remap.host_path = (event.target as HTMLInputElement).value }"
+                      @input="(event) => { const remap = remapFor(site.env_key); if (remap) { remap.host_path = (event.target as HTMLInputElement).value; if (remap.choice !== 'park') remap.choice = 'map'; } }"
                       type="text"
+                      :readonly="remapFor(site.env_key)?.choice === 'park'"
                       class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono"
                     />
-                    <button type="button" @click="browseRemap(site.env_key)" class="shrink-0 px-3 py-2 text-xs ui-btn-soft rounded-lg">
+                    <button
+                      v-if="remapFor(site.env_key)?.choice === 'map' || site.kind !== 'absolute'"
+                      type="button"
+                      @click="browseRemap(site.env_key)"
+                      class="shrink-0 px-3 py-2 text-xs ui-btn-soft rounded-lg"
+                    >
                       {{ $t('restore.preview.browse') }}
                     </button>
                   </div>
-                  <label v-if="site.kind === 'absolute'" class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                    <input
-                      type="checkbox"
-                      class="accent-blue-500"
-                      :checked="remapFor(site.env_key)?.skipped ?? false"
-                      @change="(event) => { const remap = remapFor(site.env_key); if (remap) remap.skipped = (event.target as HTMLInputElement).checked }"
-                    />
-                    {{ $t('restore.preview.skip') }}
-                  </label>
+                  <p v-else class="text-[11px] text-amber-600 dark:text-amber-400">{{ $t('restore.preview.deferHint') }}</p>
                 </div>
               </div>
 
@@ -508,7 +563,7 @@ function formatTimestamp(ts: string): string {
               </button>
               <div v-if="!canRestore && !restoring" class="mt-3 text-xs text-center text-slate-500 dark:text-slate-500">
                 <span v-if="verified === false">{{ $t('restore.restoreAction.verifyFailed') }}</span>
-                <span v-else-if="absoluteRemapPending">{{ $t('restore.preview.required') }}</span>
+                <span v-else-if="absoluteRemapPending">{{ $t('restore.preview.required', { action: $t('restore.preview.choiceMap') }) }}</span>
               </div>
             </div>
 

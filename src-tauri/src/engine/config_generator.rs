@@ -337,7 +337,8 @@ impl ConfigGenerator {
         let override_manager = UserOverrideManager::new(project_root);
 
         // 默认欢迎页目录（`SOURCE_DIR=./www` → `/www`）始终保留，与站点键共存；
-        // 站点一律 `SITE_*` → `/sites/{id}`。仅清理「上一版有、这一版没有」的站点键。
+        // 就绪站点 `SITE_*` → `/sites/{id}`。暂缓站点必须删除键（不能只靠
+        // remove_stale_site_keys：暂缓站仍在 sites.json 在册）。
         let mut sites = config.sites.clone();
         site_manager::normalize_sites(&mut sites);
         site_manager::remove_stale_site_keys(&mut env, project_root, &sites);
@@ -346,7 +347,11 @@ impl ConfigGenerator {
             site_manager::DEFAULT_SOURCE_DIR,
         );
         for site in &sites {
-            env.set(&site.env_key, &site.host_path);
+            if site.deferred {
+                env.remove(&site.env_key);
+            } else {
+                env.set(&site.env_key, &site.host_path);
+            }
         }
         env.set("TZ", &config.timezone);
         env.set("DATA_DIR", "./data");
@@ -1635,6 +1640,37 @@ impl ConfigGenerator {
 
         Ok(backed_up_files)
     }
+
+    /// 按当前 `config.sites`（含 deferred）重写 `.env`、Compose、sites.json、托管 conf。
+    ///
+    /// 不调用 `generate_service_dirs`，避免恢复 / 启动闸门重写 Dockerfile。
+    /// Compose 整份重生——手改的自定义段不保留（与 apply 一致，Compose 定位为生成物）。
+    pub fn realign_site_mounts(config: &EnvConfig, project_root: &Path) -> Result<(), String> {
+        Self::validate(config, Some(project_root))?;
+
+        let env_path = project_root.join(".env");
+        let existing_env = if env_path.exists() {
+            match std::fs::read_to_string(&env_path) {
+                Ok(content) => EnvFile::parse(&content).ok(),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+        let env_file = Self::generate_env(config, existing_env.as_ref(), project_root);
+        std::fs::write(&env_path, env_file.format())
+            .map_err(|e| format!("failed to write .env file: {e}"))?;
+
+        let compose = Self::generate_compose(config, project_root);
+        std::fs::write(project_root.join("docker-compose.yml"), compose)
+            .map_err(|e| format!("failed to write docker-compose.yml: {e}"))?;
+
+        let mut sites = config.sites.clone();
+        site_manager::normalize_sites(&mut sites);
+        site_manager::save_sites(project_root, &sites)?;
+        site_manager::sync_managed_confs(project_root, &sites)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -2249,6 +2285,8 @@ APP_VERSION=9
                 nginx_service: "nginx125".into(),
                 php_service: "php82".into(),
                 public_dir: "www".into(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: "agent".into(),
@@ -2259,6 +2297,8 @@ APP_VERSION=9
                 nginx_service: "nginx125".into(),
                 php_service: "php82".into(),
                 public_dir: "www".into(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
 

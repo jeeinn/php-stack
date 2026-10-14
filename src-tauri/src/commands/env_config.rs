@@ -360,32 +360,28 @@ fn collect_services_for_kind(
     }
 }
 
-/// 读取现有配置文件并解析为 EnvConfig
-#[tauri::command]
-pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
-    let project_root = get_project_root()?;
+/// 从工作区读取 EnvConfig（供命令、恢复对齐、启动闸门共用）。
+pub fn read_workspace_env_config(
+    project_root: &std::path::Path,
+) -> Result<Option<EnvConfig>, String> {
     let env_path = project_root.join(".env");
     let compose_path = project_root.join("docker-compose.yml");
 
-    // 如果两个文件都不存在，返回 None
     if !env_path.exists() || !compose_path.exists() {
         return Ok(None);
     }
 
-    // 读取 .env 文件
     let env_content =
         std::fs::read_to_string(&env_path).map_err(|e| format!("failed to read .env file: {e}"))?;
     let env_file = crate::engine::env_parser::EnvFile::parse(&env_content)
         .map_err(|e| format!("failed to parse .env file: {e}"))?;
     let env_map = env_file.to_map();
 
-    // 创建 VersionManifest / UserOverrideManager 用于 env prefix 反查
     let manifest = VersionManifest::new();
-    let override_manager = UserOverrideManager::new(&project_root);
+    let override_manager = UserOverrideManager::new(project_root);
     let services =
-        parse_env_to_services(&env_map, &manifest, Some(&override_manager), &project_root);
+        parse_env_to_services(&env_map, &manifest, Some(&override_manager), project_root);
 
-    // 如果没有解析到任何服务，返回 None
     if services.is_empty() {
         return Ok(None);
     }
@@ -400,8 +396,72 @@ pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
         services,
         timezone,
         mysql_root_password,
-        sites: site_manager::load_sites_with_hosts(&project_root, &env_file),
+        sites: site_manager::load_sites_with_hosts(project_root, &env_file),
     }))
+}
+
+/// 读取现有配置文件并解析为 EnvConfig
+#[tauri::command]
+pub fn load_existing_config() -> Result<Option<EnvConfig>, String> {
+    let project_root = get_project_root()?;
+    read_workspace_env_config(&project_root)
+}
+
+/// 按挂载选择更新站点并重写 `.env` / Compose / sites.json / 托管 conf。
+///
+/// 与恢复末尾、启动闸门共用。Compose 整份重生（生成物，手改自定义段不保留）。
+pub fn realign_site_mounts_with_overrides(
+    project_root: &std::path::Path,
+    overrides: &[crate::engine::restore_engine::SitePathOverride],
+) -> Result<(), String> {
+    use crate::engine::site_manager::SiteMountChoice;
+
+    let Some(mut config) = read_workspace_env_config(project_root)? else {
+        return Err("workspace config missing (.env / docker-compose.yml)".to_string());
+    };
+
+    for site in &mut config.sites {
+        let item = overrides.iter().find(|o| o.env_key == site.env_key);
+        let (choice, host) = match item {
+            Some(o) => (o.choice, o.host_path.clone()),
+            None => {
+                if site.deferred {
+                    (SiteMountChoice::Defer, site.noted_host_path.clone())
+                } else {
+                    (SiteMountChoice::Map, site.host_path.clone())
+                }
+            }
+        };
+        if choice == SiteMountChoice::Defer && site.noted_host_path.is_empty() && !host.is_empty() {
+            site.noted_host_path = site_manager::repair_host_path(&host);
+        }
+        site_manager::apply_mount_choice(site, choice, &host, project_root)?;
+    }
+
+    site_manager::normalize_sites(&mut config.sites);
+    ConfigGenerator::realign_site_mounts(&config, project_root)
+}
+
+/// 启动闸门 / 环境配置页：应用挂载选择后重写配置。
+#[tauri::command]
+pub fn apply_site_mount_overrides(
+    overrides: Vec<crate::engine::restore_engine::SitePathOverride>,
+) -> Result<(), String> {
+    let project_root = get_project_root()?;
+    realign_site_mounts_with_overrides(&project_root, &overrides)
+}
+
+/// 检查就绪站点挂载目录；有缺失时返回 `SITE_MOUNT:...` 错误。
+pub fn ensure_ready_site_mounts(project_root: &std::path::Path) -> Result<(), String> {
+    let Some(config) = read_workspace_env_config(project_root)? else {
+        return Ok(());
+    };
+    let missing = site_manager::missing_ready_site_mounts(project_root, &config.sites);
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(site_manager::format_missing_mount_error(&missing))
+    }
 }
 
 /// 生成 .env 文件内容预览
@@ -713,6 +773,11 @@ pub async fn start_environment(app_handle: tauri::AppHandle) -> Result<String, S
             "docker-compose.yml not found"
         );
         return Err("docker-compose.yml not found; apply config first".to_string());
+    }
+
+    if let Err(e) = ensure_ready_site_mounts(&project_root) {
+        ui_log!(app_handle, error, "commands::start_environment", "{}", e);
+        return Err(e);
     }
 
     ui_log!(
@@ -1465,6 +1530,11 @@ pub async fn restart_environment(app_handle: tauri::AppHandle) -> Result<String,
             "docker-compose.yml not found"
         );
         return Err("docker-compose.yml not found; apply config first".to_string());
+    }
+
+    if let Err(e) = ensure_ready_site_mounts(&project_root) {
+        ui_log!(app_handle, error, "commands::restart_environment", "{}", e);
+        return Err(e);
     }
 
     ui_log!(

@@ -20,12 +20,126 @@ pub const DEFAULT_SOURCE_DIR: &str = "./www";
 pub const KIND_RELATIVE: &str = "workspace-relative";
 pub const KIND_ABSOLUTE: &str = "absolute";
 
+/// 恢复 / 启动闸门里每个站点的挂载选择。缺省 `Defer`（最安全）。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteMountChoice {
+    Map,
+    Park,
+    #[default]
+    Defer,
+}
+
+/// 启动闸门拒绝时的稳定前缀（前端可解析，类似 `PORT_CONFLICT:`）。
+pub const SITE_MOUNT_ERROR_PREFIX: &str = "SITE_MOUNT:";
+
+/// 放到工作区 `./www/{id}` 的建议相对路径。
+pub fn suggested_park_path(site_id: &str) -> String {
+    format!("./www/{}", sanitize_site_id(site_id))
+}
+
+/// 按挂载选择更新单个站点（就绪写 host_path；暂缓清空 host_path、记 noted_host_path）。
+///
+/// `Park` 会创建 `./www/{id}`；`Map` 不创建目录（绝对路径尤其不能在新机器上静默建空目录）。
+pub fn apply_mount_choice(
+    site: &mut SiteEntry,
+    choice: SiteMountChoice,
+    host_path: &str,
+    project_root: &Path,
+) -> Result<(), String> {
+    match choice {
+        SiteMountChoice::Map => {
+            let path = repair_host_path(host_path);
+            if path.is_empty() {
+                return Err(format!("site {} is missing a mount directory", site.id));
+            }
+            site.deferred = false;
+            site.host_path = path;
+            site.noted_host_path.clear();
+            Ok(())
+        }
+        SiteMountChoice::Park => {
+            let path = suggested_park_path(&site.id);
+            let dest = resolve_host_path(project_root, &path);
+            fs::create_dir_all(&dest).map_err(|e| {
+                format!(
+                    "failed to create park directory for site {}: {}: {e}",
+                    site.id,
+                    dest.display()
+                )
+            })?;
+            site.deferred = false;
+            site.host_path = path;
+            site.noted_host_path.clear();
+            Ok(())
+        }
+        SiteMountChoice::Defer => {
+            let note = {
+                let from_arg = repair_host_path(host_path);
+                if !from_arg.is_empty() {
+                    from_arg
+                } else if !site.noted_host_path.is_empty() {
+                    repair_host_path(&site.noted_host_path)
+                } else {
+                    repair_host_path(&site.host_path)
+                }
+            };
+            site.deferred = true;
+            site.host_path.clear();
+            site.noted_host_path = note;
+            Ok(())
+        }
+    }
+}
+
+/// 就绪站点中路径为空或目录不存在的条目（id, host_path）。暂缓站点不列入。
+pub fn missing_ready_site_mounts(
+    project_root: &Path,
+    sites: &[SiteEntry],
+) -> Vec<(String, String, String)> {
+    sites
+        .iter()
+        .filter(|site| !site.deferred)
+        .filter_map(|site| {
+            if site.host_path.trim().is_empty() {
+                return Some((site.id.clone(), site.server_name.clone(), String::new()));
+            }
+            let dest = resolve_host_path(project_root, &site.host_path);
+            if dest.exists() {
+                None
+            } else {
+                Some((
+                    site.id.clone(),
+                    site.server_name.clone(),
+                    site.host_path.clone(),
+                ))
+            }
+        })
+        .collect()
+}
+
+/// 把缺失挂载格式化为带稳定前缀的错误串。
+pub fn format_missing_mount_error(missing: &[(String, String, String)]) -> String {
+    let details: Vec<String> = missing
+        .iter()
+        .map(|(id, server, path)| {
+            if path.is_empty() {
+                format!("{id} ({server}): missing path")
+            } else {
+                format!("{id} ({server}): {path}")
+            }
+        })
+        .collect();
+    format!("{SITE_MOUNT_ERROR_PREFIX}{}", details.join("; "))
+}
+
 /// 界面与 EnvConfig 使用的站点（含宿主机路径）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SiteEntry {
     pub id: String,
     pub server_name: String,
     /// 挂进容器的项目根（宿主机路径）。PHP 能读到其中的依赖。
+    /// 暂缓站点必须为空，活挂载源只来自就绪站点的 `.env` `SITE_*`。
     pub host_path: String,
     pub env_key: String,
     pub container_path: String,
@@ -34,9 +148,17 @@ pub struct SiteEntry {
     /// 相对挂载目录的对外子目录，如 `public`、`www`。空表示挂载目录本身就是网站根。
     #[serde(default)]
     pub public_dir: String,
+    /// 为真时不写 Compose 卷与托管 conf，保留站点定义供稍后补映射。
+    #[serde(default)]
+    pub deferred: bool,
+    /// 暂缓时记下的原路径 / 上次填写路径，只给界面展示，禁止写入 `.env` 或 Compose。
+    #[serde(default)]
+    pub noted_host_path: String,
 }
 
-/// 写入 `.user-config/sites.json` 的站点，不含宿主机绝对路径。
+/// 写入 `.user-config/sites.json` 的站点。
+///
+/// 不含活挂载源：就绪站点的宿主机路径在 `.env`；暂缓站点用 `noted_host_path` 记展示用路径。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SiteRecord {
     id: String,
@@ -48,6 +170,10 @@ struct SiteRecord {
     /// 相对挂载目录，不含盘符，可随站点定义跨机器带走。
     #[serde(default)]
     public_dir: String,
+    #[serde(default)]
+    deferred: bool,
+    #[serde(default)]
+    noted_host_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -116,6 +242,7 @@ pub fn normalize_sites(sites: &mut [SiteEntry]) {
     for (index, site) in sites.iter_mut().enumerate() {
         site.id = sanitize_site_id(&site.id);
         site.host_path = repair_host_path(&site.host_path);
+        site.noted_host_path = repair_host_path(&site.noted_host_path);
         site.public_dir = normalize_public_dir(&site.public_dir);
         site.server_name = site.server_name.trim().to_string();
         let slug: String = site
@@ -131,6 +258,13 @@ pub fn normalize_sites(sites: &mut [SiteEntry]) {
         };
         site.env_key = format!("SITE_{slug}");
         site.container_path = format!("/sites/{}", site.id);
+        if site.deferred {
+            // 暂缓站点禁止把路径留在 host_path，避免 generate_env 写回活挂载源。
+            if site.noted_host_path.is_empty() && !site.host_path.is_empty() {
+                site.noted_host_path = site.host_path.clone();
+            }
+            site.host_path.clear();
+        }
     }
 }
 
@@ -169,7 +303,7 @@ pub fn validate_sites(
                 site.id, site.server_name
             ));
         }
-        if site.host_path.is_empty() {
+        if !site.deferred && site.host_path.is_empty() {
             return Err(format!("site {} is missing a mount directory", site.id));
         }
         validate_public_dir(&site.id, &site.public_dir)?;
@@ -338,6 +472,7 @@ pub fn resolve_host_path(project_root: &Path, host_path: &str) -> PathBuf {
 pub fn source_volume_lines(sites: &[SiteEntry], role: MountRole, service_dir: &str) -> Vec<String> {
     let mut lines: Vec<String> = sites
         .iter()
+        .filter(|site| !site.deferred)
         .filter(|site| match role {
             MountRole::Php => site.php_service == service_dir,
             MountRole::Nginx => site.nginx_service == service_dir,
@@ -365,20 +500,39 @@ pub fn load_sites_with_hosts(project_root: &Path, env: &EnvFile) -> Vec<SiteEntr
     records
         .into_iter()
         .map(|record| {
-            let host_path = env
-                .get(&record.env_key)
-                .map(normalize_host_path)
-                .filter(|path| !path.is_empty())
-                .unwrap_or_default();
-            SiteEntry {
-                host_path: repair_host_path(&host_path),
-                id: record.id,
-                server_name: record.server_name,
-                env_key: record.env_key,
-                container_path: record.container_path,
-                nginx_service: record.nginx_service,
-                php_service: record.php_service,
-                public_dir: record.public_dir,
+            let noted = repair_host_path(&record.noted_host_path);
+            if record.deferred {
+                // 暂缓：host_path 必须为空；展示路径走独立字段，缩小泄漏面。
+                SiteEntry {
+                    host_path: String::new(),
+                    id: record.id,
+                    server_name: record.server_name,
+                    env_key: record.env_key,
+                    container_path: record.container_path,
+                    nginx_service: record.nginx_service,
+                    php_service: record.php_service,
+                    public_dir: record.public_dir,
+                    deferred: true,
+                    noted_host_path: noted,
+                }
+            } else {
+                let host_path = env
+                    .get(&record.env_key)
+                    .map(normalize_host_path)
+                    .filter(|path| !path.is_empty())
+                    .unwrap_or_default();
+                SiteEntry {
+                    host_path: repair_host_path(&host_path),
+                    id: record.id,
+                    server_name: record.server_name,
+                    env_key: record.env_key,
+                    container_path: record.container_path,
+                    nginx_service: record.nginx_service,
+                    php_service: record.php_service,
+                    public_dir: record.public_dir,
+                    deferred: false,
+                    noted_host_path: noted,
+                }
             }
         })
         .collect()
@@ -416,6 +570,12 @@ impl SiteEntry {
             nginx_service: self.nginx_service.clone(),
             php_service: self.php_service.clone(),
             public_dir: normalize_public_dir(&self.public_dir),
+            deferred: self.deferred,
+            noted_host_path: if self.deferred {
+                repair_host_path(&self.noted_host_path)
+            } else {
+                String::new()
+            },
         }
     }
 }
@@ -464,18 +624,29 @@ pub fn collect_manifest_sites(project_root: &Path) -> Vec<ManifestSite> {
     records
         .into_iter()
         .map(|record| {
-            let host = env
+            let from_env = env
                 .as_ref()
                 .and_then(|file| file.get(&record.env_key))
                 .map(normalize_host_path)
                 .filter(|path| !path.is_empty())
-                .unwrap_or_else(|| "./www".to_string());
+                .map(|path| repair_host_path(&path));
+            let from_noted = (!record.noted_host_path.is_empty())
+                .then(|| repair_host_path(&record.noted_host_path));
+            let host = if record.deferred {
+                from_noted
+                    .or(from_env)
+                    .unwrap_or_else(|| "./www".to_string())
+            } else {
+                from_env
+                    .or(from_noted)
+                    .unwrap_or_else(|| "./www".to_string())
+            };
             ManifestSite {
                 id: record.id,
                 env_key: record.env_key,
                 container_path: record.container_path,
-                host_path: repair_host_path(&host),
-                kind: path_kind(&repair_host_path(&host)).to_string(),
+                host_path: host.clone(),
+                kind: path_kind(&host).to_string(),
                 server_name: record.server_name,
                 public_dir: record.public_dir,
             }
@@ -508,9 +679,10 @@ fn read_env(project_root: &Path) -> Option<EnvFile> {
 }
 
 /// 写入托管 conf，并删除已不在清单中的托管文件。无标记的用户 conf 保持原样。
+/// 暂缓站点不写 conf，已有托管 conf 由 `remove_stale_managed_confs` 清掉。
 pub fn sync_managed_confs(project_root: &Path, sites: &[SiteEntry]) -> Result<(), String> {
     remove_stale_managed_confs(project_root, sites)?;
-    for site in sites {
+    for site in sites.iter().filter(|site| !site.deferred) {
         write_managed_conf(project_root, site)?;
     }
     Ok(())
@@ -581,7 +753,7 @@ fn remove_stale_managed_confs(project_root: &Path, sites: &[SiteEntry]) -> Resul
             };
             let still_here = sites
                 .iter()
-                .any(|site| site.id == id && site.nginx_service == nginx_dir);
+                .any(|site| !site.deferred && site.id == id && site.nginx_service == nginx_dir);
             if !still_here {
                 fs::remove_file(&path).map_err(|e| {
                     format!("failed to remove stale site conf {}: {e}", path.display())
@@ -628,6 +800,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: id.to_string(),
@@ -638,6 +812,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
         if id == "main" {
@@ -671,6 +847,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: "my-shop".to_string(),
@@ -681,6 +859,8 @@ mod tests {
                 nginx_service: "nginx125".to_string(),
                 php_service: "php82".to_string(),
                 public_dir: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
         normalize_sites(&mut sites);
@@ -717,6 +897,8 @@ mod tests {
                 nginx_service: "nginx125".into(),
                 php_service: "php82".into(),
                 public_dir: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
             SiteEntry {
                 id: "shop".into(),
@@ -727,6 +909,8 @@ mod tests {
                 nginx_service: "nginx125".into(),
                 php_service: "php84".into(),
                 public_dir: String::new(),
+                deferred: false,
+                noted_host_path: String::new(),
             },
         ];
         normalize_sites(&mut sites);
@@ -898,5 +1082,115 @@ mod tests {
         let json = r#"{"sites":[{"id":"main","server_name":"localhost","env_key":"SITE_MAIN","container_path":"/sites/main","nginx_service":"nginx125","php_service":"php82"}]}"#;
         let file: UserSitesFile = serde_json::from_str(json).unwrap();
         assert_eq!(file.sites[0].public_dir, "");
+        assert!(!file.sites[0].deferred);
+        assert_eq!(file.sites[0].noted_host_path, "");
+    }
+
+    #[test]
+    fn deferred_sites_omit_volumes_and_clear_host_path_on_normalize() {
+        let mut site = sample_site("demo2", "D:/code/demo2");
+        site.deferred = true;
+        normalize_sites(std::slice::from_mut(&mut site));
+        assert!(site.host_path.is_empty());
+        assert_eq!(site.noted_host_path, "D:/code/demo2");
+        let lines = source_volume_lines(std::slice::from_ref(&site), MountRole::Nginx, "nginx125");
+        assert_eq!(
+            lines,
+            vec!["      - ${SOURCE_DIR}:/www/:rw".to_string()],
+            "暂缓站点不得出现在 Compose 卷里"
+        );
+        assert!(validate_sites(
+            std::slice::from_ref(&site),
+            &["php82".into()],
+            &["nginx125".into()]
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn deferred_roundtrip_does_not_leak_noted_path_into_env() {
+        use crate::engine::config_generator::{ConfigGenerator, EnvConfig, ServiceEntry};
+        use crate::engine::env_parser::EnvFile;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut deferred = sample_site("demo2", "D:/code/demo2");
+        deferred.deferred = true;
+        normalize_sites(std::slice::from_mut(&mut deferred));
+        save_sites(root, std::slice::from_ref(&deferred)).unwrap();
+
+        // 模拟恢复后 .env 仍留着 A 机绝对路径
+        let stale = EnvFile::parse("SITE_DEMO2=D:/code/demo2\nSOURCE_DIR=./www\n").unwrap();
+        std::fs::write(root.join(".env"), stale.format()).unwrap();
+
+        let env = EnvFile::parse(&std::fs::read_to_string(root.join(".env")).unwrap()).unwrap();
+        let loaded = load_sites_with_hosts(root, &env);
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].deferred);
+        assert!(
+            loaded[0].host_path.is_empty(),
+            "暂缓站点 host_path 必须为空，实际: {}",
+            loaded[0].host_path
+        );
+        assert_eq!(loaded[0].noted_host_path, "D:/code/demo2");
+
+        let config = EnvConfig {
+            services: vec![
+                ServiceEntry {
+                    service_type: "php".into(),
+                    version: "php82".into(),
+                    host_port: 9000,
+                    extensions: None,
+                },
+                ServiceEntry {
+                    service_type: "nginx".into(),
+                    version: "nginx125".into(),
+                    host_port: 80,
+                    extensions: None,
+                },
+            ],
+            timezone: "Asia/Shanghai".into(),
+            mysql_root_password: None,
+            sites: loaded,
+        };
+        let out = ConfigGenerator::generate_env(&config, Some(&env), root);
+        let formatted = out.format();
+        assert!(
+            !formatted.contains("SITE_DEMO2"),
+            "generate_env 必须删除暂缓站点的 SITE_*，实际:\n{formatted}"
+        );
+        assert!(
+            !formatted.contains("D:/code/demo2"),
+            "不得把 noted_host_path 写回 .env，实际:\n{formatted}"
+        );
+    }
+
+    #[test]
+    fn sync_managed_confs_skips_deferred_and_removes_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let mut ready = sample_site("demo1", "./www/demo1");
+        normalize_sites(std::slice::from_mut(&mut ready));
+        sync_managed_confs(root, std::slice::from_ref(&ready)).unwrap();
+        let conf = root.join("services/nginx125/conf.d/demo1.conf");
+        assert!(conf.exists());
+
+        ready.deferred = true;
+        ready.noted_host_path = ready.host_path.clone();
+        ready.host_path.clear();
+        sync_managed_confs(root, std::slice::from_ref(&ready)).unwrap();
+        assert!(!conf.exists(), "暂缓后应删除托管 conf");
+    }
+
+    #[test]
+    fn site_mount_choice_defaults_to_defer() {
+        assert_eq!(SiteMountChoice::default(), SiteMountChoice::Defer);
+        #[derive(Deserialize)]
+        struct Wrap {
+            #[serde(default)]
+            choice: SiteMountChoice,
+        }
+        let wrap: Wrap = serde_json::from_str("{}").unwrap();
+        assert_eq!(wrap.choice, SiteMountChoice::Defer);
     }
 }

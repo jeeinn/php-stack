@@ -99,7 +99,7 @@ export interface EnvConfig {
 export interface SiteEntry {
   id: string
   server_name: string
-  /** 挂进容器的项目根。PHP 能读到其中的依赖。 */
+  /** 挂进容器的项目根。PHP 能读到其中的依赖。暂缓站点必须为空。 */
   host_path: string
   env_key: string
   container_path: string
@@ -107,7 +107,14 @@ export interface SiteEntry {
   php_service: string
   /** 相对挂载目录的对外子目录，如 public、www。空表示挂载目录本身就是网站根。 */
   public_dir?: string
+  /** 为真时不写 Compose 卷与托管 conf，保留站点定义。 */
+  deferred?: boolean
+  /** 暂缓时记下的原路径，只给界面展示，禁止写入 .env 或 Compose。 */
+  noted_host_path?: string
 }
+
+/** 恢复 / 启动闸门里每个站点的挂载选择。缺省 defer（最安全）。 */
+export type SiteMountChoice = 'map' | 'park' | 'defer'
 
 export interface MirrorSourceOption {
   id: string
@@ -179,7 +186,8 @@ export interface ManifestSite {
 export interface SitePathOverride {
   env_key: string
   host_path: string
-  skipped: boolean
+  /** map=挂到本机目录；park=放到 ./www/{id}；defer=暂缓。缺省 defer。 */
+  choice: SiteMountChoice
 }
 
 export interface PortConflict {
